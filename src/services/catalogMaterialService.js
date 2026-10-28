@@ -1,54 +1,66 @@
-const { isValidObjectId } = require("mongoose");
+const { prisma } = require("../config/db");
 const { AppError } = require("../middleware/errorHandler");
-const { CatalogMaterial: Model } = require("../models");
+const { isUuid, toApi } = require("../lib/ids");
 
-// CRUD for the user-owned material catalog. Every document is addressed by its
-// Mongo _id and always constrained to its owner, so another user's material is
-// never reachable.
+// CRUD for the user-owned material catalog. Every row is addressed by its id and
+// always constrained to its owner, so another user's material is never reachable.
+const db = prisma.catalogMaterial;
 const notFound = () => new AppError(404, "CatalogMaterial not found");
 
+const CONCRETE = ["fc", "fcExpected", "lightweight", "lambda"];
+const STEEL = ["Fy", "Fu", "Fye", "Fue"];
+
+// Campos de diseño del tipo anterior que hay que limpiar al cambiar de tipo.
+function fieldsToDrop(type) {
+  if (type === "concrete") return STEEL;
+  if (type === "steel" || type === "rebar") return CONCRETE;
+  return [...CONCRETE, ...STEEL];
+}
+
 module.exports = {
-  list: (ownerId) =>
-    Model.find({ ownerId }).select("-__v").sort({ createdAt: -1 }).lean(),
+  list: async (ownerId) =>
+    (await db.findMany({ where: { ownerId }, orderBy: { createdAt: "desc" } })).map(
+      (row) => toApi(row)
+    ),
 
   getOne: async (ownerId, id) => {
-    if (!isValidObjectId(id)) throw notFound();
-    const doc = await Model.findOne({ _id: id, ownerId }).select("-__v").lean();
-    if (!doc) throw notFound();
-    return doc;
+    if (!isUuid(id)) throw notFound();
+    const row = await db.findFirst({ where: { id, ownerId } });
+    if (!row) throw notFound();
+    return toApi(row);
   },
 
-  create: (ownerId, data) => Model.create({ ...data, ownerId }),
+  create: async (ownerId, data) => toApi(await db.create({ data: { ...data, ownerId } })),
 
   update: async (ownerId, id, data) => {
-    if (!isValidObjectId(id)) throw notFound();
-    const update = { $set: data };
-    // Al cambiar de tipo, limpiar los campos de diseño del tipo anterior.
+    if (!isUuid(id)) throw notFound();
+    const patch = { ...data };
     if (data.type) {
-      const CONCRETE = ["fc", "fcExpected", "lightweight", "lambda"];
-      const STEEL = ["Fy", "Fu", "Fye", "Fue"];
-      const drop =
-        data.type === "concrete"
-          ? STEEL
-          : data.type === "steel" || data.type === "rebar"
-            ? CONCRETE
-            : [...CONCRETE, ...STEEL];
-      if (drop.length) {
-        update.$unset = Object.fromEntries(drop.map((k) => [k, ""]));
+      for (const field of fieldsToDrop(data.type)) {
+        // `lightweight` es NOT NULL con default false: se resetea en vez de anularse.
+        patch[field] = field === "lightweight" ? false : null;
       }
     }
-    const doc = await Model.findOneAndUpdate({ _id: id, ownerId }, update, {
-      new: true,
-      runValidators: true,
-    });
-    if (!doc) throw notFound();
-    return doc;
+    const { count } = await db.updateMany({ where: { id, ownerId }, data: patch });
+    if (!count) throw notFound();
+    return toApi(await db.findUnique({ where: { id } }));
   },
 
   remove: async (ownerId, id) => {
-    if (!isValidObjectId(id)) throw notFound();
-    const doc = await Model.findOneAndDelete({ _id: id, ownerId });
-    if (!doc) throw notFound();
+    if (!isUuid(id)) throw notFound();
+    let count;
+    try {
+      ({ count } = await db.deleteMany({ where: { id, ownerId } }));
+    } catch (err) {
+      if (err.code === "P2003") {
+        throw new AppError(
+          409,
+          "El material está en uso por una o más secciones. Cambia o borra esas secciones primero."
+        );
+      }
+      throw err;
+    }
+    if (!count) throw notFound();
     return { deleted: true };
   },
 };

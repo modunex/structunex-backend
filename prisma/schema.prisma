@@ -1,0 +1,417 @@
+// Esquema de PostgreSQL de Structunex. Sustituye a los modelos de Mongoose.
+//
+// Convenciones:
+//  - Columnas en camelCase, igual que el JSON que viaja al frontend y al calc-service.
+//  - Tablas con los mismos nombres que tenían las colecciones de Mongo (@@map).
+//  - PK uuid v7 (ordenado por tiempo, como el ObjectId). En las 8 tablas del modelo
+//    estructural la PK se llama `pk`, porque `id` ya es el id de dominio ("N1", "A1").
+//    Hacia la API se sigue exponiendo como `_id` (ver src/lib/ids.js).
+//  - `seq` (autoincremental) en las tablas del modelo: Postgres no garantiza el orden de
+//    inserción al leer, y el frontend depende de él. Toda lectura ordena por `seq`.
+//  - Lo que en Mongo eran subdocumentos o Mixed y nunca se consulta por dentro va en
+//    columnas Json (JSONB): se guarda y se devuelve entero.
+//  - Los "enums" son String validados por Zod en la ruta: añadir un valor no necesita
+//    migración.
+
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "client" // sin binario de Rust: usa @prisma/adapter-pg
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Usuarios (espejo de Clerk, rellenado por el webhook) ───
+model User {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  clerkId           String    @unique // = ownerId de proyectos y catálogos
+  email             String?
+  firstName         String?
+  lastName          String?
+  imageUrl          String?
+  mailchimpSyncedAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([email])
+  @@map("users")
+}
+
+// ─── Catálogos del usuario (no ligados a un proyecto) ───
+model CatalogMaterial {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  ownerId     String // Clerk user id
+  name        String
+  type        String   @default("steel") // concrete | steel | rebar | other
+  E           Float // kPa
+  nu          Float
+  density     Float? // kN/m³
+  alpha       Float?
+  fc          Float?
+  fcExpected  Float?
+  lightweight Boolean  @default(false)
+  lambda      Float?
+  Fy          Float?
+  Fu          Float?
+  Fye         Float?
+  Fue         Float?
+  color       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  frameSections CatalogFrameSection[]
+  areaSections  CatalogAreaSection[]
+
+  @@index([ownerId, createdAt(sort: Desc)])
+  @@map("catalog_materials")
+}
+
+model CatalogFrameSection {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  ownerId       String
+  name          String
+  materialId    String   @db.Uuid
+  propertyType  String   @default("steel") // steel | concrete | other
+  source        String // catalog | parametric | general
+  catalogLabel  String?
+  shape         String?
+  b             Float?
+  h             Float?
+  d             Float?
+  t             Float?
+  tw            Float?
+  tf            Float?
+  bf            Float?
+  bfTop         Float?
+  tfTop         Float?
+  bfBot         Float?
+  tfBot         Float?
+  A             Float?
+  I33           Float?
+  I22           Float?
+  J             Float?
+  reinforcement Json? // armado (solo hormigón); su rebarMaterialId no lleva FK
+  props         Json // { A, I33, I22, J } resueltas por el servidor
+  modifiers     Json     @default("{}")
+  color         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Restrict: no se puede borrar un material que usa alguna sección (409).
+  material CatalogMaterial @relation(fields: [materialId], references: [id], onDelete: Restrict)
+  elements ModelElement[]
+
+  @@index([ownerId, createdAt(sort: Desc)])
+  @@map("catalog_frame_sections")
+}
+
+model CatalogAreaSection {
+  id                String   @id @default(uuid(7)) @db.Uuid
+  ownerId           String
+  name              String
+  kind              String   @default("shell")
+  shellType         String
+  materialId        String   @db.Uuid
+  materialAngle     Float    @default(0)
+  thicknessMembrane Float // m
+  thicknessBending  Float // m
+  modifiers         Json     @default("{}")
+  color             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  material CatalogMaterial @relation(fields: [materialId], references: [id], onDelete: Restrict)
+  areas    ModelArea[]
+
+  @@index([ownerId, createdAt(sort: Desc)])
+  @@map("catalog_area_sections")
+}
+
+// ─── Proyecto ───
+model Project {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  ownerId          String // Clerk user id
+  name             String
+  code             String   @default("E.030")
+  status           String   @default("draft") // draft | solving | solved | error
+  isLocked         Boolean  @default(false)
+  analysisProgress Json?
+  analysisError    String?
+  designProgress   Json?
+  designError      String?
+  templateId       String?
+  analysisType     String?
+  dofPerNode       Int?
+  params           Json?
+  units            String?
+  client           String?
+  company          String?
+  engineer         String?
+  description      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  configuration ModelConfiguration?
+  nodes         ModelNode[]
+  elements      ModelElement[]
+  supports      ModelSupport[]
+  loads         ModelLoad[]
+  areas         ModelArea[]
+  frameLoads    ModelFrameLoad[]
+  areaLoads     ModelAreaLoad[]
+  areaSprings   ModelAreaSpring[]
+  analysisRuns  AnalysisRun[]
+  designRuns    DesignRun[]
+
+  @@index([ownerId, createdAt(sort: Desc)])
+  @@map("projects")
+}
+
+// Configuración no geométrica del modelo: una fila por proyecto.
+model ModelConfiguration {
+  projectId             String   @id @db.Uuid
+  gridSystem            Json?
+  loadPatterns          Json     @default("[]")
+  loadCombinations      Json     @default("[]")
+  massSource            Json?
+  modalCases            Json     @default("[]")
+  diaphragms            Json     @default("[]")
+  spectrumFunctions     Json     @default("[]")
+  responseSpectrumCases Json     @default("[]")
+  activeDofs            Json? // null = automático
+  defaultFrameSectionId String?
+  defaultAreaSectionId  String?
+  designPreferences     Json?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("model_configuration")
+}
+
+// ─── Modelo estructural: 8 tablas con pk + seq ───
+model ModelNode {
+  pk        String   @id @default(uuid(7)) @db.Uuid
+  seq       BigInt   @default(autoincrement())
+  projectId String   @db.Uuid
+  id        String // "N1", único por proyecto
+  x         Float
+  y         Float
+  z         Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, id])
+  @@index([projectId, seq])
+  @@map("model_nodes")
+}
+
+model ModelElement {
+  pk             String   @id @default(uuid(7)) @db.Uuid
+  seq            BigInt   @default(autoincrement())
+  projectId      String   @db.Uuid
+  id             String
+  nodeA          String
+  nodeB          String
+  frameSectionId String?  @db.Uuid
+  roll           Float    @default(0)
+  releases       Json? // { i: {...}, j: {...} }
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  project      Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // SetNull: si se borra la sección del catálogo, la barra queda sin sección.
+  frameSection CatalogFrameSection? @relation(fields: [frameSectionId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, id])
+  @@index([projectId, seq])
+  @@index([frameSectionId])
+  @@map("model_elements")
+}
+
+model ModelSupport {
+  pk        String   @id @default(uuid(7)) @db.Uuid
+  seq       BigInt   @default(autoincrement())
+  projectId String   @db.Uuid
+  nodeId    String
+  dx        Boolean  @default(false)
+  dy        Boolean  @default(false)
+  dz        Boolean  @default(false)
+  rx        Boolean  @default(false)
+  ry        Boolean  @default(false)
+  rz        Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, nodeId])
+  @@index([projectId, seq])
+  @@map("model_supports")
+}
+
+model ModelLoad {
+  pk          String   @id @default(uuid(7)) @db.Uuid
+  seq         BigInt   @default(autoincrement())
+  projectId   String   @db.Uuid
+  nodeId      String
+  loadPattern String
+  fx          Float    @default(0)
+  fy          Float    @default(0)
+  fz          Float    @default(0)
+  mx          Float    @default(0)
+  my          Float    @default(0)
+  mz          Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, seq])
+  @@map("model_loads")
+}
+
+model ModelArea {
+  pk             String   @id @default(uuid(7)) @db.Uuid
+  seq            BigInt   @default(autoincrement())
+  projectId      String   @db.Uuid
+  id             String // "A1"
+  nodeIds        String[]
+  areaSectionId  String?  @db.Uuid
+  mesh           Json? // { along12, along13 }
+  localAxisAngle Float    @default(0)
+  diaphragm      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  areaSection CatalogAreaSection? @relation(fields: [areaSectionId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, id])
+  @@index([projectId, seq])
+  @@index([areaSectionId])
+  @@map("model_areas")
+}
+
+model ModelFrameLoad {
+  pk          String   @id @default(uuid(7)) @db.Uuid
+  seq         BigInt   @default(autoincrement())
+  projectId   String   @db.Uuid
+  elementId   String
+  loadPattern String
+  kind        String   @default("distributed") // distributed | point
+  dir         String   @default("gravity") // gx | gy | gz | gravity
+  value       Float    @default(0)
+  dist        Float? // point: posición relativa 0..1
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, seq])
+  @@map("model_frame_loads")
+}
+
+model ModelAreaLoad {
+  pk          String   @id @default(uuid(7)) @db.Uuid
+  seq         BigInt   @default(autoincrement())
+  projectId   String   @db.Uuid
+  areaId      String
+  loadPattern String
+  dir         String   @default("gravity")
+  value       Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, seq])
+  @@map("model_area_loads")
+}
+
+model ModelAreaSpring {
+  pk        String   @id @default(uuid(7)) @db.Uuid
+  seq       BigInt   @default(autoincrement())
+  projectId String   @db.Uuid
+  areaId    String
+  stiffness Float    @default(0) // kN/m³
+  resists   String   @default("compressionOnly")
+  face      String   @default("bottom")
+  outward   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, areaId])
+  @@index([projectId, seq])
+  @@map("model_area_springs")
+}
+
+// ─── Ejecuciones (lo pesado vive en S3 como Parquet) ───
+model AnalysisRun {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  projectId     String    @db.Uuid
+  status        String    @default("solving") // solving | solved | error | cancelled
+  startedAt     DateTime  @default(now())
+  solvedAt      DateTime?
+  durationMs    Int?
+  error         String?
+  s3Prefix      String?
+  schemaVersion Int?
+  activeDofs    String[]
+  notes         String[]
+  cases         Json      @default("[]")
+  counts        Json      @default("{}")
+  modes         Json      @default("[]")
+  mesh          Json      @default("{}")
+  modeShapes    String?
+  springs       String?
+  bytes         BigInt    @default(0)
+  summary       Json      @default("{\"perCase\":[],\"drift\":[],\"storyForces\":[]}")
+  stories       Json      @default("[]")
+  modelHash     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  designRuns DesignRun[]
+
+  @@index([projectId, startedAt(sort: Desc)])
+  @@map("analysis_runs")
+}
+
+model DesignRun {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  projectId     String    @db.Uuid
+  analysisRunId String    @db.Uuid
+  status        String    @default("designing") // designing | done | error | cancelled
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+  durationMs    Int?
+  error         String?
+  code          String?
+  steelCode     String?
+  combos        String[]
+  s3Prefix      String?
+  schemaVersion Int?
+  files         Json      @default("{}")
+  counts        Json      @default("{}")
+  notes         String[]
+  bytes         BigInt    @default(0)
+  summary       Json      @default("{}")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  analysisRun AnalysisRun @relation(fields: [analysisRunId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, startedAt(sort: Desc)])
+  @@index([analysisRunId])
+  @@map("design_runs")
+}

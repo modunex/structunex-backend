@@ -1,23 +1,29 @@
-const { User } = require("../models");
+const { prisma } = require("../config/db");
 
 // Persists app users mirrored from Clerk webhook events. Keyed by `clerkId`
 // (same value as `ownerId` on projects/catalogs), so writes are idempotent on
 // webhook re-delivery.
 
-async function upsertFromClerk({ clerkId, email, firstName, lastName, imageUrl }) {
-  return User.findOneAndUpdate(
-    { clerkId },
-    { $set: { email, firstName, lastName, imageUrl } },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
+function upsertFromClerk({ clerkId, email, firstName, lastName, imageUrl }) {
+  const data = { email, firstName, lastName, imageUrl };
+  return prisma.user.upsert({
+    where: { clerkId },
+    create: { clerkId, ...data },
+    update: data,
+  });
 }
 
-async function markMailchimpSynced(clerkId) {
-  return User.updateOne({ clerkId }, { $set: { mailchimpSyncedAt: new Date() } });
+function markMailchimpSynced(clerkId) {
+  // updateMany: no falla si el usuario se borró entre medias.
+  return prisma.user.updateMany({
+    where: { clerkId },
+    data: { mailchimpSyncedAt: new Date() },
+  });
 }
 
-async function deleteByClerkId(clerkId) {
-  return User.deleteOne({ clerkId });
+function deleteByClerkId(clerkId) {
+  // deleteMany: no falla si el webhook llega dos veces.
+  return prisma.user.deleteMany({ where: { clerkId } });
 }
 
 module.exports = { upsertFromClerk, markMailchimpSynced, deleteByClerkId };

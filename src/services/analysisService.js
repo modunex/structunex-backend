@@ -1,20 +1,5 @@
-const mongoose = require("mongoose");
-const {
-  Project,
-  AnalysisRun,
-  ModelNode,
-  ModelElement,
-  ModelSupport,
-  ModelLoad,
-  ModelArea,
-  ModelFrameLoad,
-  ModelAreaLoad,
-  ModelAreaSpring,
-  ModelConfiguration,
-  CatalogFrameSection,
-  CatalogAreaSection,
-  CatalogMaterial,
-} = require("../models");
+const { prisma, CHILD_MODELS } = require("../models");
+const { isUuid, stripChild, toApi } = require("../lib/ids");
 const { AppError } = require("../middleware/errorHandler");
 const analysisJob = require("./analysisJob");
 const s3Service = require("./s3Service");
@@ -23,24 +8,30 @@ const spectrumGenerators = require("../lib/spectrumGenerators");
 // Lo que se devuelve de una ejecución: metadatos y resumen, nunca el payload. Los
 // resultados pesados están en S3 en Parquet y los baja el navegador con una URL
 // prefirmada (ver signCase más abajo).
-const RUN_FIELDS =
-  "status startedAt solvedAt durationMs error activeDofs notes cases counts modes " +
-  "mesh modeShapes springs bytes summary schemaVersion stories";
+const RUN_SELECT = Object.fromEntries(
+  [
+    "id", "status", "startedAt", "solvedAt", "durationMs", "error", "activeDofs",
+    "notes", "cases", "counts", "modes", "mesh", "modeShapes", "springs", "bytes",
+    "summary", "schemaVersion", "stories",
+  ].map((field) => [field, true])
+);
+const runToApi = (row) => (row ? toApi(row, "analysisRun") : row);
 
 const ALL_DOFS = ["UX", "UY", "UZ", "RX", "RY", "RZ"];
 
 // Builds the v2 payload the condition-based engine (POST /analyze) expects. The
-// model geometry is read from the project's collections (autosaved by the
+// model geometry is read from the project's tables (autosaved by the
 // frontend); the *conditions* (activeDofs + load patterns) come from the request.
 //
 // Materials and sections are not stored per-project: bars reference a
 // CatalogFrameSection (which carries its material), so we expand those catalog
-// docs into the flat { materials, sections } the engine consumes. Convention
+// rows into the flat { materials, sections } the engine consumes. Convention
 // (SAP): I33 = strong axis -> Iy, I22 = weak -> Iz. Stiffness modifiers applied.
 // Bars without an assigned section can't be solved and are omitted. Areas carry
 // no stiffness (v1): they pass through only to lump their surface loads to the
 // boundary nodes.
 async function assembleModel(projectId) {
+  // Same order as CHILD_MODELS; each table read in insertion order (`seq`).
   const [
     nodes,
     elements,
@@ -50,26 +41,21 @@ async function assembleModel(projectId) {
     frameLoads,
     areaLoads,
     areaSprings,
-  ] = await Promise.all([
-      ModelNode.find({ projectId }).select("-_id -projectId -__v -createdAt -updatedAt").lean(),
-      ModelElement.find({ projectId }).select("-_id -projectId -__v -createdAt -updatedAt").lean(),
-      ModelSupport.find({ projectId }).select("-_id -projectId -__v -createdAt -updatedAt").lean(),
-      ModelLoad.find({ projectId }).select("-_id -projectId -__v -createdAt -updatedAt").lean(),
-      ModelArea.find({ projectId }).select("-_id -projectId -__v -createdAt -updatedAt").lean(),
-      ModelFrameLoad.find({ projectId }).select("-_id -projectId -__v -createdAt -updatedAt").lean(),
-      ModelAreaLoad.find({ projectId }).select("-_id -projectId -__v -createdAt -updatedAt").lean(),
-      ModelAreaSpring.find({ projectId }).select("-_id -projectId -__v -createdAt -updatedAt").lean(),
-    ]);
-
-  const assigned = elements.filter(
-    (e) => e.frameSectionId && mongoose.isValidObjectId(e.frameSectionId)
+  ] = await Promise.all(
+    CHILD_MODELS.map(({ name }) =>
+      prisma[name]
+        .findMany({ where: { projectId }, orderBy: { seq: "asc" } })
+        .then((rows) => rows.map((row) => stripChild(row, name)))
+    )
   );
+
+  const assigned = elements.filter((e) => isUuid(e.frameSectionId));
   const sectionIds = [...new Set(assigned.map((e) => String(e.frameSectionId)))];
 
   const catSections = sectionIds.length
-    ? await CatalogFrameSection.find({ _id: { $in: sectionIds } }).lean()
+    ? await prisma.catalogFrameSection.findMany({ where: { id: { in: sectionIds } } })
     : [];
-  const sectionById = new Map(catSections.map((s) => [String(s._id), s]));
+  const sectionById = new Map(catSections.map((s) => [s.id, s]));
 
   // Areas reference a CatalogAreaSection (shell: thickness + material). Expand it the
   // same way as frame sections so meshed shells get their stiffness. Areas without a
@@ -78,12 +64,11 @@ async function assembleModel(projectId) {
     ...new Set(
       areas
         .map((a) => a.areaSectionId)
-        .filter((id) => id && mongoose.isValidObjectId(id))
-        .map(String)
+        .filter(isUuid)
     ),
   ];
   const catAreaSections = areaSectionIds.length
-    ? await CatalogAreaSection.find({ _id: { $in: areaSectionIds } }).lean()
+    ? await prisma.catalogAreaSection.findMany({ where: { id: { in: areaSectionIds } } })
     : [];
 
   // Materials come from BOTH frame and area sections (union), so shell materials land
@@ -91,18 +76,18 @@ async function assembleModel(projectId) {
   const materialIds = [
     ...new Set(
       [...catSections, ...catAreaSections]
-        .map((s) => String(s.materialId))
-        .filter((id) => mongoose.isValidObjectId(id))
+        .map((s) => s.materialId)
+        .filter(isUuid)
     ),
   ];
   const catMaterials = materialIds.length
-    ? await CatalogMaterial.find({ _id: { $in: materialIds } }).lean()
+    ? await prisma.catalogMaterial.findMany({ where: { id: { in: materialIds } } })
     : [];
 
   // Engine materials: { id, E, G, density }. G derived from E and nu if absent;
   // density (kN/m^3) drives self weight.
   const materials = catMaterials.map((m) => ({
-    id: String(m._id),
+    id: m.id,
     E: m.E,
     G: m.G != null ? m.G : m.E / (2 * (1 + (m.nu != null ? m.nu : 0.3))),
     density: m.density != null ? m.density : 0,
@@ -113,8 +98,8 @@ async function assembleModel(projectId) {
     const p = s.props || {};
     const mod = s.modifiers || {};
     return {
-      id: String(s._id),
-      materialId: String(s.materialId),
+      id: s.id,
+      materialId: s.materialId,
       A: (p.A || 0) * (mod.area != null ? mod.area : 1),
       Iy: (p.I33 || 0) * (mod.i33 != null ? mod.i33 : 1),
       Iz: (p.I22 || 0) * (mod.i22 != null ? mod.i22 : 1),
@@ -126,15 +111,15 @@ async function assembleModel(projectId) {
   // thicknessBending, modifiers }. Thicknesses are already stored in metres; the
   // calc-service meshes each area into CQUAD4 shells against this section.
   const areaSections = catAreaSections.map((s) => ({
-    id: String(s._id),
-    materialId: String(s.materialId),
+    id: s.id,
+    materialId: s.materialId,
     shellType: s.shellType,
     thicknessMembrane: s.thicknessMembrane,
     thicknessBending: s.thicknessBending,
     modifiers: s.modifiers || {},
   }));
 
-  // Bars reference their section by the catalog _id (the section carries material).
+  // Bars reference their section by the catalog id (the section carries material).
   const solverElements = assigned
     .filter((e) => sectionById.has(String(e.frameSectionId)))
     .map((e) => ({
@@ -200,11 +185,16 @@ async function resolveOptions(projectId, options) {
   // One config read for load patterns + the modal inputs (Mass Source, Modal cases) +
   // the response-spectrum condition. SAP-style single Run: the calc-service also solves
   // modes when modalCases is present, and combines them for each responseSpectrumCase.
-  const config = await ModelConfiguration.findOne({ projectId })
-    .select(
-      "loadPatterns massSource modalCases spectrumFunctions responseSpectrumCases"
-    )
-    .lean();
+  const config = await prisma.modelConfiguration.findUnique({
+    where: { projectId },
+    select: {
+      loadPatterns: true,
+      massSource: true,
+      modalCases: true,
+      spectrumFunctions: true,
+      responseSpectrumCases: true,
+    },
+  });
 
   let loadPatterns = Array.isArray(opts.loadPatterns) ? opts.loadPatterns : null;
   if (!loadPatterns) loadPatterns = (config && config.loadPatterns) || [];
@@ -286,10 +276,10 @@ function buildResponseSpectrum(config) {
 // The HTTP call to the solver stays outside any transaction.
 // Starts the analysis and returns as soon as the job is queued - the solve itself runs
 // in the background (analysisJob) and reports progress through the project document.
-// Blocking here would be worse than slow: Heroku's router aborts any request without a
-// response within 30 s, so a long solve could never finish over a synchronous call.
+// Blocking here would be worse than slow: a long solve held open on one HTTP request
+// dies with the first proxy timeout or client disconnect along the way.
 async function run(project, options) {
-  const projectId = project._id;
+  const projectId = project.id;
 
   // Assemble everything the solver needs BEFORE going async, so a bad model still fails
   // as a normal 4xx on this request instead of surfacing later as a job error.
@@ -315,15 +305,18 @@ async function run(project, options) {
   };
 }
 
-// A run whose progress stopped moving this long ago is orphaned: the web dyno was
-// restarted (deploy, routine cycling) while the job was in flight.
+// A run whose progress stopped moving this long ago is orphaned: the web service was
+// restarted (deploy, crash) while the job was in flight.
 const STALE_MS = 5 * 60 * 1000;
 
 const latestSolvedRun = (projectId) =>
-  AnalysisRun.findOne({ projectId, status: "solved" })
-    .sort({ startedAt: -1 })
-    .select(RUN_FIELDS)
-    .lean();
+  prisma.analysisRun
+    .findFirst({
+      where: { projectId, status: "solved" },
+      orderBy: { startedAt: "desc" },
+      select: RUN_SELECT,
+    })
+    .then(runToApi);
 
 // Current analysis state + live progress + metadata of the last solved run.
 //
@@ -333,9 +326,10 @@ const latestSolvedRun = (projectId) =>
 // fetched once, straight from S3.
 async function get(projectId) {
   const [project, run] = await Promise.all([
-    Project.findById(projectId)
-      .select("status analysisProgress analysisError")
-      .lean(),
+    prisma.project.findUnique({
+      where: { id: projectId },
+      select: { status: true, analysisProgress: true, analysisError: true },
+    }),
     latestSolvedRun(projectId),
   ]);
   if (!project) return { status: null, progress: null, error: null, run: null };
@@ -371,10 +365,12 @@ async function get(projectId) {
 
 /** Historial de ejecuciones del proyecto, de la más reciente a la más antigua. */
 async function listRuns(projectId) {
-  return AnalysisRun.find({ projectId })
-    .sort({ startedAt: -1 })
-    .select(RUN_FIELDS)
-    .lean();
+  const rows = await prisma.analysisRun.findMany({
+    where: { projectId },
+    orderBy: { startedAt: "desc" },
+    select: RUN_SELECT,
+  });
+  return rows.map(runToApi);
 }
 
 /**
@@ -385,12 +381,13 @@ async function listRuns(projectId) {
  * resuelve colisiones con un ordinal, así que el nombre no permite reconstruirla.
  */
 async function signCase(projectId, runId, caseKey) {
-  if (!mongoose.isValidObjectId(runId)) {
+  if (!isUuid(runId)) {
     throw new AppError(404, "Ejecución no encontrada");
   }
-  const run = await AnalysisRun.findOne({ _id: runId, projectId })
-    .select("status cases mesh modeShapes springs")
-    .lean();
+  const run = await prisma.analysisRun.findFirst({
+    where: { id: runId, projectId },
+    select: { status: true, cases: true, mesh: true, modeShapes: true, springs: true },
+  });
   if (!run || run.status !== "solved") {
     throw new AppError(404, "Ejecución no encontrada");
   }

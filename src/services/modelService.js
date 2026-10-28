@@ -1,97 +1,73 @@
-const mongoose = require("mongoose");
-const { CHILD_MODELS, ModelConfiguration } = require("../models");
+const { prisma, CHILD_MODELS } = require("../models");
+const { stripChild, jsonNulls } = require("../lib/ids");
+const { sanitizeSectionRefs } = require("./sectionRefs");
 
-// Reads/writes the whole structural model (nodes, materials, sections,
-// elements, supports, loads, areas) as one nested object, so the frontend can
-// hydrate and autosave in a single round-trip instead of one call per entity.
+// Reads/writes the whole structural model (nodes, elements, supports, loads, areas,
+// frame/area loads, area springs + configuration) as one nested object, so the
+// frontend can hydrate and autosave in a single round-trip instead of one call per
+// entity.
 
-const BY_KEY = Object.fromEntries(CHILD_MODELS.map((c) => [c.key, c.Model]));
+// La configuración sale sin la clave del proyecto ni las fechas. Sus null se conservan:
+// en Mongo esos campos tenían `default: null` y el frontend ya los veía así.
+function stripConfig(config) {
+  const { projectId, createdAt, updatedAt, ...rest } = config;
+  return rest;
+}
 
-// Assembles the nested model from the project's child collections, stripping
-// Mongo bookkeeping so the shape matches the frontend StructuralModel.
-async function getModel(projectId) {
+// Assembles the nested model from the project's tables, in insertion order (`seq`),
+// with the same shape as the frontend StructuralModel. `db` is prisma or a transaction.
+async function getModel(projectId, db = prisma) {
   const [entries, config] = await Promise.all([
     Promise.all(
-      CHILD_MODELS.map(({ key, Model }) =>
-        Model.find({ projectId })
-          .select("-_id -projectId -__v -createdAt -updatedAt")
-          .lean()
-          .then((docs) => [key, docs])
+      CHILD_MODELS.map(({ key, name }) =>
+        db[name]
+          .findMany({ where: { projectId }, orderBy: { seq: "asc" } })
+          .then((rows) => [key, rows.map((row) => stripChild(row, name))])
       )
     ),
-    ModelConfiguration.findOne({ projectId })
-      .select("-_id -projectId -__v -createdAt -updatedAt")
-      .lean(),
+    db.modelConfiguration.findUnique({ where: { projectId } }),
   ]);
-  return { ...Object.fromEntries(entries), configuration: config || null };
+  return { ...Object.fromEntries(entries), configuration: config ? stripConfig(config) : null };
 }
 
-// Swaps each listed collection for the incoming array. `session` is passed when
-// running inside a transaction; null for the standalone fallback.
-async function replaceCollections(projectId, keys, model, session) {
-  const opts = session ? { session } : {};
-  for (const key of keys) {
-    const Model = BY_KEY[key];
-    await Model.deleteMany({ projectId }, opts);
-    const docs = model[key].map((d) => ({ ...d, projectId }));
-    if (docs.length) await Model.insertMany(docs, opts);
-  }
-}
-
-// True when the error means the Mongo deployment has no transaction support
-// (standalone mongod) — as opposed to a real write error we must surface.
-function isNoTxnSupport(err) {
-  const msg = String((err && err.message) || "");
-  return (
-    err?.code === 20 || // IllegalOperation
-    err?.codeName === "IllegalOperation" ||
-    /Transaction numbers are only allowed|replica set member or mongos|Transactions are not supported/i.test(
-      msg
-    )
-  );
-}
-
-// Reconcile by collection: for every entity key present in `model`, swap the
-// whole collection for the incoming array. Absent keys are left untouched (so an
-// autosave can send only the collections that changed). Domain-id uniqueness is
-// enforced by each model's compound index.
+// Reconcile by table: for every entity key present in `model`, swap the whole table
+// for the incoming array. Absent keys are left untouched (so an autosave can send only
+// the collections that changed). Domain-id uniqueness is enforced by each table's
+// unique index (a duplicate comes back as 409).
 //
-// Prefers a transaction (atomic swap across collections). If the deployment is a
-// standalone mongod (no transactions), falls back to a sequential replace — the
-// swap is then non-atomic, acceptable for single-user autosave.
-async function saveModel(projectId, model) {
-  const keys = Object.keys(model).filter(
-    (k) => BY_KEY[k] && Array.isArray(model[k])
-  );
+// Todo va en una transacción: o se aplica el guardado entero o nada. Las filas se
+// insertan en el orden del array, que es el que devuelve `seq` al leer.
+//
+// Receives the project row (loadProject) because section references are checked
+// against the owner's catalog.
+async function saveModel(project, model) {
+  const projectId = project.id;
+  const present = CHILD_MODELS.filter(({ key }) => Array.isArray(model[key]));
   const config = model.configuration; // objeto único (grid + defaults), o ausente
 
-  const applyAll = async (session) => {
-    await replaceCollections(projectId, keys, model, session);
-    if (config != null) {
-      await ModelConfiguration.findOneAndUpdate(
-        { projectId },
-        { $set: { ...config, projectId } },
-        {
-          upsert: true,
-          new: true,
-          setDefaultsOnInsert: true,
-          ...(session ? { session } : {}),
+  await prisma.$transaction(
+    async (tx) => {
+      for (const { key, name } of present) {
+        const rows = await sanitizeSectionRefs(tx, project.ownerId, name, model[key]);
+        await tx[name].deleteMany({ where: { projectId } });
+        if (rows.length) {
+          await tx[name].createMany({
+            data: rows.map((row) => jsonNulls({ ...row, projectId }, name)),
+          });
         }
-      );
-    }
-  };
-
-  const session = await mongoose.startSession();
-  try {
-    await session.withTransaction(async () => {
-      await applyAll(session);
-    });
-  } catch (err) {
-    if (!isNoTxnSupport(err)) throw err;
-    await applyAll(null);
-  } finally {
-    session.endSession();
-  }
+      }
+      if (config != null) {
+        const data = jsonNulls(stripConfig(config), "modelConfiguration");
+        await tx.modelConfiguration.upsert({
+          where: { projectId },
+          create: { ...data, projectId },
+          update: data,
+        });
+      }
+    },
+    // El timeout por defecto (5 s) se queda corto al reescribir modelos grandes.
+    { maxWait: 10_000, timeout: 30_000 }
+  );
 
   return getModel(projectId);
 }

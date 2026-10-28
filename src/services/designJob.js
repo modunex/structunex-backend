@@ -9,7 +9,8 @@
 //      progreso que se persiste es el de las fases del propio job, y no hay ningún
 //      proceso externo largo al que haya que mantener vivo con latidos.
 
-const { Project, DesignRun } = require("../models");
+const { Prisma } = require("@prisma/client");
+const { prisma } = require("../config/db");
 const { designModel } = require("./calcService");
 const s3Service = require("./s3Service");
 const { env } = require("../config/env");
@@ -27,71 +28,70 @@ function isRunning(projectId) {
 }
 
 async function setProgress(projectId, progress) {
-  await Project.updateOne(
-    { _id: projectId },
-    {
-      $set: {
-        designProgress: {
-          step: progress.step ?? null,
-          current: progress.current ?? null,
-          total: progress.total ?? null,
-          updatedAt: new Date(),
-        },
+  await prisma.project.update({
+    where: { id: projectId },
+    data: {
+      designProgress: {
+        step: progress.step ?? null,
+        current: progress.current ?? null,
+        total: progress.total ?? null,
+        updatedAt: new Date().toISOString(),
       },
-    }
-  );
+    },
+  });
 }
 
 /** Cierra una comprobación fallida sin tocar lo que ya hubiera comprobado antes. */
 async function settleFailure(projectId, runId, message) {
   if (runId) {
-    await DesignRun.updateOne(
-      { _id: runId },
-      { $set: { status: "error", error: message, finishedAt: new Date() } }
-    ).catch(() => {});
+    await prisma.designRun
+      .update({
+        where: { id: runId },
+        data: { status: "error", error: message, finishedAt: new Date() },
+      })
+      .catch(() => {});
   }
-  await Project.updateOne(
-    { _id: projectId },
-    { $set: { designError: message }, $unset: { designProgress: "" } }
-  );
+  await prisma.project.update({
+    where: { id: projectId },
+    data: { designError: message, designProgress: Prisma.DbNull },
+  });
 }
 
 async function saveManifest(run, manifest) {
   const finishedAt = new Date();
-  await DesignRun.updateOne(
-    { _id: run._id },
-    {
-      $set: {
-        status: "done",
-        finishedAt,
-        durationMs: finishedAt.getTime() - run.startedAt.getTime(),
-        error: null,
-        s3Prefix: s3Service.runPrefix(run.projectId, run._id),
-        schemaVersion: manifest.schemaVersion ?? null,
-        code: manifest.code ?? null,
-        steelCode: manifest.steelCode ?? null,
-        combos: manifest.combos ?? [],
-        files: manifest.files ?? {},
-        counts: manifest.counts ?? {},
-        notes: manifest.notes ?? [],
-        bytes: manifest.bytes?.total ?? 0,
-        summary: manifest.summary ?? {},
-      },
-    }
-  );
+  await prisma.designRun.update({
+    where: { id: run.id },
+    data: {
+      status: "done",
+      finishedAt,
+      durationMs: finishedAt.getTime() - run.startedAt.getTime(),
+      error: null,
+      s3Prefix: s3Service.runPrefix(run.projectId, run.id),
+      schemaVersion: manifest.schemaVersion ?? null,
+      code: manifest.code ?? null,
+      steelCode: manifest.steelCode ?? null,
+      combos: manifest.combos ?? [],
+      files: manifest.files ?? {},
+      counts: manifest.counts ?? {},
+      notes: manifest.notes ?? [],
+      bytes: manifest.bytes?.total ?? 0,
+      summary: manifest.summary ?? {},
+    },
+  });
 }
 
 async function pruneRuns(projectId) {
-  const stale = await DesignRun.find({ projectId })
-    .sort({ startedAt: -1 })
-    .skip(MAX_RUNS_PER_PROJECT)
-    .select("_id")
-    .lean();
+  const stale = await prisma.designRun.findMany({
+    where: { projectId },
+    orderBy: { startedAt: "desc" },
+    skip: MAX_RUNS_PER_PROJECT,
+    select: { id: true },
+  });
   if (stale.length === 0) return;
   await Promise.all(
-    stale.map((r) => s3Service.deleteRun(projectId, r._id).catch(() => {}))
+    stale.map((r) => s3Service.deleteRun(projectId, r.id).catch(() => {}))
   );
-  await DesignRun.deleteMany({ _id: { $in: stale.map((r) => r._id) } });
+  await prisma.designRun.deleteMany({ where: { id: { in: stale.map((r) => r.id) } } });
 }
 
 /**
@@ -107,23 +107,23 @@ async function start(projectId, payload) {
   const controller = new AbortController();
   running.set(key, controller);
 
-  const run = await DesignRun.create({
-    projectId,
-    analysisRunId: payload.analysisRunId,
-    status: "designing",
-    code: payload.preferences?.code ?? null,
-    steelCode: payload.preferences?.steelCode ?? null,
+  const run = await prisma.designRun.create({
+    data: {
+      projectId,
+      analysisRunId: payload.analysisRunId,
+      status: "designing",
+      code: payload.preferences?.code ?? null,
+      steelCode: payload.preferences?.steelCode ?? null,
+    },
   });
 
-  await Project.updateOne(
-    { _id: projectId },
-    {
-      $set: {
-        designError: null,
-        designProgress: { step: "preparing", updatedAt: new Date() },
-      },
-    }
-  );
+  await prisma.project.update({
+    where: { id: projectId },
+    data: {
+      designError: null,
+      designProgress: { step: "preparing", updatedAt: new Date().toISOString() },
+    },
+  });
 
   // A propósito sin await: la respuesta HTTP sale ya.
   (async () => {
@@ -147,7 +147,7 @@ async function start(projectId, payload) {
           preferences: payload.preferences,
           storage: {
             projectId: key,
-            runId: String(run._id),
+            runId: String(run.id),
             bucket: env.s3Bucket,
             prefix: env.s3Prefix,
           },
@@ -164,10 +164,10 @@ async function start(projectId, payload) {
 
       await setProgress(projectId, { step: "saving" });
       await saveManifest(run, manifest);
-      await Project.updateOne(
-        { _id: projectId },
-        { $set: { designError: null }, $unset: { designProgress: "" } }
-      );
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { designError: null, designProgress: Prisma.DbNull },
+      });
       await pruneRuns(projectId).catch(() => {});
     } catch (err) {
       const cancelled =
@@ -179,23 +179,25 @@ async function start(projectId, payload) {
         : err instanceof AppError
           ? err.message
           : "El calc-service no pudo comprobar el modelo";
-      await DesignRun.updateOne(
-        { _id: run._id },
-        {
-          $set: {
+      await prisma.designRun
+        .update({
+          where: { id: run.id },
+          data: {
             status: cancelled ? "cancelled" : "error",
             error: message,
             finishedAt: new Date(),
           },
-        }
-      ).catch(() => {});
+        })
+        .catch(() => {});
       if (!cancelled) {
-        await s3Service.deleteRun(projectId, run._id).catch(() => {});
+        await s3Service.deleteRun(projectId, run.id).catch(() => {});
       }
-      await Project.updateOne(
-        { _id: projectId },
-        { $set: { designError: message }, $unset: { designProgress: "" } }
-      ).catch(() => {});
+      await prisma.project
+        .update({
+          where: { id: projectId },
+          data: { designError: message, designProgress: Prisma.DbNull },
+        })
+        .catch(() => {});
     } finally {
       running.delete(key);
     }

@@ -64,7 +64,7 @@ async function analyzeModel(request) {
 // result. Two reasons to prefer it over analyzeModel():
 //   1. Progress - `onProgress({step, message, current, total})` fires as it goes.
 //   2. Bytes start flowing immediately, so the request survives a proxy that aborts
-//      anything without a response in 30 s (Heroku's router does exactly that).
+//      anything without a response for a while (load balancers commonly cut at 30-60 s).
 // `signal` is an AbortSignal: aborting it drops the connection, and the calc-service
 // notices the disconnect and kills MYSTRAN.
 async function analyzeModelStream(request, { onProgress, signal } = {}) {

@@ -5,8 +5,17 @@ require("dotenv").config();
 
 const env = {
   port: Number(process.env.PORT || 4000),
-  mongoUri: process.env.MONGODB_URI || "mongodb://localhost:27017/structunex",
-  calcServiceUrl: process.env.CALC_SERVICE_URL || "http://localhost:8000",
+  // PostgreSQL. En Render: la "Internal Database URL" de la base.
+  databaseUrl: process.env.DATABASE_URL,
+  // Conexiones máximas del pool (los planes pequeños de Postgres admiten pocas).
+  databasePoolMax: Number(process.env.DATABASE_POOL_MAX || 5),
+  // URL del calc-service. En Render, el Blueprint inyecta CALC_SERVICE_HOSTPORT
+  // ("host:puerto" del servicio privado, sin esquema); CALC_SERVICE_URL manda si existe.
+  calcServiceUrl:
+    process.env.CALC_SERVICE_URL ||
+    (process.env.CALC_SERVICE_HOSTPORT
+      ? `http://${process.env.CALC_SERVICE_HOSTPORT}`
+      : "http://localhost:8000"),
   // Orígenes permitidos para CORS. Acepta una lista separada por comas.
   // Por defecto, la app de producción (app.structunex.com). localhost se permite
   // aparte en app.js para desarrollo.
@@ -42,6 +51,13 @@ const env = {
   // URL que se quede pegada en el historial no debe seguir sirviendo resultados.
   s3UrlTtlS: Number(process.env.S3_URL_TTL_S || 300),
 };
+
+if (!env.databaseUrl) {
+  console.warn(
+    "[env] DATABASE_URL is not set — the server cannot reach PostgreSQL. " +
+      "Set it in .env (local) or in the Render service environment."
+  );
+}
 
 if (!env.clerkSecretKey) {
   console.warn(

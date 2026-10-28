@@ -1,13 +1,14 @@
-const { isValidObjectId } = require("mongoose");
+const { prisma } = require("../config/db");
 const { AppError } = require("../middleware/errorHandler");
-const { CatalogFrameSection: Model, CatalogMaterial } = require("../models");
+const { isUuid, toApi, jsonNulls } = require("../lib/ids");
 const { getShape } = require("../lib/aiscShapes");
 const { computeSectionProps } = require("../lib/sectionGeometry");
 
-// CRUD for the user-owned section catalog. Every document is addressed by its
-// Mongo _id and always constrained to its owner. The solver-facing props
+// CRUD for the user-owned section catalog. Every row is addressed by its id and
+// always constrained to its owner. The solver-facing props
 // (A/I33/I22/J) are computed here from the shape definition, never trusted from
 // the body.
+const db = prisma.catalogFrameSection;
 const notFound = () => new AppError(404, "CatalogFrameSection not found");
 
 // Campos de definición usados por cada forma paramétrica (además de `shape`).
@@ -51,10 +52,11 @@ const COMPATIBLE_MATERIAL = {
 // Confirma que el material referenciado existe, pertenece al usuario y es
 // coherente con el `propertyType` de la sección.
 async function assertMaterial(ownerId, materialId, propertyType) {
-  if (!isValidObjectId(materialId)) throw new AppError(400, "Material no válido");
-  const mat = await CatalogMaterial.findOne({ _id: materialId, ownerId })
-    .select("type")
-    .lean();
+  if (!isUuid(materialId)) throw new AppError(400, "Material no válido");
+  const mat = await prisma.catalogMaterial.findFirst({
+    where: { id: materialId, ownerId },
+    select: { type: true },
+  });
   if (!mat) throw new AppError(400, "Material no encontrado");
   const allowed = COMPATIBLE_MATERIAL[propertyType];
   if (allowed && !allowed.includes(mat.type)) {
@@ -68,11 +70,11 @@ async function assertMaterial(ownerId, materialId, propertyType) {
 
 // El material de armadura debe existir, pertenecer al usuario y ser armadura/acero.
 async function assertRebarMaterial(ownerId, materialId) {
-  if (!isValidObjectId(materialId))
-    throw new AppError(400, "Material de armadura no válido");
-  const mat = await CatalogMaterial.findOne({ _id: materialId, ownerId })
-    .select("type")
-    .lean();
+  if (!isUuid(materialId)) throw new AppError(400, "Material de armadura no válido");
+  const mat = await prisma.catalogMaterial.findFirst({
+    where: { id: materialId, ownerId },
+    select: { type: true },
+  });
   if (!mat) throw new AppError(400, "Material de armadura no encontrado");
   if (!["rebar", "steel"].includes(mat.type))
     throw new AppError(400, "El material de armadura debe ser de tipo armadura o acero");
@@ -89,14 +91,16 @@ function resolveProps(def) {
 }
 
 module.exports = {
-  list: (ownerId) =>
-    Model.find({ ownerId }).select("-__v").sort({ createdAt: -1 }).lean(),
+  list: async (ownerId) =>
+    (await db.findMany({ where: { ownerId }, orderBy: { createdAt: "desc" } })).map(
+      (row) => toApi(row)
+    ),
 
   getOne: async (ownerId, id) => {
-    if (!isValidObjectId(id)) throw notFound();
-    const doc = await Model.findOne({ _id: id, ownerId }).select("-__v").lean();
-    if (!doc) throw notFound();
-    return doc;
+    if (!isUuid(id)) throw notFound();
+    const row = await db.findFirst({ where: { id, ownerId } });
+    if (!row) throw notFound();
+    return toApi(row);
   },
 
   create: async (ownerId, data) => {
@@ -105,21 +109,22 @@ module.exports = {
       await assertRebarMaterial(ownerId, data.reinforcement.rebarMaterialId);
     }
     const props = resolveProps(data);
-    const doc = { ...data, ownerId, props };
+    const row = { ...data, ownerId, props };
     // El armado sólo tiene sentido en hormigón.
-    if (doc.propertyType !== "concrete") delete doc.reinforcement;
-    return Model.create(doc);
+    if (row.propertyType !== "concrete") delete row.reinforcement;
+    return toApi(await db.create({ data: row }));
   },
 
   update: async (ownerId, id, data) => {
-    if (!isValidObjectId(id)) throw notFound();
-    const existing = await Model.findOne({ _id: id, ownerId }).lean();
+    if (!isUuid(id)) throw notFound();
+    const existing = await db.findFirst({ where: { id, ownerId } });
     if (!existing) throw notFound();
 
     // Definición efectiva = existente + parche (el discriminante `source`
     // siempre viene en el PATCH). Sirve para recomputar props de forma robusta
-    // aunque el parche sea parcial.
-    const def = { ...existing, ...data };
+    // aunque el parche sea parcial. toApi quita los null de las columnas vacías,
+    // para que la definición se vea igual que el documento de Mongo de antes.
+    const def = { ...toApi(existing), ...data };
     await assertMaterial(ownerId, def.materialId, def.propertyType);
     if (def.reinforcement && def.reinforcement.rebarMaterialId) {
       await assertRebarMaterial(ownerId, def.reinforcement.rebarMaterialId);
@@ -129,29 +134,21 @@ module.exports = {
     const set = { ...data, props };
     // Al cambiar de source/shape, limpiar los campos de definición no usados.
     const keep = keepFields(def);
-    const drop = ALL_DEF_FIELDS.filter(
-      (f) => !keep.includes(f) && !(f in data)
-    );
-    // El armado sólo vive en hormigón: al dejar de serlo, se elimina.
-    if (def.propertyType !== "concrete") {
-      delete set.reinforcement;
-      drop.push("reinforcement");
+    for (const field of ALL_DEF_FIELDS) {
+      if (!keep.includes(field) && !(field in data)) set[field] = null;
     }
-    const update = { $set: set };
-    if (drop.length) update.$unset = Object.fromEntries(drop.map((k) => [k, ""]));
+    // El armado sólo vive en hormigón: al dejar de serlo, se elimina.
+    if (def.propertyType !== "concrete") set.reinforcement = null;
 
-    const doc = await Model.findOneAndUpdate({ _id: id, ownerId }, update, {
-      new: true,
-      runValidators: true,
-    });
-    if (!doc) throw notFound();
-    return doc;
+    await db.update({ where: { id }, data: jsonNulls(set, "catalogFrameSection") });
+    return toApi(await db.findUnique({ where: { id } }));
   },
 
+  // Las barras que la usaban quedan sin sección (FK con ON DELETE SET NULL).
   remove: async (ownerId, id) => {
-    if (!isValidObjectId(id)) throw notFound();
-    const doc = await Model.findOneAndDelete({ _id: id, ownerId });
-    if (!doc) throw notFound();
+    if (!isUuid(id)) throw notFound();
+    const { count } = await db.deleteMany({ where: { id, ownerId } });
+    if (!count) throw notFound();
     return { deleted: true };
   },
 };

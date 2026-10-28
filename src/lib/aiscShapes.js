@@ -1,4 +1,4 @@
-// AISC shapes catalog served entirely from the bundled JSON (no Mongo). The
+// AISC shapes catalog served entirely from the bundled JSON (no database). The
 // file (~600 KB, 2299 shapes, already in SI units: m, m², m⁴, kN/m) is loaded
 // once at require time; searches and lookups run in memory. Updating the
 // catalog = replacing the JSON file. No DB, no seed.

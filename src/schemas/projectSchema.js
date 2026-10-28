@@ -1,8 +1,8 @@
 const { z } = require("zod");
 
-// Zod validates the request body BEFORE it touches Mongo. These per-entity
+// Zod validates the request body BEFORE it touches the database. These per-entity
 // schemas back the sub-resource routes: the full object for POST, and
-// `.partial()` for PATCH. They carry NO `.default()` — Mongoose fills defaults
+// `.partial()` for PATCH. They carry NO `.default()` — Postgres fills defaults
 // on insert, so `.partial()` never injects a default that would overwrite an
 // unspecified field on update.
 
@@ -10,7 +10,7 @@ const node = z.object({
   id: z.string().min(1),
   x: z.number(),
   y: z.number(),
-  z: z.number().optional(), // Mongoose default 0
+  z: z.number().optional(), // column default 0
 });
 
 // Barra: referencia una frame section del catálogo (CatalogFrameSection, que
@@ -34,7 +34,7 @@ const element = z.object({
   nodeB: z.string().min(1),
   frameSectionId: z.string().optional(),
   // Section orientation about the member axis, in degrees (SAP2000 "angle").
-  // Optional: Mongoose defaults it to 0.
+  // Optional: the column defaults to 0.
   roll: z.number().optional(),
   // Liberaciones de extremo (SAP2000 "Frame Releases"): i = extremo inicial (nodeA),
   // j = extremo final (nodeB). Ausente = ambos extremos empotrados.
@@ -44,7 +44,7 @@ const element = z.object({
     .optional(),
 });
 
-// Booleans/numbers below are optional (no Zod default) — Mongoose defaults them
+// Booleans/numbers below are optional (no Zod default) — the columns default them
 // to false / 0 on insert.
 const support = z.object({
   nodeId: z.string().min(1),

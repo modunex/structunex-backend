@@ -1,54 +1,79 @@
 # Structunex Backend
 
-Express + MongoDB (Mongoose) API for the AI structural design MVP.
-Node orchestrates and stores data; the Python `calc-service` does the actual solving.
+Express + PostgreSQL (Prisma) API for the AI structural design MVP.
+Node orchestrates and stores data; the Python `calc-service` does the actual solving,
+and the heavy results live in S3 as Parquet.
 
 ## Requirements
 
-- Node.js 18+
-- MongoDB (local, or a MongoDB Atlas connection string)
+- Node.js 22
+- PostgreSQL 14+ (local Docker, or Render Postgres)
 
-## Setup
+## Setup (local)
 
 ```bash
-cd backend
+# 1. Postgres local
+docker run -d --name structunex-pg -e POSTGRES_PASSWORD=dev -p 5432:5432 postgres:17
+
+# 2. Dependencias (postinstall ejecuta `prisma generate`)
 npm install
+
+# 3. Variables: DATABASE_URL apunta al contenedor de arriba
 cp .env.example .env   # then edit values if needed
-npm run dev            # starts on http://localhost:4000
+
+# 4. Crear las tablas
+npm run db:deploy      # aplica prisma/migrations
+
+# 5. Arrancar
+npm run dev            # http://localhost:4000
 ```
+
+Useful commands:
+
+| Command              | What it does                                                   |
+| -------------------- | -------------------------------------------------------------- |
+| `npm run db:migrate` | After editing `prisma/schema.prisma`: creates a new migration and applies it locally |
+| `npm run db:deploy`  | Applies pending migrations (what Render runs before each deploy) |
+| `npm run db:studio`  | Opens Prisma Studio to browse the tables                       |
+| `npm test`           | Unit tests (load combos, spectra)                              |
 
 ## Environment (.env)
 
-| Variable          | Default                                  | Description                     |
-| ----------------- | ---------------------------------------- | ------------------------------- |
-| PORT                  | 4000                                     | API port                        |
-| MONGODB_URI           | mongodb://localhost:27017/structunex     | Mongo connection string         |
-| CALC_SERVICE_URL      | http://localhost:8000                    | Python solver microservice      |
-| CLIENT_ORIGIN         | http://localhost:5173                    | Frontend origin (CORS)          |
-| CLERK_PUBLISHABLE_KEY | pk_test_...                              | Clerk publishable key           |
-| CLERK_SECRET_KEY      | sk_test_...                              | Clerk secret key (backend auth) |
+| Variable                     | Default                    | Description                                  |
+| ---------------------------- | -------------------------- | -------------------------------------------- |
+| PORT                         | 4000                       | API port                                     |
+| DATABASE_URL                 | —                          | PostgreSQL connection string                 |
+| DATABASE_POOL_MAX            | 5                          | Max connections in the pool                  |
+| CALC_SERVICE_URL             | http://localhost:8000      | Python solver microservice                   |
+| CALC_SERVICE_HOSTPORT        | —                          | `host:port` of the calc-service (set by Render); used if CALC_SERVICE_URL is absent |
+| CLIENT_ORIGIN                | https://app.structunex.com | Frontend origin(s) for CORS, comma-separated |
+| CLERK_PUBLISHABLE_KEY        | pk_test_...                | Clerk publishable key                        |
+| CLERK_SECRET_KEY             | sk_test_...                | Clerk secret key (backend auth)              |
+| CLERK_WEBHOOK_SIGNING_SECRET | whsec_...                  | Verifies `/api/webhooks/clerk`               |
+| MAILCHIMP_API_KEY / MAILCHIMP_AUDIENCE_ID | —             | Syncs new users to Mailchimp                 |
+| AWS_REGION / AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_S3_BUCKET | — | Analysis results bucket |
 
 > Clerk keys are written to `.env.local` by `clerk init` (git-ignored). The
 > table above documents them; do not commit real values.
 
 ## Authentication
 
-All `/api/projects` routes require a valid Clerk session. The client must send
-the Clerk session token on every request:
+All `/api/projects` and catalog routes require a valid Clerk session. The client must
+send the Clerk session token on every request:
 
 ```
 Authorization: Bearer <clerk-session-token>
 ```
 
-`GET /api/health` stays public. The project owner (`ownerId`) is taken from the
-authenticated Clerk user — it is **not** sent in the request body — and each
-user can only access their own projects.
+`GET /api/health` stays public. The owner (`ownerId`) is taken from the authenticated
+Clerk user — it is **not** sent in the request body — and each user can only access
+their own projects and catalogs. The `users` table mirrors Clerk through the
+`/api/webhooks/clerk` webhook.
 
 ## API
 
-The structural model is built **incrementally**: create a project (metadata
-only), then add its entities through their own sub-resource routes, then run the
-analysis. Every entity is addressed by its Mongo `_id`.
+Every row is exposed with an `_id` (a UUID). The structural model can be saved whole
+(`PUT /api/projects/:id/model`, used by the frontend autosave) or per entity.
 
 **Projects**
 
@@ -56,100 +81,94 @@ analysis. Every entity is addressed by its Mongo `_id`.
 | ------ | ------------------ | ---------------------------------------- |
 | GET    | /api/health        | Health check (public)                    |
 | GET    | /api/projects      | List the caller's projects (metadata)    |
-| POST   | /api/projects      | Create a project (`name`, `code`)        |
+| POST   | /api/projects      | Create a project                         |
 | GET    | /api/projects/:id  | Get project metadata                     |
 | PATCH  | /api/projects/:id  | Update project metadata                  |
-| DELETE | /api/projects/:id  | Delete project + all its children        |
+| DELETE | /api/projects/:id  | Delete project + everything it owns      |
 
-**Sub-resources** — the same CRUD shape for each entity, nested under a project:
+**Model**
 
-| Method | Route                                    | Description        |
-| ------ | ---------------------------------------- | ------------------ |
-| GET    | /api/projects/:id/`<entity>`             | List entities      |
-| POST   | /api/projects/:id/`<entity>`             | Create one         |
-| GET    | /api/projects/:id/`<entity>`/:entityId   | Get one            |
-| PATCH  | /api/projects/:id/`<entity>`/:entityId   | Update one         |
-| DELETE | /api/projects/:id/`<entity>`/:entityId   | Delete one         |
+| Method | Route                       | Description                                        |
+| ------ | --------------------------- | -------------------------------------------------- |
+| GET    | /api/projects/:id/model     | Whole model + configuration                        |
+| PUT    | /api/projects/:id/model     | Replace the collections present in the body (one transaction) |
 
-where `<entity>` ∈ `nodes | materials | sections | elements | supports | loads`.
+Per-entity CRUD (`GET`/`POST` on the collection, `GET`/`PATCH`/`DELETE` on
+`/:entityId`) for `nodes | elements | supports | loads | areas`.
 
-**Analysis**
+**Catalogs** (per user): `/api/materials`, `/api/sections`, `/api/area-sections`.
 
-| Method | Route                        | Description                          |
-| ------ | ---------------------------- | ------------------------------------ |
-| GET    | /api/projects/:id/analysis   | Current status + last result         |
-| POST   | /api/projects/:id/analysis   | Run the solver, store the result     |
+**Analysis / Design**
+
+| Method | Route                                         | Description                      |
+| ------ | --------------------------------------------- | -------------------------------- |
+| GET    | /api/projects/:id/analysis                    | Status + progress + last run     |
+| POST   | /api/projects/:id/analysis                    | Launch the solver (202)          |
+| DELETE | /api/projects/:id/analysis                    | Cancel                           |
+| GET    | /api/projects/:id/analysis/runs               | Run history                      |
+| GET    | /api/projects/:id/analysis/runs/:runId/urls   | Presigned URLs of one load case  |
+| …      | /api/projects/:id/design…                     | Same shape for code checking     |
 
 ## Data model
 
-The structural model is **normalized**: instead of embedding everything in one
-`projects` document, each entity type lives in its own collection related by
-`projectId`, with indexes.
+The schema lives in `prisma/schema.prisma`; migrations in `prisma/migrations/`.
 
-| Collection  | Holds                    | Key index                          |
-| ----------- | ------------------------ | ---------------------------------- |
-| `projects`  | Project metadata         | `{ ownerId, createdAt }`           |
-| `nodes`     | Nodes                    | `{ projectId, id }` unique         |
-| `materials` | Materials                | `{ projectId, id }` unique         |
-| `sections`  | Sections                 | `{ projectId, id }` unique         |
-| `elements`  | Elements                 | `{ projectId, id }` unique         |
-| `supports`  | Supports                 | `{ projectId, nodeId }` unique     |
-| `loads`     | Loads                    | `{ projectId }`                    |
-| `results`   | Solver output (1:1)      | `{ projectId }` unique             |
+| Table                         | Holds                                   | Key constraint                        |
+| ----------------------------- | --------------------------------------- | ------------------------------------- |
+| `users`                       | Clerk mirror                            | `clerkId` unique                      |
+| `catalog_materials`           | User materials                          | index `(ownerId, createdAt)`          |
+| `catalog_frame_sections`      | User frame sections                     | FK material (`RESTRICT`)              |
+| `catalog_area_sections`       | User shell sections                     | FK material (`RESTRICT`)              |
+| `projects`                    | Project metadata + job progress         | index `(ownerId, createdAt)`          |
+| `model_configuration`         | Grid, load patterns, combos, spectra… (JSONB) | PK = `projectId`                |
+| `model_nodes`, `model_elements`, `model_areas` | Geometry                | `(projectId, id)` unique              |
+| `model_supports`              | Restraints                              | `(projectId, nodeId)` unique          |
+| `model_loads`, `model_frame_loads`, `model_area_loads` | Loads           | index `(projectId, seq)`              |
+| `model_area_springs`          | Subgrade springs                        | `(projectId, areaId)` unique          |
+| `analysis_runs`, `design_runs`| Run metadata (results are in S3)        | index `(projectId, startedAt)`        |
 
-The domain id (`id` / `nodeId`) is a data field with a unique index per project;
-creating a duplicate is rejected by the index. Project deletion cascades to all
-children in a **transaction** (requires a replica set — MongoDB Atlas, or a local
-`mongod --replSet`).
+Notes:
+
+- Every table hangs from `projects` with `ON DELETE CASCADE`: deleting a project
+  removes its model, configuration and runs in one statement.
+- Model tables have a `pk` (exposed as `_id`) because `id` is the domain id (`"N1"`),
+  plus a `seq` column: reads are ordered by it so the model comes back in the order it
+  was saved.
+- Elements/areas reference catalog sections with `ON DELETE SET NULL`; deleting a
+  material still used by a section is refused (409).
 
 ## Structure
 
 ```
+prisma/
+├── schema.prisma     # tables, relations, indexes
+└── migrations/       # SQL history applied by `prisma migrate deploy`
 src/
 ├── index.js          # entry point (connects DB, starts server)
 ├── app.js            # Express config (middlewares, routes, CORS)
-├── config/           # env + db connection
-├── models/           # one file/collection per entity + index barrel
+├── config/           # env + Prisma client
+├── models/           # CHILD_MODELS: the model tables iterated by the services
+├── lib/ids.js        # UUID validation + row -> API shape (`_id`, no nulls)
 ├── schemas/          # Zod validation (per-entity)
 ├── controllers/      # thin per-resource handlers + crudFactory
-├── services/         # thin per-resource services + crudFactory + analysis
+├── services/         # business logic, jobs, S3, calc-service client
 ├── routes/           # one router per resource, nested under projects
 └── middleware/       # auth (Clerk) + loadProject + validate + errorHandler
 ```
 
-Sub-resource routes/controllers/services are generated from a shared `crudFactory`
-so each entity stays an independent file without duplicating CRUD. Ownership is
-enforced once by `loadProject`, which loads the project and checks it belongs to
-the Clerk user before any sub-resource handler runs.
-
 ## Data flow
 
 ```
-routes -> requireAuth -> loadProject -> validate (Zod) -> controller -> service -> (MongoDB | Python calc-service)
+routes -> requireAuth -> loadProject -> validate (Zod) -> controller -> service -> (PostgreSQL | S3 | Python calc-service)
 ```
 
-## Example: build a project incrementally
+## Deploy (Render)
 
-All requests need `-H "Authorization: Bearer <clerk-session-token>"`.
+`render.yaml` is a Render Blueprint with the database, this API, the calc-service
+(private service) and the frontend (static site). Render runs
+`npx prisma migrate deploy` before each deploy of the API.
 
-```bash
-# 1. Create the project (metadata only) -> returns { _id, ... }
-curl -X POST http://localhost:4000/api/projects \
-  -H "Content-Type: application/json" -H "Authorization: Bearer <token>" \
-  -d '{ "name": "Portico ejemplo", "code": "E.030" }'
-
-# 2. Add entities (use the project _id from step 1)
-curl -X POST http://localhost:4000/api/projects/<projectId>/nodes \
-  -H "Content-Type: application/json" -H "Authorization: Bearer <token>" \
-  -d '{ "id": "N1", "x": 0, "y": 0, "z": 0 }'
-
-curl -X POST http://localhost:4000/api/projects/<projectId>/materials \
-  -H "Content-Type: application/json" -H "Authorization: Bearer <token>" \
-  -d '{ "id": "M1", "name": "Concreto", "E": 25000000, "G": 10400000 }'
-
-# ... sections, elements, supports, loads the same way ...
-
-# 3. Run the analysis
-curl -X POST http://localhost:4000/api/projects/<projectId>/analysis \
-  -H "Authorization: Bearer <token>"
-```
+> Prisma downloads its migration engine from `binaries.prisma.sh` the first time a
+> `prisma` command runs. If a corporate network blocks that host, `npm install`
+> fails at `prisma generate`; run it from another network or ask IT to allow it.
+> Render has no such restriction.

@@ -1,14 +1,5 @@
-const mongoose = require("mongoose");
-const {
-  Project,
-  AnalysisRun,
-  DesignRun,
-  ModelNode,
-  ModelElement,
-  ModelConfiguration,
-  CatalogFrameSection,
-  CatalogMaterial,
-} = require("../models");
+const { prisma } = require("../config/db");
+const { isUuid, toApi } = require("../lib/ids");
 const { AppError } = require("../middleware/errorHandler");
 const designJob = require("./designJob");
 const s3Service = require("./s3Service");
@@ -19,16 +10,21 @@ const { getShape } = require("../lib/aiscShapes");
 // EL HUECO QUE CIERRA ESTE MÓDULO. `analysisService.assembleModel` manda al solver los
 // materiales como { id, E, G, density } y las secciones como { id, materialId, A, Iy,
 // Iz, J }: exactamente lo que MYSTRAN necesita y nada más. Todo lo que hace falta para
-// COMPROBAR —f'c, Fy, el armado, las cotas de la sección— se queda en Mongo. Aquí se
+// COMPROBAR —f'c, Fy, el armado, las cotas de la sección— se queda en la base. Aquí se
 // arma un payload distinto que sí lo lleva.
 //
 // Se hace en una función aparte en vez de ampliar `assembleModel` a propósito: el
 // payload del solver está probado y en producción, y engordarlo con datos que el
 // solver ignora solo añade formas de romperlo.
 
-const RUN_FIELDS =
-  "status startedAt finishedAt durationMs error code steelCode combos files counts " +
-  "notes bytes summary schemaVersion analysisRunId";
+const RUN_SELECT = Object.fromEntries(
+  [
+    "id", "status", "startedAt", "finishedAt", "durationMs", "error", "code",
+    "steelCode", "combos", "files", "counts", "notes", "bytes", "summary",
+    "schemaVersion", "analysisRunId",
+  ].map((field) => [field, true])
+);
+const runToApi = (row) => (row ? toApi(row, "designRun") : row);
 
 // Cotas paramétricas que el motor necesita para reconstruir la sección. Es el mismo
 // superconjunto que `SectionDims` en el frontend; cada forma usa las suyas.
@@ -60,34 +56,38 @@ function pick(source, fields) {
  */
 async function assembleDesignModel(projectId) {
   const [nodes, elements] = await Promise.all([
-    ModelNode.find({ projectId }).select("-_id id x y z").lean(),
-    ModelElement.find({ projectId }).select("-_id id nodeA nodeB frameSectionId").lean(),
+    prisma.modelNode.findMany({
+      where: { projectId },
+      orderBy: { seq: "asc" },
+      select: { id: true, x: true, y: true, z: true },
+    }),
+    prisma.modelElement.findMany({
+      where: { projectId },
+      orderBy: { seq: "asc" },
+      select: { id: true, nodeA: true, nodeB: true, frameSectionId: true },
+    }),
   ]);
 
-  const assigned = elements.filter(
-    (e) => e.frameSectionId && mongoose.isValidObjectId(e.frameSectionId)
-  );
-  const sectionIds = [...new Set(assigned.map((e) => String(e.frameSectionId)))];
+  const assigned = elements.filter((e) => isUuid(e.frameSectionId));
+  const sectionIds = [...new Set(assigned.map((e) => e.frameSectionId))];
   const catSections = sectionIds.length
-    ? await CatalogFrameSection.find({ _id: { $in: sectionIds } }).lean()
+    ? await prisma.catalogFrameSection.findMany({ where: { id: { in: sectionIds } } })
     : [];
 
   // Materiales: el de la sección MÁS el del armado, que cuelga del `reinforcement` y
   // que el análisis nunca mira porque no aporta rigidez.
   const materialIds = new Set();
   for (const section of catSections) {
-    if (mongoose.isValidObjectId(section.materialId)) {
-      materialIds.add(String(section.materialId));
-    }
+    if (isUuid(section.materialId)) materialIds.add(section.materialId);
     const rebarId = section.reinforcement?.rebarMaterialId;
-    if (rebarId && mongoose.isValidObjectId(rebarId)) materialIds.add(String(rebarId));
+    if (isUuid(rebarId)) materialIds.add(rebarId);
   }
   const catMaterials = materialIds.size
-    ? await CatalogMaterial.find({ _id: { $in: [...materialIds] } }).lean()
+    ? await prisma.catalogMaterial.findMany({ where: { id: { in: [...materialIds] } } })
     : [];
 
   const materials = catMaterials.map((m) => ({
-    id: String(m._id),
+    id: m.id,
     name: m.name,
     type: m.type,
     E: m.E,
@@ -107,9 +107,9 @@ async function assembleDesignModel(projectId) {
 
   const sections = catSections.map((s) => {
     const out = {
-      id: String(s._id),
+      id: s.id,
       name: s.name,
-      materialId: String(s.materialId),
+      materialId: s.materialId,
       propertyType: s.propertyType,
       source: s.source,
       shape: s.shape ?? null,
@@ -153,9 +153,10 @@ const DEFAULT_PREFERENCES = {
  * encuentre la última elección del usuario.
  */
 async function resolvePreferences(projectId, requested) {
-  const configuration = await ModelConfiguration.findOne({ projectId })
-    .select("designPreferences loadCombinations")
-    .lean();
+  const configuration = await prisma.modelConfiguration.findUnique({
+    where: { projectId },
+    select: { designPreferences: true, loadCombinations: true },
+  });
   const stored = configuration?.designPreferences || {};
   const preferences = {
     ...DEFAULT_PREFERENCES,
@@ -163,11 +164,11 @@ async function resolvePreferences(projectId, requested) {
     ...(requested || {}),
   };
   if (requested) {
-    await ModelConfiguration.updateOne(
-      { projectId },
-      { $set: { designPreferences: preferences } },
-      { upsert: true }
-    );
+    await prisma.modelConfiguration.upsert({
+      where: { projectId },
+      create: { projectId, designPreferences: preferences },
+      update: { designPreferences: preferences },
+    });
   }
   return {
     preferences,
@@ -177,15 +178,16 @@ async function resolvePreferences(projectId, requested) {
 
 /** Lanza la comprobación y responde 202; el progreso se consulta con GET. */
 async function run(project, options) {
-  const projectId = project._id;
+  const projectId = project.id;
 
   // El análisis que aporta los esfuerzos: siempre el más reciente que resolvió. Si no
   // hay ninguno no hay nada que comprobar, y decirlo aquí es mejor que dejar que el
   // job falle a los dos segundos.
-  const analysisRun = await AnalysisRun.findOne({ projectId, status: "solved" })
-    .sort({ startedAt: -1 })
-    .select("_id cases")
-    .lean();
+  const analysisRun = await prisma.analysisRun.findFirst({
+    where: { projectId, status: "solved" },
+    orderBy: { startedAt: "desc" },
+    select: { id: true, cases: true },
+  });
   if (!analysisRun) {
     throw new AppError(
       409,
@@ -213,7 +215,7 @@ async function run(project, options) {
   }
 
   await designJob.start(projectId, {
-    analysisRunId: String(analysisRun._id),
+    analysisRunId: analysisRun.id,
     cases: analysisRun.cases.map((c) => ({ name: c.name, key: c.key, kind: c.kind })),
     model,
     combinations: combinations.map((c) => ({
@@ -230,26 +232,33 @@ async function run(project, options) {
   return { status: "designing", progress: { step: "preparing" } };
 }
 
-// Una ejecución cuyo progreso lleva parado este tiempo está huérfana: el dyno se
+// Una ejecución cuyo progreso lleva parado este tiempo está huérfana: el servidor se
 // reinició con el job en vuelo. Igual que en análisis, pero más corto: comprobar no
 // tarda minutos.
 const STALE_MS = 2 * 60 * 1000;
 
 const latestRun = (projectId) =>
-  DesignRun.findOne({ projectId, status: "done" })
-    .sort({ startedAt: -1 })
-    .select(RUN_FIELDS)
-    .lean();
+  prisma.designRun
+    .findFirst({
+      where: { projectId, status: "done" },
+      orderBy: { startedAt: "desc" },
+      select: RUN_SELECT,
+    })
+    .then(runToApi);
 
 /** Estado actual + progreso + metadatos de la última comprobación terminada. */
 async function get(projectId) {
   const [project, run, inFlight] = await Promise.all([
-    Project.findById(projectId).select("designProgress designError").lean(),
+    prisma.project.findUnique({
+      where: { id: projectId },
+      select: { designProgress: true, designError: true },
+    }),
     latestRun(projectId),
-    DesignRun.findOne({ projectId, status: "designing" })
-      .sort({ startedAt: -1 })
-      .select("_id startedAt")
-      .lean(),
+    prisma.designRun.findFirst({
+      where: { projectId, status: "designing" },
+      orderBy: { startedAt: "desc" },
+      select: { id: true, startedAt: true },
+    }),
   ]);
   if (!project) return { status: null, progress: null, error: null, run: null };
 
@@ -264,7 +273,7 @@ async function get(projectId) {
     if (stale) {
       const message =
         "La comprobación se interrumpió (el servidor se reinició). Vuelve a lanzarla.";
-      await designJob.settleFailure(projectId, inFlight._id, message).catch(() => {});
+      await designJob.settleFailure(projectId, inFlight.id, message).catch(() => {});
       return { status: run ? "done" : "idle", progress: null, error: message, run: run || null };
     }
   }
@@ -279,7 +288,12 @@ async function get(projectId) {
 
 /** Historial de comprobaciones, de la más reciente a la más antigua. */
 async function listRuns(projectId) {
-  return DesignRun.find({ projectId }).sort({ startedAt: -1 }).select(RUN_FIELDS).lean();
+  const rows = await prisma.designRun.findMany({
+    where: { projectId },
+    orderBy: { startedAt: "desc" },
+    select: RUN_SELECT,
+  });
+  return rows.map(runToApi);
 }
 
 /**
@@ -291,12 +305,13 @@ async function listRuns(projectId) {
  * `criteria` y `interaction`.
  */
 async function signRun(projectId, runId) {
-  if (!mongoose.isValidObjectId(runId)) {
+  if (!isUuid(runId)) {
     throw new AppError(404, "Comprobación no encontrada");
   }
-  const run = await DesignRun.findOne({ _id: runId, projectId })
-    .select("status files")
-    .lean();
+  const run = await prisma.designRun.findFirst({
+    where: { id: runId, projectId },
+    select: { status: true, files: true },
+  });
   if (!run || run.status !== "done") {
     throw new AppError(404, "Comprobación no encontrada");
   }

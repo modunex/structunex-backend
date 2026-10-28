@@ -2,8 +2,8 @@
 //
 // This service NEVER reads Parquet. The calc-service writes the files and the browser
 // reads them directly from a presigned URL; all Node does is sign those URLs and clean
-// up when a run or a project goes away. That keeps megabytes of results off the dyno —
-// which matters on Heroku, where the router aborts a request that takes over 30 s.
+// up when a run or a project goes away. That keeps megabytes of results off this
+// server and off any proxy timeout between it and the browser.
 
 const {
   S3Client,
@@ -29,7 +29,7 @@ function s3() {
     client = new S3Client({
       region: env.awsRegion,
       // Sin credenciales explícitas, el SDK usa su cadena habitual (perfil, rol…),
-      // que es lo que querría un despliegue fuera de Heroku.
+      // que es lo que querría un despliegue con roles de IAM.
       ...(env.awsAccessKeyId && env.awsSecretAccessKey
         ? {
             credentials: {
@@ -84,7 +84,7 @@ async function signRunPaths(projectId, runId, paths) {
 
 /**
  * Borra todo lo que cuelgue de un prefijo. Se usa al podar ejecuciones antiguas y al
- * borrar un proyecto; en ambos casos va FUERA de la transacción de Mongo (S3 no
+ * borrar un proyecto; en ambos casos va FUERA de la transacción de la base (S3 no
  * participa en ella), así que es best-effort y la regla de ciclo de vida del bucket es
  * la red de seguridad de lo que falle.
  */

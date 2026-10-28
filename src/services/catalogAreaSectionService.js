@@ -1,53 +1,55 @@
-const { isValidObjectId } = require("mongoose");
+const { prisma } = require("../config/db");
 const { AppError } = require("../middleware/errorHandler");
-const { CatalogAreaSection: Model, CatalogMaterial } = require("../models");
+const { isUuid, toApi } = require("../lib/ids");
 
-// CRUD for the user-owned area-section catalog. Every document is addressed by
-// its Mongo _id and always constrained to its owner (req.userId). Mirror of
-// catalogFrameSectionService, but area sections carry no computed solver props —
-// thickness + material define the shell directly.
+// CRUD for the user-owned area-section catalog. Every row is addressed by its id and
+// always constrained to its owner (req.userId). Mirror of catalogFrameSectionService,
+// but area sections carry no computed solver props — thickness + material define the
+// shell directly.
+const db = prisma.catalogAreaSection;
 const notFound = () => new AppError(404, "CatalogAreaSection not found");
 
 // Confirms the referenced material exists and belongs to the user.
 async function assertMaterial(ownerId, materialId) {
-  if (!isValidObjectId(materialId)) throw new AppError(400, "Material no válido");
-  const mat = await CatalogMaterial.findOne({ _id: materialId, ownerId })
-    .select("_id")
-    .lean();
+  if (!isUuid(materialId)) throw new AppError(400, "Material no válido");
+  const mat = await prisma.catalogMaterial.findFirst({
+    where: { id: materialId, ownerId },
+    select: { id: true },
+  });
   if (!mat) throw new AppError(400, "Material no encontrado");
 }
 
 module.exports = {
-  list: (ownerId) =>
-    Model.find({ ownerId }).select("-__v").sort({ createdAt: -1 }).lean(),
+  list: async (ownerId) =>
+    (await db.findMany({ where: { ownerId }, orderBy: { createdAt: "desc" } })).map(
+      (row) => toApi(row)
+    ),
 
   getOne: async (ownerId, id) => {
-    if (!isValidObjectId(id)) throw notFound();
-    const doc = await Model.findOne({ _id: id, ownerId }).select("-__v").lean();
-    if (!doc) throw notFound();
-    return doc;
+    if (!isUuid(id)) throw notFound();
+    const row = await db.findFirst({ where: { id, ownerId } });
+    if (!row) throw notFound();
+    return toApi(row);
   },
 
   create: async (ownerId, data) => {
     await assertMaterial(ownerId, data.materialId);
-    return Model.create({ ...data, ownerId });
+    return toApi(await db.create({ data: { ...data, ownerId } }));
   },
 
   update: async (ownerId, id, data) => {
-    if (!isValidObjectId(id)) throw notFound();
+    if (!isUuid(id)) throw notFound();
     if (data.materialId) await assertMaterial(ownerId, data.materialId);
-    const doc = await Model.findOneAndUpdate({ _id: id, ownerId }, data, {
-      new: true,
-      runValidators: true,
-    });
-    if (!doc) throw notFound();
-    return doc;
+    const { count } = await db.updateMany({ where: { id, ownerId }, data });
+    if (!count) throw notFound();
+    return toApi(await db.findUnique({ where: { id } }));
   },
 
+  // Las áreas que la usaban quedan sin sección (FK con ON DELETE SET NULL).
   remove: async (ownerId, id) => {
-    if (!isValidObjectId(id)) throw notFound();
-    const doc = await Model.findOneAndDelete({ _id: id, ownerId });
-    if (!doc) throw notFound();
+    if (!isUuid(id)) throw notFound();
+    const { count } = await db.deleteMany({ where: { id, ownerId } });
+    if (!count) throw notFound();
     return { deleted: true };
   },
 };

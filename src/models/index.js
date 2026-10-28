@@ -1,52 +1,22 @@
-const { Project } = require("./projectModel");
-const { ModelNode } = require("./modelNodeModel");
-const { ModelElement } = require("./modelElementModel");
-const { ModelSupport } = require("./modelSupportModel");
-const { ModelLoad } = require("./modelLoadModel");
-const { ModelArea } = require("./modelAreaModel");
-const { ModelFrameLoad } = require("./modelFrameLoadModel");
-const { ModelAreaLoad } = require("./modelAreaLoadModel");
-const { ModelAreaSpring } = require("./modelAreaSpringModel");
-const { ModelConfiguration } = require("./modelConfigurationModel");
-const { AnalysisRun } = require("./analysisRunModel");
-const { DesignRun } = require("./designRunModel");
-const { CatalogMaterial } = require("./catalogMaterialModel");
-const { CatalogFrameSection } = require("./catalogFrameSectionModel");
-const { CatalogAreaSection } = require("./catalogAreaSectionModel");
-const { User } = require("./userModel");
+const { prisma } = require("../config/db");
 
-// Maps each key of the nested `model` payload to its collection. The service
-// iterates this to split on write, assemble on read, and clean up on delete —
-// so adding an entity type means adding one line here. Materials and sections
-// are NOT model collections: elements/areas reference the user catalogs
-// (CatalogFrameSection / CatalogAreaSection) directly.
+// El esquema vive en prisma/schema.prisma. Este archivo solo conserva la tabla que
+// recorre el modelo estructural: cada clave del payload anidado `model` y el delegate
+// de Prisma de su tabla. El servicio la itera para repartir al escribir, montar al leer
+// y limpiar al borrar, así que añadir un tipo de entidad es añadir una línea aquí.
+//
+// `name` se usa como prisma[name] fuera de una transacción y como tx[name] dentro.
+// Materiales y secciones NO son tablas del modelo: barras y áreas referencian los
+// catálogos del usuario (catalog_frame_sections / catalog_area_sections).
 const CHILD_MODELS = [
-  { key: "nodes", Model: ModelNode },
-  { key: "elements", Model: ModelElement },
-  { key: "supports", Model: ModelSupport },
-  { key: "loads", Model: ModelLoad },
-  { key: "areas", Model: ModelArea },
-  { key: "frameLoads", Model: ModelFrameLoad },
-  { key: "areaLoads", Model: ModelAreaLoad },
-  { key: "areaSprings", Model: ModelAreaSpring },
+  { key: "nodes", name: "modelNode" },
+  { key: "elements", name: "modelElement" },
+  { key: "supports", name: "modelSupport" },
+  { key: "loads", name: "modelLoad" },
+  { key: "areas", name: "modelArea" },
+  { key: "frameLoads", name: "modelFrameLoad" },
+  { key: "areaLoads", name: "modelAreaLoad" },
+  { key: "areaSprings", name: "modelAreaSpring" },
 ];
 
-module.exports = {
-  Project,
-  ModelNode,
-  ModelElement,
-  ModelSupport,
-  ModelLoad,
-  ModelArea,
-  ModelFrameLoad,
-  ModelAreaLoad,
-  ModelAreaSpring,
-  ModelConfiguration,
-  AnalysisRun,
-  DesignRun,
-  CatalogMaterial,
-  CatalogFrameSection,
-  CatalogAreaSection,
-  User,
-  CHILD_MODELS,
-};
+module.exports = { prisma, CHILD_MODELS };

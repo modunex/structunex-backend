@@ -1,4 +1,3 @@
 const { makeChildService } = require("./crudFactory");
-const { ModelLoad } = require("../models");
 
-module.exports = makeChildService(ModelLoad);
+module.exports = makeChildService("modelLoad");
