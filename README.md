@@ -28,6 +28,17 @@ npm run db:deploy      # aplica prisma/migrations
 npm run dev            # http://localhost:4000
 ```
 
+> **Usar la base de Render desde local** (en vez del Docker del paso 1): pon en
+> `DATABASE_URL` la *External Database URL* de Render con `?sslmode=verify-full`
+> al final y añade tu IP pública en Render → base → *Access Control*. Sin TLS o
+> sin la IP permitida, Render cierra el socket y el arranque falla con
+> `Server has closed the connection`.
+>
+> El servidor lee `.env.local` y luego `.env`, pero la CLI de Prisma
+> (`db:migrate`, `db:deploy`, `db:studio`) solo lee `.env`: si `DATABASE_URL`
+> está únicamente en `.env.local`, esos comandos fallan con `P1012`. Mantén
+> `DATABASE_URL` también en `.env` (git-ignored).
+
 Useful commands:
 
 | Command              | What it does                                                   |

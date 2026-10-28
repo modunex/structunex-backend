@@ -153,17 +153,18 @@ model Project {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  configuration ModelConfiguration?
-  nodes         ModelNode[]
-  elements      ModelElement[]
-  supports      ModelSupport[]
-  loads         ModelLoad[]
-  areas         ModelArea[]
-  frameLoads    ModelFrameLoad[]
-  areaLoads     ModelAreaLoad[]
-  areaSprings   ModelAreaSpring[]
-  analysisRuns  AnalysisRun[]
-  designRuns    DesignRun[]
+  configuration   ModelConfiguration?
+  nodes           ModelNode[]
+  elements        ModelElement[]
+  supports        ModelSupport[]
+  loads           ModelLoad[]
+  areas           ModelArea[]
+  frameLoads      ModelFrameLoad[]
+  areaLoads       ModelAreaLoad[]
+  areaSprings     ModelAreaSpring[]
+  analysisRuns    AnalysisRun[]
+  designRuns      DesignRun[]
+  aiConversations AiConversation[]
 
   @@index([ownerId, createdAt(sort: Desc)])
   @@map("projects")
@@ -414,4 +415,58 @@ model DesignRun {
   @@index([projectId, startedAt(sort: Desc)])
   @@index([analysisRunId])
   @@map("design_runs")
+}
+
+// ─── Asistente IA (conversaciones por proyecto) ───
+model AiConversation {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  projectId String   @db.Uuid
+  ownerId   String // Clerk user id
+  title     String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  messages    AiMessage[]
+  attachments AiAttachment[]
+
+  @@index([projectId, updatedAt(sort: Desc)])
+  @@map("ai_conversations")
+}
+
+// Un mensaje de la API de Claude tal cual (append-only: los bloques de thinking deben
+// reenviarse sin tocar). Los adjuntos van como bloques {type:"attachment", attachmentId}
+// y se rehidratan desde S3 al construir cada petición.
+model AiMessage {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  conversationId  String   @db.Uuid
+  seq             Int      @default(autoincrement())
+  role            String // user | assistant
+  content         Json
+  // Propuesta de cambios del turno (en el último mensaje del asistente) y su estado.
+  changeset       Json?
+  changesetStatus String? // pending | applied | discarded
+  usage           Json?
+  createdAt       DateTime @default(now())
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, seq])
+  @@map("ai_messages")
+}
+
+model AiAttachment {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  conversationId String   @db.Uuid
+  s3Key          String
+  mime           String
+  name           String
+  size           Int
+  uploaded       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("ai_attachments")
 }

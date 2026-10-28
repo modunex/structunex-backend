@@ -8,6 +8,7 @@
 const {
   S3Client,
   GetObjectCommand,
+  PutObjectCommand,
   DeleteObjectsCommand,
   ListObjectsV2Command,
 } = require("@aws-sdk/client-s3");
@@ -118,6 +119,25 @@ async function deletePrefix(prefix) {
   return deleted;
 }
 
+/**
+ * URL prefirmada de subida (adjuntos del asistente IA). El navegador sube el archivo
+ * directamente a S3, así que los PDF de 20 MB no pasan por este servidor. El
+ * Content-Type queda firmado: el PUT debe enviar exactamente ese tipo.
+ */
+async function signPut(key, contentType) {
+  return getSignedUrl(
+    s3(),
+    new PutObjectCommand({ Bucket: env.s3Bucket, Key: key, ContentType: contentType }),
+    { expiresIn: env.s3UrlTtlS }
+  );
+}
+
+/** Descarga un objeto entero a memoria. Solo para adjuntos pequeños (≤ decenas de MB). */
+async function getObjectBuffer(key) {
+  const out = await s3().send(new GetObjectCommand({ Bucket: env.s3Bucket, Key: key }));
+  return Buffer.from(await out.Body.transformToByteArray());
+}
+
 const deleteRun = (projectId, runId) => deletePrefix(runPrefix(projectId, runId));
 const deleteProjectResults = (projectId) => deletePrefix(projectPrefix(projectId));
 
@@ -126,6 +146,8 @@ module.exports = {
   projectPrefix,
   signGet,
   signRunPaths,
+  signPut,
+  getObjectBuffer,
   deletePrefix,
   deleteRun,
   deleteProjectResults,

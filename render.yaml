@@ -47,12 +47,19 @@ services:
         sync: false
       - key: AWS_REGION
         sync: false
-      - key: AWS_ACCESS_KEY_ID # Get/Delete/List sobre el bucket
+      - key: AWS_ACCESS_KEY_ID # Get/Delete/List sobre el bucket; Put/Get en chat/*; invocar Bedrock
         sync: false
       - key: AWS_SECRET_ACCESS_KEY
         sync: false
       - key: AWS_S3_BUCKET
         sync: false
+      # Asistente IA (Claude en Amazon Bedrock).
+      - key: BEDROCK_MODEL_ID
+        value: anthropic.claude-opus-5-5
+      - key: BEDROCK_REGION
+        sync: false
+      - key: AI_EFFORT
+        value: medium
 
   # ─── calc-service (MYSTRAN, Docker), solo accesible desde la red privada ───
   - type: pserv

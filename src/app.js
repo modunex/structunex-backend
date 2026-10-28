@@ -28,7 +28,14 @@ app.use(
 // mounted BEFORE the global JSON parser and are not behind requireAuth.
 app.use("/api/webhooks", webhookRoutes);
 
-app.use(express.json({ limit: "2mb" }));
+// Los mensajes al asistente IA llevan el modelo entero (snapshot) en el cuerpo: es la
+// única ruta con un límite mayor. El resto sigue en 2 MB.
+const AI_MESSAGE_PATH = /^\/api\/projects\/[^/]+\/ai\/conversations\/[^/]+\/messages$/;
+const jsonDefault = express.json({ limit: "2mb" });
+const jsonAiMessage = express.json({ limit: "15mb" });
+app.use((req, res, next) =>
+  (AI_MESSAGE_PATH.test(req.path) ? jsonAiMessage : jsonDefault)(req, res, next)
+);
 
 // Attaches Clerk session state to every request (does not block on its own).
 app.use(clerkMiddleware());

@@ -50,6 +50,16 @@ const env = {
   // Vida de las URL prefirmadas. Corta a propósito: la descarga tarda segundos y una
   // URL que se quede pegada en el historial no debe seguir sirviendo resultados.
   s3UrlTtlS: Number(process.env.S3_URL_TTL_S || 300),
+
+  // Asistente IA: Claude en Amazon Bedrock (endpoint Mantle). Usa las mismas
+  // credenciales AWS de arriba; el usuario de IAM necesita permiso de invocación de
+  // Bedrock y s3:PutObject/GetObject sobre `${AWS_S3_BUCKET}/chat/*` (adjuntos).
+  bedrockModelId: process.env.BEDROCK_MODEL_ID || "anthropic.claude-opus-5-5",
+  bedrockRegion: process.env.BEDROCK_REGION || process.env.AWS_REGION || "eu-west-1",
+  // Esfuerzo de razonamiento: low | medium | high | xhigh | max.
+  aiEffort: process.env.AI_EFFORT || "medium",
+  aiMaxUploadMb: Number(process.env.AI_MAX_UPLOAD_MB || 20),
+  aiS3Prefix: (process.env.AI_S3_PREFIX || "chat").replace(/^\/+|\/+$/g, ""),
 };
 
 if (!env.databaseUrl) {
