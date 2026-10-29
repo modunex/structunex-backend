@@ -60,6 +60,18 @@ services:
         sync: false
       - key: AI_EFFORT
         value: medium
+      # Reporting: PDFs y logos en ${AWS_S3_BUCKET}/reports/* (Put/Get/Delete con las
+      # credenciales de arriba). El PDF lo genera el servicio privado report-renderer.
+      - key: RENDERER_HOSTPORT
+        fromService:
+          type: pserv
+          name: structunex-report-renderer
+          property: hostport
+      - key: RENDERER_TOKEN
+        fromService:
+          type: pserv
+          name: structunex-report-renderer
+          envVarKey: RENDERER_TOKEN
 
   # ─── calc-service (MYSTRAN, Docker), solo accesible desde la red privada ───
   - type: pserv
@@ -78,6 +90,23 @@ services:
         sync: false
       - key: AWS_S3_BUCKET # respaldo: el backend manda el bucket en cada petición
         sync: false
+
+  # ─── report-renderer (Chromium + Paged.js, Docker), solo red privada ───
+  # Vive en el repo del frontend (services/report-renderer) porque reutiliza los bloques
+  # de Report Studio; el contexto de build es la raíz de ese repo.
+  - type: pserv
+    name: structunex-report-renderer
+    runtime: docker
+    repo: https://github.com/Fmelendre/structunex-frontend # TODO: confirmar
+    branch: main
+    plan: starter # Chromium necesita ~1 GB con documentos largos
+    dockerfilePath: ./services/report-renderer/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: RENDERER_TOKEN
+        generateValue: true
+      - key: RENDERER_CONCURRENCY
+        value: "2"
 
   # ─── Frontend (Vite, estático) ───
   - type: web

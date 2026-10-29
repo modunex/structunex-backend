@@ -150,6 +150,8 @@ model Project {
   company          String?
   engineer         String?
   description      String?
+  // Logo para portadas y encabezados de los reportes (clave S3, PNG/JPEG).
+  logoKey          String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -166,6 +168,7 @@ model Project {
   designRuns      DesignRun[]
   aiConversations AiConversation[]
   connections     Connection[]
+  reportExports   ReportExport[]
 
   @@index([ownerId, createdAt(sort: Desc)])
   @@map("projects")
@@ -547,4 +550,32 @@ model ConnectionRun {
   @@index([connectionId, createdAt(sort: Desc)])
   @@index([analysisRunId])
   @@map("connection_runs")
+}
+
+// Reporting (R1): un PDF exportado. Guarda el documento EXACTO que se paginó (con las
+// instantáneas de cada ejecución), las ejecuciones de origen y la huella del PDF, para
+// poder decir siempre de qué cálculos sale cada hoja.
+model ReportExport {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  projectId       String   @db.Uuid
+  kind            String // connections
+  title           String
+  lang            String   @default("es")
+  unitSystemId    String?
+  status          String   @default("done") // done | error
+  runIds          String[]
+  document        Json
+  documentHash    String
+  s3Key           String?
+  sha256          String?
+  bytes           Int?
+  pages           Int?
+  rendererVersion String?
+  error           String?
+  createdAt       DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt(sort: Desc)])
+  @@map("report_exports")
 }

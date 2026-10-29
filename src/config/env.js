@@ -60,6 +60,15 @@ const env = {
   aiEffort: process.env.AI_EFFORT || "medium",
   aiMaxUploadMb: Number(process.env.AI_MAX_UPLOAD_MB || 20),
   aiS3Prefix: (process.env.AI_S3_PREFIX || "chat").replace(/^\/+|\/+$/g, ""),
+
+  // Reporting: PDFs exportados y logos de proyecto en `${AWS_S3_BUCKET}/reports/*`
+  // (Put/Get/Delete). El PDF lo produce el servicio privado report-renderer.
+  reportsS3Prefix: (process.env.REPORTS_S3_PREFIX || "reports").replace(/^\/+|\/+$/g, ""),
+  rendererUrl:
+    process.env.RENDERER_URL ||
+    (process.env.RENDERER_HOSTPORT ? `http://${process.env.RENDERER_HOSTPORT}` : "http://localhost:8090"),
+  rendererToken: process.env.RENDERER_TOKEN || "",
+  logoMaxBytes: Number(process.env.LOGO_MAX_BYTES || 1024 * 1024),
 };
 
 if (!env.databaseUrl) {

@@ -1,0 +1,30 @@
+const { z } = require("zod");
+
+const uuid = z.string().uuid();
+
+// Exportar a PDF: o la última comprobación vigente de cada conexión, o una lista de
+// comprobaciones concretas (en el orden en que deben salir).
+const exportReportSchema = z.discriminatedUnion("scope", [
+  z.object({
+    scope: z.literal("currentConnections"),
+    lang: z.enum(["es", "en"]).default("es"),
+    title: z.string().trim().min(1).max(160).optional(),
+    unitSystemId: z.string().trim().min(1).max(32).optional(),
+  }),
+  z.object({
+    scope: z.literal("runs"),
+    runIds: z.array(uuid).min(1).max(200),
+    lang: z.enum(["es", "en"]).default("es"),
+    title: z.string().trim().min(1).max(160).optional(),
+    unitSystemId: z.string().trim().min(1).max(32).optional(),
+  }),
+]);
+
+const logoUploadSchema = z.object({
+  contentType: z.enum(["image/png", "image/jpeg"]),
+  bytes: z.number().int().positive(),
+});
+
+const setLogoSchema = z.object({ key: z.string().min(1).max(512) });
+
+module.exports = { exportReportSchema, logoUploadSchema, setLogoSchema };
