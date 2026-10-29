@@ -25,6 +25,14 @@ const s3Service = require("./s3Service");
 const { fromCalcError } = require("./calcService");
 const { runStaleReason } = require("./analysisService");
 const {
+  analysisSnapshot,
+  analysisTitle,
+  buildAnalysisDocument,
+  buildMemoriaDocument,
+  memoriaTitle,
+  modelSummary,
+} = require("../lib/reportingAnalysis");
+const {
   archiveDesignRuns,
   buildMembersDocument,
   hasSheet,
@@ -109,6 +117,7 @@ async function archive(project) {
   const archived = archiveConnections(connections, runs, { latestSolvedRunId: solvedId });
   const latest = archived.map((c) => c.latest).filter(Boolean);
   return {
+    analysis: await analysisArchive(project.id),
     designRuns: await designRunArchive(project.id, solvedId),
     connections: archived,
     counts: {
@@ -222,6 +231,8 @@ async function render(document, meta, { lang, unitSystemId }) {
 
 async function exportPdf(project, body) {
   if (body.scope === "currentMembers" || body.scope === "designRun") return exportMembers(project, body);
+  if (body.scope === "analysis") return exportAnalysis(project, body);
+  if (body.scope === "memoria") return exportMemoria(project, body);
   const { scope, runIds = [], lang = "es", title, unitSystemId } = body;
   const sheets = await selectSheets(project, { scope, runIds });
   const document = buildConnectionsDocument(sheets, lang);
@@ -376,6 +387,178 @@ async function exportMembers(project, { scope, designRunId, elementIds, lang = "
   });
 }
 
+// ─── Análisis y memoria (R3) ──────────────────────────────────────────────────────
+
+const ANALYSIS_RUN_SELECT = {
+  id: true, solvedAt: true, startedAt: true, schemaVersion: true, activeDofs: true, notes: true,
+  cases: true, counts: true, modes: true, summary: true, stories: true, modelHash: true,
+};
+
+/** El último análisis resuelto y si es del modelo actual. */
+async function currentAnalysis(projectId) {
+  const run = await prisma.analysisRun.findFirst({
+    where: { projectId, status: "solved" },
+    orderBy: { startedAt: "desc" },
+    select: ANALYSIS_RUN_SELECT,
+  });
+  if (!run) return { run: null, staleReason: "analysis.missing" };
+  return { run, staleReason: await runStaleReason(projectId, run.id) };
+}
+
+async function analysisArchive(projectId) {
+  const { run, staleReason } = await currentAnalysis(projectId);
+  if (!run) return null;
+  return {
+    kind: "analysisRun",
+    analysisRunId: run.id,
+    solvedAt: (run.solvedAt || run.startedAt).toISOString(),
+    state: staleReason ? "stale" : "current",
+    staleReasons: staleReason ? ["model.changed"] : [],
+    counts: run.counts || {},
+    cases: (run.cases || []).map((c) => ({ name: c.name, kind: c.kind || "pattern" })),
+    modes: (run.modes || []).length,
+  };
+}
+
+/** Datos del modelo ACTUAL (solo se usan si el análisis es de este modelo). */
+async function currentModelSummary(projectId) {
+  const [nodes, supports, areas, elements, configuration] = await Promise.all([
+    prisma.modelNode.count({ where: { projectId } }),
+    prisma.modelSupport.count({ where: { projectId } }),
+    prisma.modelArea.count({ where: { projectId } }),
+    prisma.modelElement.findMany({ where: { projectId }, select: { frameSectionId: true } }),
+    prisma.modelConfiguration.findUnique({
+      where: { projectId },
+      select: { loadPatterns: true, loadCombinations: true },
+    }),
+  ]);
+  const sectionIds = [...new Set(elements.map((e) => e.frameSectionId).filter(isUuid))];
+  const sections = sectionIds.length
+    ? await prisma.catalogFrameSection.findMany({
+        where: { id: { in: sectionIds } },
+        select: { id: true, name: true, materialId: true, source: true, reinforcement: true },
+      })
+    : [];
+  const materialIds = new Set();
+  for (const sct of sections) {
+    if (isUuid(sct.materialId)) materialIds.add(sct.materialId);
+    if (isUuid(sct.reinforcement?.rebarMaterialId)) materialIds.add(sct.reinforcement.rebarMaterialId);
+  }
+  const materials = materialIds.size
+    ? await prisma.catalogMaterial.findMany({
+        where: { id: { in: [...materialIds] } },
+        select: { id: true, name: true, type: true, E: true, Fy: true, Fu: true, fc: true },
+      })
+    : [];
+  return modelSummary({ nodes, elements, supports, areas, sections, materials, configuration });
+}
+
+async function analysisSheets(projectId, runId) {
+  try {
+    const { data } = await axios.post(
+      `${env.calcServiceUrl}/analysis/sheets`,
+      { storage: { projectId: String(projectId), runId: String(runId), bucket: env.s3Bucket, prefix: env.s3Prefix }, maxRows: 500 },
+      { timeout: 60000 }
+    );
+    return data;
+  } catch (err) {
+    if (err.response?.status === 404) throw new AppError(404, "No se encontraron los resultados de este análisis.");
+    throw fromCalcError(err);
+  }
+}
+
+/** Instantánea del análisis vigente. 409 si no lo hay o no es del modelo actual. */
+async function currentAnalysisSnapshot(project) {
+  const { run, staleReason } = await currentAnalysis(project.id);
+  if (!run) throw new AppError(409, "No hay un análisis resuelto. Lanza primero el análisis.");
+  if (staleReason) {
+    throw new AppError(409, "El análisis no corresponde al modelo actual: vuelve a analizar para documentarlo.");
+  }
+  const [sheets, model] = await Promise.all([analysisSheets(project.id, run.id), currentModelSummary(project.id)]);
+  return analysisSnapshot({ run, sheets, model });
+}
+
+async function analysisSheet(project) {
+  const snapshot = await currentAnalysisSnapshot(project);
+  return { snapshot, snapshotHash: sha256(snapshot) };
+}
+
+async function exportAnalysis(project, { lang = "es", title, unitSystemId }) {
+  const snapshot = await currentAnalysisSnapshot(project);
+  return renderAndStore(project, {
+    kind: "analysis",
+    title: title || analysisTitle(lang),
+    lang,
+    unitSystemId,
+    runIds: [snapshot.run.id],
+    document: buildAnalysisDocument(snapshot, lang),
+  });
+}
+
+/**
+ * Memoria del proyecto con todo lo VIGENTE: análisis, miembros (todas las hojas si
+ * caben; si no, el resumen completo y las hojas de las que no cumplen o están
+ * incompletas) y conexiones. Lo que no está vigente no entra: su capítulo lo avisa.
+ */
+async function exportMemoria(project, { lang = "es", title, unitSystemId }) {
+  const runIds = [];
+  let analysis = null;
+  try {
+    analysis = await currentAnalysisSnapshot(project);
+    runIds.push(analysis.run.id);
+  } catch (err) {
+    if (!(err instanceof AppError) || err.status !== 409) throw err;
+  }
+
+  let members = null;
+  const solvedId = await latestSolvedRunId(project.id);
+  const designArchive = await designRunArchive(project.id, solvedId);
+  const latestDesign = designArchive[0];
+  if (latestDesign && latestDesign.state === "current" && latestDesign.sheetsAvailable) {
+    const run = await findDesignRun(project, latestDesign.designRunId);
+    const summary = await designSheets(project, run.id, { summaryOnly: true });
+    const rows = (summary.members || []).map((m) => ({ ...memberListRow(m), hasSheet: hasSheet(m) }));
+    let ids = rows.filter((m) => m.hasSheet).map((m) => m.elementId);
+    const tooMany = ids.length > MAX_SHEETS;
+    if (tooMany) {
+      ids = rows
+        .filter((m) => m.hasSheet && (m.status === "overstressed" || m.verification === "incomplete"))
+        .map((m) => m.elementId)
+        .slice(0, MAX_SHEETS);
+    }
+    const sheets = ids.length ? await designSheets(project, run.id, { elementIds: ids }) : { members: [] };
+    const snapshots = ids.map((id) => memberSnapshot(sheets, id, run)).filter(Boolean);
+    members = {
+      document: buildMembersDocument(snapshots, { lang, summaryRows: rows }),
+      count: snapshots.length,
+      all: !tooMany,
+      tooMany,
+    };
+    runIds.push(run.id);
+  }
+
+  let connections = null;
+  try {
+    const sheets = await selectSheets(project, { scope: "currentConnections" });
+    connections = { document: buildConnectionsDocument(sheets, lang), count: sheets.length };
+    runIds.push(...sheets.map((x) => x.snapshot.run.id));
+  } catch (err) {
+    if (!(err instanceof AppError) || err.status !== 409) throw err;
+  }
+
+  if (!analysis && !members && !connections) {
+    throw new AppError(409, "No hay nada vigente que documentar: analiza y comprueba el proyecto primero.");
+  }
+  return renderAndStore(project, {
+    kind: "memoria",
+    title: title || memoriaTitle(lang),
+    lang,
+    unitSystemId,
+    runIds,
+    document: buildMemoriaDocument({ analysis, members, connections, lang }),
+  });
+}
+
 const safeName = (s) => s.normalize("NFKD").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80) || "report";
 
 async function exportDownload(project, exportId) {
@@ -452,6 +635,7 @@ async function removeLogo(project) {
 
 module.exports = {
   archive,
+  analysisSheet,
   connectionSheet,
   designRunMembers,
   memberSheet,

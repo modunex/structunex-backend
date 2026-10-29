@@ -1,0 +1,229 @@
+{
+ "manifest": {
+  "schemaVersion": 1,
+  "compression": "zstd",
+  "solvedAt": "2026-07-27T10:00:00+00:00",
+  "activeDofs": [
+   "UX",
+   "UY",
+   "UZ",
+   "RX",
+   "RY",
+   "RZ"
+  ],
+  "notes": [
+   "una nota"
+  ],
+  "cases": [
+   {
+    "name": "DEAD",
+    "key": "dead",
+    "kind": "pattern",
+    "files": {
+     "displacements": "displacements/dead.parquet",
+     "member_forces": "member_forces/dead.parquet",
+     "stations": "stations/dead.parquet",
+     "deflected": "deflected/dead.parquet",
+     "reactions": "reactions/dead.parquet",
+     "shell_forces": "shell_forces/dead.parquet"
+    },
+    "bytes": 14125
+   },
+   {
+    "name": "LIVE",
+    "key": "live",
+    "kind": "pattern",
+    "files": {
+     "displacements": "displacements/live.parquet",
+     "member_forces": "member_forces/live.parquet",
+     "stations": "stations/live.parquet",
+     "deflected": "deflected/live.parquet",
+     "reactions": "reactions/live.parquet",
+     "shell_forces": "shell_forces/live.parquet"
+    },
+    "bytes": 14125
+   }
+  ],
+  "mesh": {
+   "nodes": "mesh/nodes.parquet",
+   "quads": "mesh/quads.parquet",
+   "beam_splits": "mesh/beam_splits.parquet"
+  },
+  "springs": null,
+  "modes": [
+   {
+    "mode": 1,
+    "eigenvalue": 100.0,
+    "frequencyHz": 1.6,
+    "period": 0.62,
+    "ux": 0.1,
+    "uy": 0.02,
+    "uz": 0.0,
+    "rx": 0.0,
+    "ry": 0.0,
+    "rz": 0.0,
+    "massX": 12.5,
+    "massY": 0.0,
+    "massZ": 0.0
+   },
+   {
+    "mode": 2,
+    "eigenvalue": 200.0,
+    "frequencyHz": 1.6,
+    "period": 0.62,
+    "ux": 0.2,
+    "uy": 0.02,
+    "uz": 0.0,
+    "rx": 0.0,
+    "ry": 0.0,
+    "rz": 0.0,
+    "massX": 12.5,
+    "massY": 0.0,
+    "massZ": 0.0
+   },
+   {
+    "mode": 3,
+    "eigenvalue": 300.0,
+    "frequencyHz": 1.6,
+    "period": 0.62,
+    "ux": 0.30000000000000004,
+    "uy": 0.02,
+    "uz": 0.0,
+    "rx": 0.0,
+    "ry": 0.0,
+    "rz": 0.0,
+    "massX": 12.5,
+    "massY": 0.0,
+    "massZ": 0.0
+   }
+  ],
+  "modeShapes": "modal/mode_shapes.parquet",
+  "counts": {
+   "nodes": 3,
+   "elements": 2,
+   "meshNodes": 1,
+   "shellQuads": 1,
+   "cases": 2,
+   "modes": 3
+  },
+  "summary": {
+   "perCase": [
+    {
+     "case": "DEAD",
+     "maxDisp": {
+      "nodeId": "~a:1",
+      "value": 0.03
+     },
+     "maxReaction": 12.5,
+     "maxAxial": 10.0,
+     "maxShear": 3.0,
+     "maxMoment": 5.0
+    },
+    {
+     "case": "LIVE",
+     "maxDisp": {
+      "nodeId": "~a:1",
+      "value": 0.03
+     },
+     "maxReaction": 12.5,
+     "maxAxial": 10.0,
+     "maxShear": 3.0,
+     "maxMoment": 5.0
+    }
+   ],
+   "drift": [
+    {
+     "case": "DEAD",
+     "level": 1,
+     "z": 3.0,
+     "height": 3.0,
+     "driftX": 0.006666666666666667,
+     "driftY": 0.0
+    },
+    {
+     "case": "LIVE",
+     "level": 1,
+     "z": 3.0,
+     "height": 3.0,
+     "driftX": 0.006666666666666667,
+     "driftY": 0.0
+    }
+   ],
+   "storyForces": []
+  },
+  "stories": [],
+  "bytes": {
+   "total": 34577,
+   "byPath": {
+    "mesh/nodes.parquet": 1299,
+    "mesh/quads.parquet": 1567,
+    "mesh/beam_splits.parquet": 986,
+    "displacements/dead.parquet": 2208,
+    "member_forces/dead.parquet": 2275,
+    "stations/dead.parquet": 2875,
+    "deflected/dead.parquet": 1598,
+    "reactions/dead.parquet": 2163,
+    "shell_forces/dead.parquet": 3006,
+    "displacements/live.parquet": 2208,
+    "member_forces/live.parquet": 2275,
+    "stations/live.parquet": 2875,
+    "deflected/live.parquet": 1598,
+    "reactions/live.parquet": 2163,
+    "shell_forces/live.parquet": 3006,
+    "modal/mode_shapes.parquet": 2475
+   }
+  }
+ },
+ "sheets": {
+  "run": {
+   "schemaVersion": 1,
+   "solvedAt": "2026-07-27T10:00:00+00:00"
+  },
+  "cases": [
+   {
+    "name": "DEAD",
+    "kind": "pattern",
+    "supports": 1,
+    "reactions": [
+     {
+      "nodeId": "N1",
+      "fx": 0.0,
+      "fy": 0.0,
+      "fz": 12.5,
+      "mx": 0.0,
+      "my": 0.0,
+      "mz": 0.0
+     }
+    ],
+    "truncated": false,
+    "sum": {
+     "fx": 0.0,
+     "fy": 0.0,
+     "fz": 12.5
+    }
+   },
+   {
+    "name": "LIVE",
+    "kind": "pattern",
+    "supports": 1,
+    "reactions": [
+     {
+      "nodeId": "N1",
+      "fx": 0.0,
+      "fy": 0.0,
+      "fz": 12.5,
+      "mx": 0.0,
+      "my": 0.0,
+      "mz": 0.0
+     }
+    ],
+    "truncated": false,
+    "sum": {
+     "fx": 0.0,
+     "fy": 0.0,
+     "fz": 12.5
+    }
+   }
+  ]
+ }
+}

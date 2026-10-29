@@ -11,6 +11,10 @@ const connectionSheet = asyncHandler(async (req, res) => {
   res.json(await reportingService.connectionSheet(req.project, req.params.runId));
 });
 
+const analysisSheet = asyncHandler(async (req, res) => {
+  res.json(await reportingService.analysisSheet(req.project));
+});
+
 const designRunMembers = asyncHandler(async (req, res) => {
   res.json(await reportingService.designRunMembers(req.project, req.params.designRunId));
 });
@@ -45,4 +49,4 @@ const removeLogo = asyncHandler(async (req, res) => {
   res.json(await reportingService.removeLogo(req.project));
 });
 
-module.exports = { archive, connectionSheet, designRunMembers, memberSheet, exportPdf, exportDownload, logoUploadUrl, setLogo, getLogo, removeLogo };
+module.exports = { archive, analysisSheet, connectionSheet, designRunMembers, memberSheet, exportPdf, exportDownload, logoUploadUrl, setLogo, getLogo, removeLogo };

@@ -12,6 +12,18 @@ const exportReportSchema = z.discriminatedUnion("scope", [
     unitSystemId: z.string().trim().min(1).max(32).optional(),
   }),
   z.object({
+    scope: z.literal("analysis"),
+    lang: z.enum(["es", "en"]).default("es"),
+    title: z.string().trim().min(1).max(160).optional(),
+    unitSystemId: z.string().trim().min(1).max(32).optional(),
+  }),
+  z.object({
+    scope: z.literal("memoria"),
+    lang: z.enum(["es", "en"]).default("es"),
+    title: z.string().trim().min(1).max(160).optional(),
+    unitSystemId: z.string().trim().min(1).max(32).optional(),
+  }),
+  z.object({
     scope: z.literal("currentMembers"),
     elementIds: z.array(z.string().trim().min(1).max(64)).max(200).optional(),
     lang: z.enum(["es", "en"]).default("es"),

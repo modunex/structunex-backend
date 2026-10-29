@@ -558,7 +558,7 @@ model ConnectionRun {
 model ReportExport {
   id              String   @id @default(uuid(7)) @db.Uuid
   projectId       String   @db.Uuid
-  kind            String // connections | members
+  kind            String // connections | members | analysis | memoria
   title           String
   lang            String   @default("es")
   unitSystemId    String?

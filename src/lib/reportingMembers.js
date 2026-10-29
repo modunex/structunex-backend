@@ -121,7 +121,7 @@ const TEXT = {
     title: "Memoria de cálculo de miembros",
     summary: "Resumen de barras",
     cols: ["Barra", "Sección", "Ratio", "Gobierna", "Combinación", "Resultado"],
-    status: { ok: "Cumple", overstressed: "No cumple", unchecked: "Incompleta" },
+    status: { ok: "Cumple", overstressed: "No cumple", incomplete: "Incompleta", unchecked: "Sin comprobar" },
     stale: "Esta comprobación no corresponde al estado actual del proyecto",
     reasons: {
       "analysis.outdated": "se hizo con un análisis anterior al vigente",
@@ -135,7 +135,7 @@ const TEXT = {
     title: "Member design report",
     summary: "Member summary",
     cols: ["Member", "Section", "Ratio", "Governs", "Combination", "Result"],
-    status: { ok: "Pass", overstressed: "Fail", unchecked: "Incomplete" },
+    status: { ok: "Pass", overstressed: "Fail", incomplete: "Incomplete", unchecked: "Not checked" },
     stale: "This check does not match the current state of the project",
     reasons: {
       "analysis.outdated": "it used an analysis older than the current one",
@@ -150,11 +150,15 @@ const text = (lang) => TEXT[lang] || TEXT.es;
 
 const t = (s) => [{ text: String(s ?? "—") }];
 
+/** Resultado de una barra para el resumen: una incompleta no "cumple". */
+const resultKey = (status, verification) =>
+  status === "overstressed" ? "overstressed" : verification === "incomplete" ? "incomplete" : status;
+
 /**
  * Documento de miembros: aviso si la ejecución no es vigente, tabla resumen de las barras
  * incluidas y una hoja completa por barra. `snapshots` en el orden dado.
  */
-function buildMembersDocument(snapshots, { lang = "es", staleReasons = [] } = {}) {
+function buildMembersDocument(snapshots, { lang = "es", staleReasons = [], summaryRows = null } = {}) {
   const tx = text(lang);
   const blocks = [];
   if (staleReasons.length) {
@@ -173,16 +177,27 @@ function buildMembersDocument(snapshots, { lang = "es", staleReasons = [] } = {}
     id: "t-summary",
     type: "table",
     header: true,
+    // `summaryRows` (filas de lista de TODAS las barras) cuando el documento solo lleva
+    // las hojas de algunas: el resumen sigue cubriendo la comprobación entera.
     rows: [
       tx.cols.map((c) => t(c)),
-      ...snapshots.map((s) => [
-        t(s.member.elementId),
-        t(s.inputs?.sectionName || s.member.sectionId),
-        t(s.governing.ratio == null ? "—" : s.governing.ratio.toFixed(3)),
-        t(s.governing.name),
-        t(s.governing.combination),
-        t(s.verification === "incomplete" && s.status !== "overstressed" ? tx.status.unchecked : tx.status[s.status] || s.status),
-      ]),
+      ...(summaryRows
+        ? summaryRows.map((m) => [
+            t(m.elementId),
+            t(m.sectionName),
+            t(m.ratio == null || !m.hasSheet ? "—" : m.ratio.toFixed(3)),
+            t(m.hasSheet ? m.governing : "—"),
+            t(m.combo || "—"),
+            t(tx.status[resultKey(m.status, m.verification)] || m.status),
+          ])
+        : snapshots.map((s) => [
+            t(s.member.elementId),
+            t(s.inputs?.sectionName || s.member.sectionId),
+            t(s.governing.ratio == null ? "—" : s.governing.ratio.toFixed(3)),
+            t(s.governing.name),
+            t(s.governing.combination),
+            t(tx.status[resultKey(s.status, s.verification)] || s.status),
+          ])),
     ],
   });
   for (const s of snapshots) {
