@@ -60,4 +60,51 @@ function buildInspectRequest({
   };
 }
 
-module.exports = { buildInspectRequest, FORCE_CASE_KINDS };
+/**
+ * Las barras de una conexión nueva, a partir de la inspección del nudo que devolvió el
+ * calc-service. Se decide con la aplicabilidad que calculó el MOTOR (no aquí): si la
+ * tipología no aplica, se devuelven sus motivos y no se crea nada.
+ *
+ * @returns {{ ok: true, members: {elementId, end, role}[] } | { ok: false, reasons: string[] }}
+ */
+function membersFromInspection(inspection, elementId, typology) {
+  const rows = inspection?.joint?.members || [];
+  const supported = rows.find((m) => m.elementId === elementId);
+  if (!supported) return { ok: false, reasons: ["typology.memberNotAtJoint"] };
+  const entry = (supported.typologies || []).find((t) => t.typology === typology);
+  if (!entry) return { ok: false, reasons: ["typology.notOffered"] };
+  if (!entry.applicable) return { ok: false, reasons: entry.reasons || [] };
+  const members = [{ elementId, end: supported.end, role: "supported" }];
+  for (const id of entry.supporting || []) {
+    const row = rows.find((m) => m.elementId === id);
+    if (row) members.push({ elementId: id, end: row.end, role: "supporting" });
+  }
+  return { ok: true, members };
+}
+
+/**
+ * Por qué una conexión guardada ya no corresponde al modelo: su nudo o alguna de sus
+ * barras desaparecieron, o una barra ya no toca el nudo. Lista vacía = vigente.
+ * `model` = { nodeIds: Set, elementsById: Map<id, {nodeA, nodeB}> }.
+ */
+function orphanReasons(connection, model) {
+  const reasons = [];
+  if (!model.nodeIds.has(connection.nodeId)) reasons.push("connection.nodeMissing");
+  for (const m of connection.members || []) {
+    const el = model.elementsById.get(m.elementId);
+    if (!el) {
+      reasons.push(`connection.memberMissing:${m.elementId}`);
+      continue;
+    }
+    const atJoint = m.end === "A" ? el.nodeA : el.nodeB;
+    if (atJoint !== connection.nodeId) reasons.push(`connection.memberMoved:${m.elementId}`);
+  }
+  return reasons;
+}
+
+module.exports = {
+  buildInspectRequest,
+  membersFromInspection,
+  orphanReasons,
+  FORCE_CASE_KINDS,
+};

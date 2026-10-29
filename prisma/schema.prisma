@@ -165,6 +165,7 @@ model Project {
   analysisRuns    AnalysisRun[]
   designRuns      DesignRun[]
   aiConversations AiConversation[]
+  connections     Connection[]
 
   @@index([ownerId, createdAt(sort: Desc)])
   @@map("projects")
@@ -380,8 +381,9 @@ model AnalysisRun {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  designRuns DesignRun[]
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  designRuns     DesignRun[]
+  connectionRuns ConnectionRun[]
 
   @@index([projectId, startedAt(sort: Desc)])
   @@map("analysis_runs")
@@ -469,4 +471,80 @@ model AiAttachment {
 
   @@index([conversationId])
   @@map("ai_attachments")
+}
+
+// ─── Conexiones de acero ───
+//
+// Una conexión es UN extremo de barra apoyado en un nudo (un shear tab por viga): por eso
+// es única por (proyecto, nudo, barra apoyada). Nudo y barras se referencian por su id de
+// dominio ("N12", "B7"), como el resto del modelo; si el modelo cambia y desaparecen, la
+// conexión queda huérfana (lo detecta el servicio) en vez de borrarse en cascada.
+//
+// `params` lleva su propia versión (`paramsVersion`): placa, pernos, soldadura y
+// distancias, en unidades base (m, kN). Un parámetro sin definir es null, y la
+// comprobación (F3) lo trata como NO VERIFICABLE, nunca como un valor por defecto.
+
+model Connection {
+  id                 String   @id @default(uuid(7)) @db.Uuid
+  projectId          String   @db.Uuid
+  nodeId             String // id de dominio del nudo
+  supportedElementId String // la barra apoyada (id de dominio)
+  name               String
+  typology           String // shear_tab
+  code               String   @default("AISC360-16")
+  method             String   @default("LRFD")
+  paramsVersion      Int      @default(1)
+  params             Json     @default("{}")
+  status             String   @default("draft") // draft | checked
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  project Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  members ConnectionMember[]
+  runs    ConnectionRun[]
+
+  @@unique([projectId, nodeId, supportedElementId])
+  @@index([projectId, createdAt])
+  @@map("connections")
+}
+
+model ConnectionMember {
+  id           String @id @default(uuid(7)) @db.Uuid
+  connectionId String @db.Uuid
+  elementId    String // id de dominio de la barra
+  end          String // A | B: qué extremo de la barra está en el nudo
+  role         String // supported | supporting
+
+  connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, elementId])
+  @@map("connection_members")
+}
+
+// Una comprobación de una conexión (F3). Guarda TODO lo que la produjo —la copia de las
+// entradas (fuerzas por combinación, geometría, materiales), su hash, la versión del
+// motor y la norma— para que un resultado sea reproducible aunque el modelo cambie o el
+// análisis de origen se pode (por eso analysisRunId es SetNull: el id también va en
+// `inputs`).
+model ConnectionRun {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  connectionId  String    @db.Uuid
+  analysisRunId String?   @db.Uuid
+  status        String    @default("done") // done | error
+  engineVersion String
+  code          String
+  method        String
+  inputsHash    String
+  inputs        Json
+  results       Json      @default("{}")
+  schemaVersion Int       @default(1)
+  error         String?
+  createdAt     DateTime  @default(now())
+
+  connection  Connection   @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  analysisRun AnalysisRun? @relation(fields: [analysisRunId], references: [id], onDelete: SetNull)
+
+  @@index([connectionId, createdAt(sort: Desc)])
+  @@index([analysisRunId])
+  @@map("connection_runs")
 }
