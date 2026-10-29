@@ -16,7 +16,6 @@ function buildInspectRequest({
   supports,
   areas,
   loads,
-  frameLoads,
   combinations,
   bucket,
   prefix,
@@ -48,16 +47,6 @@ function buildInspectRequest({
     supports,
     areas,
     loads,
-    // Las cargas puntuales de barra llegan al análisis como fuerzas nodales y no
-    // entran en las estaciones: el calc-service tiene que saber qué barras las llevan.
-    frameLoads: (frameLoads || []).map((fl) => ({
-      elementId: fl.elementId,
-      loadPattern: fl.loadPattern,
-      kind: fl.kind,
-      dir: fl.dir,
-      value: fl.value,
-      dist: fl.dist ?? null,
-    })),
     // GDL con los que se resolvió el run: el equilibrio del nudo solo se mira en ellos.
     activeDofs: run.activeDofs || [],
     combinations: (combinations || []).map((c) => ({

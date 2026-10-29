@@ -63,8 +63,7 @@ async function inspect(project, nodeId) {
     neighbourIds.add(e.nodeB);
   }
 
-  const elementIds = elements.map((e) => e.id);
-  const [design, supports, areas, loads, frameLoads, configuration] = await Promise.all([
+  const [design, supports, areas, loads, configuration] = await Promise.all([
     assembleDesignModel(projectId),
     prisma.modelSupport.findMany({
       where: { projectId, nodeId },
@@ -76,10 +75,6 @@ async function inspect(project, nodeId) {
       select: {
         nodeId: true, loadPattern: true, fx: true, fy: true, fz: true, mx: true, my: true, mz: true,
       },
-    }),
-    prisma.modelFrameLoad.findMany({
-      where: { projectId, elementId: { in: elementIds } },
-      select: { elementId: true, loadPattern: true, kind: true, dir: true, value: true, dist: true },
     }),
     prisma.modelConfiguration.findUnique({
       where: { projectId },
@@ -100,7 +95,6 @@ async function inspect(project, nodeId) {
     supports,
     areas,
     loads,
-    frameLoads,
     combinations: configuration?.loadCombinations || [],
     bucket: env.s3Bucket,
     prefix: env.s3Prefix,

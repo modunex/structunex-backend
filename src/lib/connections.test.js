@@ -29,9 +29,6 @@ test("la petición lleva todas las barras, solo casos con esfuerzos y combos nor
     supports: [],
     areas: [],
     loads: [],
-    frameLoads: [
-      { elementId: "B1", loadPattern: "L", kind: "point", dir: "gravity", value: 10, dist: 0.5, pk: "x" },
-    ],
     combinations: [
       { name: "1.2D+E", factors: [{ factor: 1.2, pattern: "D" }, { factor: 1, seismic: true }] },
     ],
@@ -52,7 +49,5 @@ test("la petición lleva todas las barras, solo casos con esfuerzos y combos nor
   ]);
   assert.equal(req.source.bucket, "b");
   assert.deepEqual(req.activeDofs, ["UX", "UZ", "RY"]);
-  assert.deepEqual(req.frameLoads, [
-    { elementId: "B1", loadPattern: "L", kind: "point", dir: "gravity", value: 10, dist: 0.5 },
-  ]);
+  assert.equal(req.frameLoads, undefined);
 });
