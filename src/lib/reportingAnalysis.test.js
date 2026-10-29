@@ -70,3 +70,17 @@ test("documento de análisis y memoria con capítulos; lo no vigente se avisa", 
   assert.deepEqual(types, ["heading", "callout", "heading", "callout", "paragraph", "heading", "heading", "paragraph", "heading"]);
   assert.match(withMembers.blocks[4].content[0].text, /failing or incomplete/);
 });
+
+test("el resumen del modelo no depende del orden de las filas (huella estable)", () => {
+  const { sha256 } = require("./reporting");
+  const base = {
+    nodes: 1, supports: 0, areas: 0,
+    elements: [{ frameSectionId: "a" }, { frameSectionId: "b" }],
+    materials: [{ id: "m1", name: "B" }, { id: "m2", name: "A" }],
+    configuration: {},
+  };
+  const s1 = [{ id: "a", name: "S1", materialId: "m1" }, { id: "b", name: "S2", materialId: "m2" }];
+  const x = modelSummary({ ...base, sections: s1 });
+  const y = modelSummary({ ...base, sections: s1.slice().reverse(), materials: base.materials.slice().reverse() });
+  assert.equal(sha256(x), sha256(y));
+});

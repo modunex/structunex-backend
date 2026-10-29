@@ -87,12 +87,14 @@ function modelSummary({ nodes, elements, supports, areas, sections, materials, c
   const matName = new Map(materials.map((m) => [m.id, m.name]));
   return {
     counts: { nodes, elements: elements.length, supports, areas },
-    materials: materials.map((m) => ({
-      name: m.name, type: m.type, E: num(m.E), Fy: num(m.Fy), Fu: num(m.Fu), fc: num(m.fc),
-    })),
+    // Orden determinista: la huella de la instantánea no puede depender del orden en que
+    // la base devuelva las filas (se recalcula al exportar y tiene que coincidir).
+    materials: materials
+      .map((m) => ({ name: m.name, type: m.type, E: num(m.E), Fy: num(m.Fy), Fu: num(m.Fu), fc: num(m.fc) }))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name))),
     sections: sections
       .map((s) => ({ name: s.name, material: matName.get(s.materialId) || null, source: s.source, members: useCount.get(String(s.id)) || 0 }))
-      .sort((a, b) => b.members - a.members),
+      .sort((a, b) => b.members - a.members || String(a.name).localeCompare(String(b.name))),
     loadPatterns: (configuration?.loadPatterns || []).map((p) => ({
       name: p.name, type: p.type || null, selfWeight: num(p.selfWeightMultiplier) ?? 0,
     })),
