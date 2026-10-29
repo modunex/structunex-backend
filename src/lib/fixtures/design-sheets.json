@@ -1,0 +1,2194 @@
+{
+ "w": {
+  "run": {
+   "schemaVersion": 2,
+   "engineVersion": "design-1.0.0",
+   "designedAt": "2026-10-29T23:01:49.439891+00:00",
+   "code": "ACI318-19",
+   "steelCode": "AISC360-16",
+   "combos": [
+    "1.2D"
+   ]
+  },
+  "members": [
+   {
+    "elementId": "c1",
+    "sectionId": "sec-w",
+    "role": "steel",
+    "code": "AISC360-16",
+    "status": "ok",
+    "governing": "H1-1",
+    "combo": "1.2D",
+    "ratio": 0.21200190859420445,
+    "station": 3.0,
+    "axial": -960.0,
+    "shearY": 48.0,
+    "shearZ": 0.0,
+    "torsion": 0.0,
+    "momentY": 0.0,
+    "momentZ": 108.0,
+    "asReqTop": 0.0,
+    "asReqBot": 0.0,
+    "avOverS": 0.0,
+    "phiPn": 5412.807269494184,
+    "phiMnx": 875.7466338575921,
+    "phiMny": 422.1593143073074,
+    "phiVn": 919.7459024399998,
+    "thetaM": 0.0,
+    "verification": "complete",
+    "inputs": {
+     "sectionName": "W14X99",
+     "sectionSource": "catalog",
+     "materialName": "",
+     "codeName": "AISC360-16",
+     "length": 3.0,
+     "shape": "W",
+     "Fy": 345000.0,
+     "Fu": 450000.0,
+     "E": 200000000.0,
+     "K3": 1.0,
+     "K2": 1.0,
+     "Kz": 1.0,
+     "Lb": 3.0,
+     "Cb": 1.0,
+     "defaulted": [
+      "K3",
+      "K2",
+      "Kz",
+      "Lb",
+      "Cb"
+     ]
+    }
+   },
+   {
+    "elementId": "b1",
+    "sectionId": "sec-w",
+    "role": "steel",
+    "code": "AISC360-16",
+    "status": "ok",
+    "governing": "Mx",
+    "combo": "1.2D",
+    "ratio": 0.2652060393859267,
+    "station": 0.0,
+    "axial": 0.0,
+    "shearY": 144.0,
+    "shearZ": 0.0,
+    "torsion": 0.0,
+    "momentY": 0.0,
+    "momentZ": -216.0,
+    "asReqTop": 0.0,
+    "asReqBot": 0.0,
+    "avOverS": 0.0,
+    "phiPn": 5829.375438,
+    "phiMnx": 814.461090328632,
+    "phiMny": 422.1593143073074,
+    "phiVn": 919.7459024399998,
+    "thetaM": 0.0,
+    "verification": "complete",
+    "inputs": {
+     "sectionName": "W14X99",
+     "sectionSource": "catalog",
+     "materialName": "",
+     "codeName": "AISC360-16",
+     "length": 6.0,
+     "shape": "W",
+     "Fy": 345000.0,
+     "Fu": 450000.0,
+     "E": 200000000.0,
+     "K3": 1.0,
+     "K2": 1.0,
+     "Kz": 1.0,
+     "Lb": 6.0,
+     "Cb": 1.0,
+     "defaulted": [
+      "K3",
+      "K2",
+      "Kz",
+      "Lb",
+      "Cb"
+     ]
+    }
+   }
+  ],
+  "criteria": {
+   "c1": [
+    {
+     "elementId": "c1",
+     "name": "Pc",
+     "demand": 960.0,
+     "capacity": 999.0,
+     "ratio": 0.17735713691681287,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. E3-1, E3-2, E3-4",
+     "equation": "\\phi_c P_n = \\phi_c F_{cr} A_g,\\quad F_{cr} = 0.658^{F_y/F_e} F_y,\\quad F_e = \\frac{\\pi^2 E}{(L_c/r)^2}",
+     "vars": [
+      {
+       "symbol": "F_y",
+       "value": 345000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "E",
+       "value": 200000000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "A_g",
+       "value": 0.018774156,
+       "unit": "m^2"
+      },
+      {
+       "symbol": "L",
+       "value": 3.0,
+       "unit": "m"
+      },
+      {
+       "symbol": "K_x",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "K_y",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "r_x",
+       "value": 0.156718,
+       "unit": "m"
+      },
+      {
+       "symbol": "r_y",
+       "value": 0.094234,
+       "unit": "m"
+      },
+      {
+       "symbol": "L_{cx}/r_x",
+       "value": 19.142663893107365,
+       "unit": "-"
+      },
+      {
+       "symbol": "L_{cy}/r_y",
+       "value": 31.83564318611117,
+       "unit": "-"
+      },
+      {
+       "symbol": "F_e^{flex}",
+       "value": 1947612.1898865972,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "K_z",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "L_{cz}",
+       "value": 3.0,
+       "unit": "m"
+      },
+      {
+       "symbol": "G",
+       "value": 77241379.31034483,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "J",
+       "value": 2.2351627554719997e-06,
+       "unit": "m^4"
+      },
+      {
+       "symbol": "C_w",
+       "value": 4.833645597721726e-06,
+       "unit": "m^6"
+      },
+      {
+       "symbol": "I_x",
+       "value": 0.0004620168824159999,
+       "unit": "m^4"
+      },
+      {
+       "symbol": "I_y",
+       "value": 0.00016732503309119996,
+       "unit": "m^4"
+      },
+      {
+       "symbol": "F_e^{tor}",
+       "value": 1958846.4266265053,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "F_e",
+       "value": 1947612.1898865972,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "F_{cr}",
+       "value": 320346.2408343673,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "\\lambda_{f}",
+       "value": 9.35897435897436,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{r,f}",
+       "value": 13.483215545606152,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{w}",
+       "value": 26.061855670103093,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{r,w}",
+       "value": 35.874984219559224,
+       "unit": "-"
+      },
+      {
+       "symbol": "P_n",
+       "value": 6014.230299437982,
+       "unit": "kN"
+      },
+      {
+       "symbol": "\\phi_c",
+       "value": 0.9,
+       "unit": "-"
+      }
+     ],
+     "assumptions": [
+      "steel.defaultK",
+      "steel.defaultKz",
+      "steel.webHeightApprox"
+     ],
+     "unit": "kN",
+     "combo": "1.2D",
+     "station": 3.0
+    },
+    {
+     "elementId": "c1",
+     "name": "Mx",
+     "demand": 108.0,
+     "capacity": 875.7466338575921,
+     "ratio": 0.12332334013579802,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. F3-1, F2-1",
+     "equation": "\\phi_b M_n,\\quad M_n = M_p - (M_p - 0.7F_yS_x)\\frac{\\lambda - \\lambda_{pf}}{\\lambda_{rf} - \\lambda_{pf}}",
+     "vars": [
+      {
+       "symbol": "F_y",
+       "value": 345000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "E",
+       "value": 200000000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "Z_x",
+       "value": 0.002834962072,
+       "unit": "m^3"
+      },
+      {
+       "symbol": "\\lambda_w",
+       "value": 26.061855670103093,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{pw}",
+       "value": 90.53016152049844,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{rw}",
+       "value": 137.2398725177769,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_f",
+       "value": 9.35897435897436,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{pf}",
+       "value": 9.14932483451846,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{rf}",
+       "value": 24.07717061715384,
+       "unit": "-"
+      },
+      {
+       "symbol": "L_b",
+       "value": 3.0,
+       "unit": "m"
+      },
+      {
+       "symbol": "C_b",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "L_p",
+       "value": 3.9932430488488997,
+       "unit": "m"
+      },
+      {
+       "symbol": "L_r",
+       "value": 13.785807095038974,
+       "unit": "m"
+      },
+      {
+       "symbol": "r_{ts}",
+       "value": 0.105137714000882,
+       "unit": "m"
+      },
+      {
+       "symbol": "c",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "J",
+       "value": 2.2351627554719997e-06,
+       "unit": "m^4"
+      },
+      {
+       "symbol": "C_w",
+       "value": 4.833645597721726e-06,
+       "unit": "m^6"
+      },
+      {
+       "symbol": "h_o",
+       "value": 0.34086799999999995,
+       "unit": "m"
+      },
+      {
+       "symbol": "S_x",
+       "value": 0.0025727690479999997,
+       "unit": "m^3"
+      },
+      {
+       "symbol": "M_p",
+       "value": 978.06191484,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "k_c",
+       "value": 0.76,
+       "unit": "-"
+      },
+      {
+       "symbol": "M_{n,FLB}",
+       "value": 973.0518153973245,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_n",
+       "value": 973.0518153973245,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "\\phi_b",
+       "value": 0.9,
+       "unit": "-"
+      }
+     ],
+     "assumptions": [
+      "steel.webHeightApprox",
+      "steel.defaultLb",
+      "steel.defaultCb"
+     ],
+     "unit": "kN\u00b7m",
+     "combo": "1.2D",
+     "station": 3.0
+    },
+    {
+     "elementId": "c1",
+     "name": "My",
+     "demand": 0.0,
+     "capacity": 422.1593143073074,
+     "ratio": 0.0,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. F6-2, F6-1",
+     "equation": "\\phi_b M_n,\\quad M_n = M_p - (M_p - 0.7F_yS_y)\\frac{\\lambda - \\lambda_{pf}}{\\lambda_{rf} - \\lambda_{pf}}",
+     "vars": [
+      {
+       "symbol": "F_y",
+       "value": 345000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "E",
+       "value": 200000000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "Z_y",
+       "value": 0.0013699585503999998,
+       "unit": "m^3"
+      },
+      {
+       "symbol": "S_y",
+       "value": 0.0009045659328,
+       "unit": "m^3"
+      },
+      {
+       "symbol": "\\lambda",
+       "value": 9.35897435897436,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{pf}",
+       "value": 9.14932483451846,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{rf}",
+       "value": 24.07717061715384,
+       "unit": "-"
+      },
+      {
+       "symbol": "M_p",
+       "value": 472.6356998879999,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_n",
+       "value": 469.0659047858971,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "\\phi_b",
+       "value": 0.9,
+       "unit": "-"
+      }
+     ],
+     "assumptions": [],
+     "unit": "kN\u00b7m",
+     "combo": "1.2D",
+     "station": 3.0
+    },
+    {
+     "elementId": "c1",
+     "name": "V2",
+     "demand": 48.0,
+     "capacity": 919.7459024399998,
+     "ratio": 0.05218832709410338,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. G2-1, G2-2",
+     "equation": "\\phi_v V_n = \\phi_v 0.6 F_y A_w C_{v1}",
+     "vars": [
+      {
+       "symbol": "F_y",
+       "value": 345000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "E",
+       "value": 200000000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "d",
+       "value": 0.36067999999999995,
+       "unit": "m"
+      },
+      {
+       "symbol": "t_w",
+       "value": 0.012318999999999998,
+       "unit": "m"
+      },
+      {
+       "symbol": "A_w",
+       "value": 0.004443216919999999,
+       "unit": "m^2"
+      },
+      {
+       "symbol": "h/t_w",
+       "value": 26.061855670103093,
+       "unit": "-"
+      },
+      {
+       "symbol": "2.24\\sqrt{E/F_y}",
+       "value": 53.93286218242461,
+       "unit": "-"
+      },
+      {
+       "symbol": "C_{v1}",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "V_n",
+       "value": 919.7459024399998,
+       "unit": "kN"
+      },
+      {
+       "symbol": "\\phi_v",
+       "value": 1.0,
+       "unit": "-"
+      }
+     ],
+     "assumptions": [
+      "steel.webHeightApprox"
+     ],
+     "unit": "kN",
+     "combo": "1.2D",
+     "station": 3.0
+    },
+    {
+     "elementId": "c1",
+     "name": "V3",
+     "demand": 0.0,
+     "capacity": 999.0,
+     "ratio": 0.0,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. G6-1, G2-9",
+     "equation": "\\phi_v V_n = \\phi_v \\sum 0.6 F_y b_f t_f C_{v2}",
+     "vars": [
+      {
+       "symbol": "F_y",
+       "value": 345000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "E",
+       "value": 200000000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "k_v",
+       "value": 1.2,
+       "unit": "-"
+      },
+      {
+       "symbol": "b_{f1}",
+       "value": 0.37084,
+       "unit": "m"
+      },
+      {
+       "symbol": "t_{f1}",
+       "value": 0.019812,
+       "unit": "m"
+      },
+      {
+       "symbol": "(h/t_w)_{1}",
+       "value": 9.35897435897436,
+       "unit": "-"
+      },
+      {
+       "symbol": "C_{v2,1}",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "b_{f2}",
+       "value": 0.37084,
+       "unit": "m"
+      },
+      {
+       "symbol": "t_{f2}",
+       "value": 0.019812,
+       "unit": "m"
+      },
+      {
+       "symbol": "(h/t_w)_{2}",
+       "value": 9.35897435897436,
+       "unit": "-"
+      },
+      {
+       "symbol": "C_{v2,2}",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "V_n",
+       "value": 3041.69198112,
+       "unit": "kN"
+      },
+      {
+       "symbol": "\\phi_v",
+       "value": 0.9,
+       "unit": "-"
+      }
+     ],
+     "assumptions": [],
+     "unit": "kN",
+     "combo": "1.2D",
+     "station": 3.0
+    },
+    {
+     "elementId": "c1",
+     "name": "H1-1",
+     "demand": 0.21200190859420445,
+     "capacity": 1.0,
+     "ratio": 0.21200190859420445,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. H1-1b (Sec. H1.1)",
+     "equation": "\\frac{P_r}{2P_c} + \\left(\\frac{M_{rx}}{M_{cx}} + \\frac{M_{ry}}{M_{cy}}\\right) \\le 1.0",
+     "vars": [
+      {
+       "symbol": "P_r",
+       "value": 960.0,
+       "unit": "kN"
+      },
+      {
+       "symbol": "P_c",
+       "value": 5412.807269494184,
+       "unit": "kN"
+      },
+      {
+       "symbol": "P_r/P_c",
+       "value": 0.17735713691681287,
+       "unit": "-"
+      },
+      {
+       "symbol": "M_{rx}",
+       "value": 108.0,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_{cx}",
+       "value": 875.7466338575921,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_{ry}",
+       "value": 0.0,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_{cy}",
+       "value": 422.1593143073074,
+       "unit": "kN\u00b7m"
+      }
+     ],
+     "assumptions": [],
+     "unit": "-",
+     "combo": "1.2D",
+     "station": 3.0
+    }
+   ],
+   "b1": [
+    {
+     "elementId": "b1",
+     "name": "Pt",
+     "demand": 0.0,
+     "capacity": 999.0,
+     "ratio": 0.0,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. D2-1",
+     "equation": "\\phi_t P_n = \\phi_t F_y A_g",
+     "vars": [
+      {
+       "symbol": "F_y",
+       "value": 345000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "A_g",
+       "value": 0.018774156,
+       "unit": "m^2"
+      },
+      {
+       "symbol": "P_n",
+       "value": 6477.08382,
+       "unit": "kN"
+      },
+      {
+       "symbol": "\\phi_t",
+       "value": 0.9,
+       "unit": "-"
+      }
+     ],
+     "assumptions": [],
+     "unit": "kN",
+     "combo": "1.2D",
+     "station": 0.0
+    },
+    {
+     "elementId": "b1",
+     "name": "Mx",
+     "demand": 216.0,
+     "capacity": 814.461090328632,
+     "ratio": 0.2652060393859267,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. F2-2, F2-5, F2-6, F2-7, F2-8a",
+     "equation": "\\phi_b M_n,\\quad M_n = C_b\\left[M_p - (M_p - 0.7F_yS_x)\\frac{L_b - L_p}{L_r - L_p}\\right] \\le M_p",
+     "vars": [
+      {
+       "symbol": "F_y",
+       "value": 345000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "E",
+       "value": 200000000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "Z_x",
+       "value": 0.002834962072,
+       "unit": "m^3"
+      },
+      {
+       "symbol": "\\lambda_w",
+       "value": 26.061855670103093,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{pw}",
+       "value": 90.53016152049844,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{rw}",
+       "value": 137.2398725177769,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_f",
+       "value": 9.35897435897436,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{pf}",
+       "value": 9.14932483451846,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{rf}",
+       "value": 24.07717061715384,
+       "unit": "-"
+      },
+      {
+       "symbol": "L_b",
+       "value": 6.0,
+       "unit": "m"
+      },
+      {
+       "symbol": "C_b",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "L_p",
+       "value": 3.9932430488488997,
+       "unit": "m"
+      },
+      {
+       "symbol": "L_r",
+       "value": 13.785807095038974,
+       "unit": "m"
+      },
+      {
+       "symbol": "r_{ts}",
+       "value": 0.105137714000882,
+       "unit": "m"
+      },
+      {
+       "symbol": "c",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "J",
+       "value": 2.2351627554719997e-06,
+       "unit": "m^4"
+      },
+      {
+       "symbol": "C_w",
+       "value": 4.833645597721726e-06,
+       "unit": "m^6"
+      },
+      {
+       "symbol": "h_o",
+       "value": 0.34086799999999995,
+       "unit": "m"
+      },
+      {
+       "symbol": "S_x",
+       "value": 0.0025727690479999997,
+       "unit": "m^3"
+      },
+      {
+       "symbol": "M_p",
+       "value": 978.06191484,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_{n,LTB}",
+       "value": 904.9567670318133,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "k_c",
+       "value": 0.76,
+       "unit": "-"
+      },
+      {
+       "symbol": "M_{n,FLB}",
+       "value": 973.0518153973245,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_n",
+       "value": 904.9567670318133,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "\\phi_b",
+       "value": 0.9,
+       "unit": "-"
+      }
+     ],
+     "assumptions": [
+      "steel.webHeightApprox",
+      "steel.defaultLb",
+      "steel.defaultCb"
+     ],
+     "unit": "kN\u00b7m",
+     "combo": "1.2D",
+     "station": 0.0
+    },
+    {
+     "elementId": "b1",
+     "name": "My",
+     "demand": 0.0,
+     "capacity": 422.1593143073074,
+     "ratio": 0.0,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. F6-2, F6-1",
+     "equation": "\\phi_b M_n,\\quad M_n = M_p - (M_p - 0.7F_yS_y)\\frac{\\lambda - \\lambda_{pf}}{\\lambda_{rf} - \\lambda_{pf}}",
+     "vars": [
+      {
+       "symbol": "F_y",
+       "value": 345000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "E",
+       "value": 200000000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "Z_y",
+       "value": 0.0013699585503999998,
+       "unit": "m^3"
+      },
+      {
+       "symbol": "S_y",
+       "value": 0.0009045659328,
+       "unit": "m^3"
+      },
+      {
+       "symbol": "\\lambda",
+       "value": 9.35897435897436,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{pf}",
+       "value": 9.14932483451846,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{rf}",
+       "value": 24.07717061715384,
+       "unit": "-"
+      },
+      {
+       "symbol": "M_p",
+       "value": 472.6356998879999,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_n",
+       "value": 469.0659047858971,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "\\phi_b",
+       "value": 0.9,
+       "unit": "-"
+      }
+     ],
+     "assumptions": [],
+     "unit": "kN\u00b7m",
+     "combo": "1.2D",
+     "station": 0.0
+    },
+    {
+     "elementId": "b1",
+     "name": "V2",
+     "demand": 144.0,
+     "capacity": 919.7459024399998,
+     "ratio": 0.1565649812823101,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. G2-1, G2-2",
+     "equation": "\\phi_v V_n = \\phi_v 0.6 F_y A_w C_{v1}",
+     "vars": [
+      {
+       "symbol": "F_y",
+       "value": 345000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "E",
+       "value": 200000000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "d",
+       "value": 0.36067999999999995,
+       "unit": "m"
+      },
+      {
+       "symbol": "t_w",
+       "value": 0.012318999999999998,
+       "unit": "m"
+      },
+      {
+       "symbol": "A_w",
+       "value": 0.004443216919999999,
+       "unit": "m^2"
+      },
+      {
+       "symbol": "h/t_w",
+       "value": 26.061855670103093,
+       "unit": "-"
+      },
+      {
+       "symbol": "2.24\\sqrt{E/F_y}",
+       "value": 53.93286218242461,
+       "unit": "-"
+      },
+      {
+       "symbol": "C_{v1}",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "V_n",
+       "value": 919.7459024399998,
+       "unit": "kN"
+      },
+      {
+       "symbol": "\\phi_v",
+       "value": 1.0,
+       "unit": "-"
+      }
+     ],
+     "assumptions": [
+      "steel.webHeightApprox"
+     ],
+     "unit": "kN",
+     "combo": "1.2D",
+     "station": 0.0
+    },
+    {
+     "elementId": "b1",
+     "name": "V3",
+     "demand": 0.0,
+     "capacity": 999.0,
+     "ratio": 0.0,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. G6-1, G2-9",
+     "equation": "\\phi_v V_n = \\phi_v \\sum 0.6 F_y b_f t_f C_{v2}",
+     "vars": [
+      {
+       "symbol": "F_y",
+       "value": 345000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "E",
+       "value": 200000000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "k_v",
+       "value": 1.2,
+       "unit": "-"
+      },
+      {
+       "symbol": "b_{f1}",
+       "value": 0.37084,
+       "unit": "m"
+      },
+      {
+       "symbol": "t_{f1}",
+       "value": 0.019812,
+       "unit": "m"
+      },
+      {
+       "symbol": "(h/t_w)_{1}",
+       "value": 9.35897435897436,
+       "unit": "-"
+      },
+      {
+       "symbol": "C_{v2,1}",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "b_{f2}",
+       "value": 0.37084,
+       "unit": "m"
+      },
+      {
+       "symbol": "t_{f2}",
+       "value": 0.019812,
+       "unit": "m"
+      },
+      {
+       "symbol": "(h/t_w)_{2}",
+       "value": 9.35897435897436,
+       "unit": "-"
+      },
+      {
+       "symbol": "C_{v2,2}",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "V_n",
+       "value": 3041.69198112,
+       "unit": "kN"
+      },
+      {
+       "symbol": "\\phi_v",
+       "value": 0.9,
+       "unit": "-"
+      }
+     ],
+     "assumptions": [],
+     "unit": "kN",
+     "combo": "1.2D",
+     "station": 0.0
+    },
+    {
+     "elementId": "b1",
+     "name": "H1-1",
+     "demand": 0.2652060393859267,
+     "capacity": 1.0,
+     "ratio": 0.2652060393859267,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. H1-1b (Sec. H1.2)",
+     "equation": "\\frac{P_r}{2P_c} + \\left(\\frac{M_{rx}}{M_{cx}} + \\frac{M_{ry}}{M_{cy}}\\right) \\le 1.0",
+     "vars": [
+      {
+       "symbol": "P_r",
+       "value": 0.0,
+       "unit": "kN"
+      },
+      {
+       "symbol": "P_c",
+       "value": 5829.375438,
+       "unit": "kN"
+      },
+      {
+       "symbol": "P_r/P_c",
+       "value": 0.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "M_{rx}",
+       "value": 216.0,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_{cx}",
+       "value": 814.461090328632,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_{ry}",
+       "value": 0.0,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_{cy}",
+       "value": 422.1593143073074,
+       "unit": "kN\u00b7m"
+      }
+     ],
+     "assumptions": [],
+     "unit": "-",
+     "combo": "1.2D",
+     "station": 0.0
+    }
+   ]
+  },
+  "messages": {
+   "c1": [
+    {
+     "severity": "warning",
+     "key": "steel.tensionRuptureNotChecked"
+    },
+    {
+     "severity": "warning",
+     "key": "steel.defaultK"
+    },
+    {
+     "severity": "warning",
+     "key": "steel.defaultKz"
+    },
+    {
+     "severity": "warning",
+     "key": "steel.webHeightApprox"
+    },
+    {
+     "severity": "warning",
+     "key": "steel.defaultLb"
+    },
+    {
+     "severity": "warning",
+     "key": "steel.defaultCb"
+    }
+   ],
+   "b1": [
+    {
+     "severity": "warning",
+     "key": "steel.tensionRuptureNotChecked"
+    },
+    {
+     "severity": "warning",
+     "key": "steel.webHeightApprox"
+    },
+    {
+     "severity": "warning",
+     "key": "steel.defaultLb"
+    },
+    {
+     "severity": "warning",
+     "key": "steel.defaultCb"
+    }
+   ]
+  }
+ },
+ "c": {
+  "run": {
+   "schemaVersion": 2,
+   "engineVersion": "design-1.0.0",
+   "designedAt": "2026-10-29T23:01:49.455888+00:00",
+   "code": "ACI318-19",
+   "steelCode": "AISC360-16",
+   "combos": [
+    "1.2D"
+   ]
+  },
+  "members": [
+   {
+    "elementId": "c1",
+    "sectionId": "sec-c",
+    "role": "steel",
+    "code": "AISC360-16",
+    "status": "unchecked",
+    "governing": "Mx",
+    "combo": "1.2D",
+    "ratio": 0.6421062295032508,
+    "station": 3.0,
+    "axial": -960.0,
+    "shearY": 48.0,
+    "shearZ": 0.0,
+    "torsion": 0.0,
+    "momentY": 0.0,
+    "momentZ": 108.0,
+    "asReqTop": 0.0,
+    "asReqBot": 0.0,
+    "avOverS": 0.0,
+    "phiPn": 0.0,
+    "phiMnx": 168.19646818183256,
+    "phiMny": 25.155978591167997,
+    "phiVn": 721.159848,
+    "thetaM": 0.0,
+    "verification": "incomplete",
+    "inputs": {
+     "sectionName": "C15X33.9",
+     "sectionSource": "catalog",
+     "materialName": "",
+     "codeName": "AISC360-16",
+     "length": 3.0,
+     "shape": "C",
+     "Fy": 345000.0,
+     "Fu": 450000.0,
+     "E": 200000000.0,
+     "K3": 1.0,
+     "K2": 1.0,
+     "Kz": 1.0,
+     "Lb": 3.0,
+     "Cb": 1.0,
+     "defaulted": [
+      "K3",
+      "K2",
+      "Kz",
+      "Lb",
+      "Cb"
+     ]
+    }
+   },
+   {
+    "elementId": "b1",
+    "sectionId": "sec-w",
+    "role": "steel",
+    "code": "AISC360-16",
+    "status": "ok",
+    "governing": "Mx",
+    "combo": "1.2D",
+    "ratio": 0.2652060393859267,
+    "station": 0.0,
+    "axial": 0.0,
+    "shearY": 144.0,
+    "shearZ": 0.0,
+    "torsion": 0.0,
+    "momentY": 0.0,
+    "momentZ": -216.0,
+    "asReqTop": 0.0,
+    "asReqBot": 0.0,
+    "avOverS": 0.0,
+    "phiPn": 5829.375438,
+    "phiMnx": 814.461090328632,
+    "phiMny": 422.1593143073074,
+    "phiVn": 919.7459024399998,
+    "thetaM": 0.0,
+    "verification": "complete",
+    "inputs": {
+     "sectionName": "W14X99",
+     "sectionSource": "catalog",
+     "materialName": "",
+     "codeName": "AISC360-16",
+     "length": 6.0,
+     "shape": "W",
+     "Fy": 345000.0,
+     "Fu": 450000.0,
+     "E": 200000000.0,
+     "K3": 1.0,
+     "K2": 1.0,
+     "Kz": 1.0,
+     "Lb": 6.0,
+     "Cb": 1.0,
+     "defaulted": [
+      "K3",
+      "K2",
+      "Kz",
+      "Lb",
+      "Cb"
+     ]
+    }
+   }
+  ],
+  "criteria": {
+   "c1": [
+    {
+     "elementId": "c1",
+     "name": "Pc",
+     "demand": 960.0,
+     "capacity": 0.0,
+     "ratio": 0.0,
+     "status": "notVerified",
+     "reason": "steel.compressionE4OutOfScope",
+     "ref": "AISC 360-16 Sec. E4",
+     "equation": "",
+     "vars": [],
+     "assumptions": [],
+     "unit": "kN",
+     "combo": "1.2D",
+     "station": 3.0
+    },
+    {
+     "elementId": "c1",
+     "name": "Mx",
+     "demand": 108.0,
+     "capacity": 168.19646818183256,
+     "ratio": 0.6421062295032508,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. F2-2, F2-5, F2-6, F2-7, F2-8b",
+     "equation": "\\phi_b M_n,\\quad M_n = C_b\\left[M_p - (M_p - 0.7F_yS_x)\\frac{L_b - L_p}{L_r - L_p}\\right] \\le M_p",
+     "vars": [
+      {
+       "symbol": "F_y",
+       "value": 345000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "E",
+       "value": 200000000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "Z_x",
+       "value": 0.0008324628511999999,
+       "unit": "m^3"
+      },
+      {
+       "symbol": "\\lambda_w",
+       "value": 34.24999999999999,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{pw}",
+       "value": 90.53016152049844,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{rw}",
+       "value": 137.2398725177769,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_f",
+       "value": 5.23076923076923,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{pf}",
+       "value": 9.14932483451846,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{rf}",
+       "value": 24.07717061715384,
+       "unit": "-"
+      },
+      {
+       "symbol": "L_b",
+       "value": 3.0,
+       "unit": "m"
+      },
+      {
+       "symbol": "C_b",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "L_p",
+       "value": 0.96978759757759,
+       "unit": "m"
+      },
+      {
+       "symbol": "L_r",
+       "value": 3.418348066962363,
+       "unit": "m"
+      },
+      {
+       "symbol": "r_{ts}",
+       "value": 0.028734140551696725,
+       "unit": "m"
+      },
+      {
+       "symbol": "c",
+       "value": 1.0772516288812815,
+       "unit": "-"
+      },
+      {
+       "symbol": "J",
+       "value": 4.2039373985599993e-07,
+       "unit": "m^4"
+      },
+      {
+       "symbol": "C_w",
+       "value": 9.613584022135434e-08,
+       "unit": "m^6"
+      },
+      {
+       "symbol": "h_o",
+       "value": 0.36449,
+       "unit": "m"
+      },
+      {
+       "symbol": "S_x",
+       "value": 0.000688256688,
+       "unit": "m^3"
+      },
+      {
+       "symbol": "M_p",
+       "value": 287.19968366399996,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_{n,LTB}",
+       "value": 186.88496464648063,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_n",
+       "value": 186.88496464648063,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "\\phi_b",
+       "value": 0.9,
+       "unit": "-"
+      }
+     ],
+     "assumptions": [
+      "steel.webHeightApprox",
+      "steel.defaultLb",
+      "steel.defaultCb"
+     ],
+     "unit": "kN\u00b7m",
+     "combo": "1.2D",
+     "station": 3.0
+    },
+    {
+     "elementId": "c1",
+     "name": "My",
+     "demand": 0.0,
+     "capacity": 25.155978591167997,
+     "ratio": 0.0,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. F6-1",
+     "equation": "\\phi_b M_n,\\quad M_n = M_p = F_y Z_y \\le 1.6 F_y S_y",
+     "vars": [
+      {
+       "symbol": "F_y",
+       "value": 345000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "E",
+       "value": 200000000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "Z_y",
+       "value": 0.00010143592616,
+       "unit": "m^3"
+      },
+      {
+       "symbol": "S_y",
+       "value": 5.0636027759999995e-05,
+       "unit": "m^3"
+      },
+      {
+       "symbol": "\\lambda",
+       "value": 5.23076923076923,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{pf}",
+       "value": 9.14932483451846,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{rf}",
+       "value": 24.07717061715384,
+       "unit": "-"
+      },
+      {
+       "symbol": "M_p",
+       "value": 27.951087323519996,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_n",
+       "value": 27.951087323519996,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "\\phi_b",
+       "value": 0.9,
+       "unit": "-"
+      }
+     ],
+     "assumptions": [],
+     "unit": "kN\u00b7m",
+     "combo": "1.2D",
+     "station": 3.0
+    },
+    {
+     "elementId": "c1",
+     "name": "V2",
+     "demand": 48.0,
+     "capacity": 721.159848,
+     "ratio": 0.06655944605501664,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. G2-1, G2-3",
+     "equation": "\\phi_v V_n = \\phi_v 0.6 F_y A_w C_{v1}",
+     "vars": [
+      {
+       "symbol": "F_y",
+       "value": 345000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "E",
+       "value": 200000000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "d",
+       "value": 0.381,
+       "unit": "m"
+      },
+      {
+       "symbol": "t_w",
+       "value": 0.01016,
+       "unit": "m"
+      },
+      {
+       "symbol": "A_w",
+       "value": 0.00387096,
+       "unit": "m^2"
+      },
+      {
+       "symbol": "h/t_w",
+       "value": 34.24999999999999,
+       "unit": "-"
+      },
+      {
+       "symbol": "k_v",
+       "value": 5.34,
+       "unit": "-"
+      },
+      {
+       "symbol": "1.10\\sqrt{k_vE/F_y}",
+       "value": 61.20244382730794,
+       "unit": "-"
+      },
+      {
+       "symbol": "C_{v1}",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "V_n",
+       "value": 801.28872,
+       "unit": "kN"
+      },
+      {
+       "symbol": "\\phi_v",
+       "value": 0.9,
+       "unit": "-"
+      }
+     ],
+     "assumptions": [
+      "steel.webHeightApprox"
+     ],
+     "unit": "kN",
+     "combo": "1.2D",
+     "station": 3.0
+    },
+    {
+     "elementId": "c1",
+     "name": "V3",
+     "demand": 0.0,
+     "capacity": 531.2544213599999,
+     "ratio": 0.0,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. G6-1, G2-9",
+     "equation": "\\phi_v V_n = \\phi_v \\sum 0.6 F_y b_f t_f C_{v2}",
+     "vars": [
+      {
+       "symbol": "F_y",
+       "value": 345000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "E",
+       "value": 200000000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "k_v",
+       "value": 1.2,
+       "unit": "-"
+      },
+      {
+       "symbol": "b_{f1}",
+       "value": 0.08635999999999999,
+       "unit": "m"
+      },
+      {
+       "symbol": "t_{f1}",
+       "value": 0.01651,
+       "unit": "m"
+      },
+      {
+       "symbol": "(h/t_w)_{1}",
+       "value": 5.23076923076923,
+       "unit": "-"
+      },
+      {
+       "symbol": "C_{v2,1}",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "b_{f2}",
+       "value": 0.08635999999999999,
+       "unit": "m"
+      },
+      {
+       "symbol": "t_{f2}",
+       "value": 0.01651,
+       "unit": "m"
+      },
+      {
+       "symbol": "(h/t_w)_{2}",
+       "value": 5.23076923076923,
+       "unit": "-"
+      },
+      {
+       "symbol": "C_{v2,2}",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "V_n",
+       "value": 590.2826903999999,
+       "unit": "kN"
+      },
+      {
+       "symbol": "\\phi_v",
+       "value": 0.9,
+       "unit": "-"
+      }
+     ],
+     "assumptions": [],
+     "unit": "kN",
+     "combo": "1.2D",
+     "station": 3.0
+    },
+    {
+     "elementId": "c1",
+     "name": "H1-1",
+     "demand": 0.0,
+     "capacity": 0.0,
+     "ratio": 0.0,
+     "status": "notVerified",
+     "reason": "steel.interactionNotVerified",
+     "ref": "AISC 360-16 Sec. H1",
+     "equation": "",
+     "vars": [],
+     "assumptions": [],
+     "unit": "-",
+     "combo": "1.2D",
+     "station": 3.0
+    }
+   ],
+   "b1": [
+    {
+     "elementId": "b1",
+     "name": "Pt",
+     "demand": 0.0,
+     "capacity": 999.0,
+     "ratio": 0.0,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. D2-1",
+     "equation": "\\phi_t P_n = \\phi_t F_y A_g",
+     "vars": [
+      {
+       "symbol": "F_y",
+       "value": 345000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "A_g",
+       "value": 0.018774156,
+       "unit": "m^2"
+      },
+      {
+       "symbol": "P_n",
+       "value": 6477.08382,
+       "unit": "kN"
+      },
+      {
+       "symbol": "\\phi_t",
+       "value": 0.9,
+       "unit": "-"
+      }
+     ],
+     "assumptions": [],
+     "unit": "kN",
+     "combo": "1.2D",
+     "station": 0.0
+    },
+    {
+     "elementId": "b1",
+     "name": "Mx",
+     "demand": 216.0,
+     "capacity": 814.461090328632,
+     "ratio": 0.2652060393859267,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. F2-2, F2-5, F2-6, F2-7, F2-8a",
+     "equation": "\\phi_b M_n,\\quad M_n = C_b\\left[M_p - (M_p - 0.7F_yS_x)\\frac{L_b - L_p}{L_r - L_p}\\right] \\le M_p",
+     "vars": [
+      {
+       "symbol": "F_y",
+       "value": 345000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "E",
+       "value": 200000000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "Z_x",
+       "value": 0.002834962072,
+       "unit": "m^3"
+      },
+      {
+       "symbol": "\\lambda_w",
+       "value": 26.061855670103093,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{pw}",
+       "value": 90.53016152049844,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{rw}",
+       "value": 137.2398725177769,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_f",
+       "value": 9.35897435897436,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{pf}",
+       "value": 9.14932483451846,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{rf}",
+       "value": 24.07717061715384,
+       "unit": "-"
+      },
+      {
+       "symbol": "L_b",
+       "value": 6.0,
+       "unit": "m"
+      },
+      {
+       "symbol": "C_b",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "L_p",
+       "value": 3.9932430488488997,
+       "unit": "m"
+      },
+      {
+       "symbol": "L_r",
+       "value": 13.785807095038974,
+       "unit": "m"
+      },
+      {
+       "symbol": "r_{ts}",
+       "value": 0.105137714000882,
+       "unit": "m"
+      },
+      {
+       "symbol": "c",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "J",
+       "value": 2.2351627554719997e-06,
+       "unit": "m^4"
+      },
+      {
+       "symbol": "C_w",
+       "value": 4.833645597721726e-06,
+       "unit": "m^6"
+      },
+      {
+       "symbol": "h_o",
+       "value": 0.34086799999999995,
+       "unit": "m"
+      },
+      {
+       "symbol": "S_x",
+       "value": 0.0025727690479999997,
+       "unit": "m^3"
+      },
+      {
+       "symbol": "M_p",
+       "value": 978.06191484,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_{n,LTB}",
+       "value": 904.9567670318133,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "k_c",
+       "value": 0.76,
+       "unit": "-"
+      },
+      {
+       "symbol": "M_{n,FLB}",
+       "value": 973.0518153973245,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_n",
+       "value": 904.9567670318133,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "\\phi_b",
+       "value": 0.9,
+       "unit": "-"
+      }
+     ],
+     "assumptions": [
+      "steel.webHeightApprox",
+      "steel.defaultLb",
+      "steel.defaultCb"
+     ],
+     "unit": "kN\u00b7m",
+     "combo": "1.2D",
+     "station": 0.0
+    },
+    {
+     "elementId": "b1",
+     "name": "My",
+     "demand": 0.0,
+     "capacity": 422.1593143073074,
+     "ratio": 0.0,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. F6-2, F6-1",
+     "equation": "\\phi_b M_n,\\quad M_n = M_p - (M_p - 0.7F_yS_y)\\frac{\\lambda - \\lambda_{pf}}{\\lambda_{rf} - \\lambda_{pf}}",
+     "vars": [
+      {
+       "symbol": "F_y",
+       "value": 345000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "E",
+       "value": 200000000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "Z_y",
+       "value": 0.0013699585503999998,
+       "unit": "m^3"
+      },
+      {
+       "symbol": "S_y",
+       "value": 0.0009045659328,
+       "unit": "m^3"
+      },
+      {
+       "symbol": "\\lambda",
+       "value": 9.35897435897436,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{pf}",
+       "value": 9.14932483451846,
+       "unit": "-"
+      },
+      {
+       "symbol": "\\lambda_{rf}",
+       "value": 24.07717061715384,
+       "unit": "-"
+      },
+      {
+       "symbol": "M_p",
+       "value": 472.6356998879999,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_n",
+       "value": 469.0659047858971,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "\\phi_b",
+       "value": 0.9,
+       "unit": "-"
+      }
+     ],
+     "assumptions": [],
+     "unit": "kN\u00b7m",
+     "combo": "1.2D",
+     "station": 0.0
+    },
+    {
+     "elementId": "b1",
+     "name": "V2",
+     "demand": 144.0,
+     "capacity": 919.7459024399998,
+     "ratio": 0.1565649812823101,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. G2-1, G2-2",
+     "equation": "\\phi_v V_n = \\phi_v 0.6 F_y A_w C_{v1}",
+     "vars": [
+      {
+       "symbol": "F_y",
+       "value": 345000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "E",
+       "value": 200000000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "d",
+       "value": 0.36067999999999995,
+       "unit": "m"
+      },
+      {
+       "symbol": "t_w",
+       "value": 0.012318999999999998,
+       "unit": "m"
+      },
+      {
+       "symbol": "A_w",
+       "value": 0.004443216919999999,
+       "unit": "m^2"
+      },
+      {
+       "symbol": "h/t_w",
+       "value": 26.061855670103093,
+       "unit": "-"
+      },
+      {
+       "symbol": "2.24\\sqrt{E/F_y}",
+       "value": 53.93286218242461,
+       "unit": "-"
+      },
+      {
+       "symbol": "C_{v1}",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "V_n",
+       "value": 919.7459024399998,
+       "unit": "kN"
+      },
+      {
+       "symbol": "\\phi_v",
+       "value": 1.0,
+       "unit": "-"
+      }
+     ],
+     "assumptions": [
+      "steel.webHeightApprox"
+     ],
+     "unit": "kN",
+     "combo": "1.2D",
+     "station": 0.0
+    },
+    {
+     "elementId": "b1",
+     "name": "V3",
+     "demand": 0.0,
+     "capacity": 999.0,
+     "ratio": 0.0,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. G6-1, G2-9",
+     "equation": "\\phi_v V_n = \\phi_v \\sum 0.6 F_y b_f t_f C_{v2}",
+     "vars": [
+      {
+       "symbol": "F_y",
+       "value": 345000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "E",
+       "value": 200000000.0,
+       "unit": "kPa"
+      },
+      {
+       "symbol": "k_v",
+       "value": 1.2,
+       "unit": "-"
+      },
+      {
+       "symbol": "b_{f1}",
+       "value": 0.37084,
+       "unit": "m"
+      },
+      {
+       "symbol": "t_{f1}",
+       "value": 0.019812,
+       "unit": "m"
+      },
+      {
+       "symbol": "(h/t_w)_{1}",
+       "value": 9.35897435897436,
+       "unit": "-"
+      },
+      {
+       "symbol": "C_{v2,1}",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "b_{f2}",
+       "value": 0.37084,
+       "unit": "m"
+      },
+      {
+       "symbol": "t_{f2}",
+       "value": 0.019812,
+       "unit": "m"
+      },
+      {
+       "symbol": "(h/t_w)_{2}",
+       "value": 9.35897435897436,
+       "unit": "-"
+      },
+      {
+       "symbol": "C_{v2,2}",
+       "value": 1.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "V_n",
+       "value": 3041.69198112,
+       "unit": "kN"
+      },
+      {
+       "symbol": "\\phi_v",
+       "value": 0.9,
+       "unit": "-"
+      }
+     ],
+     "assumptions": [],
+     "unit": "kN",
+     "combo": "1.2D",
+     "station": 0.0
+    },
+    {
+     "elementId": "b1",
+     "name": "H1-1",
+     "demand": 0.2652060393859267,
+     "capacity": 1.0,
+     "ratio": 0.2652060393859267,
+     "status": "ok",
+     "reason": "",
+     "ref": "AISC 360-16 Eq. H1-1b (Sec. H1.2)",
+     "equation": "\\frac{P_r}{2P_c} + \\left(\\frac{M_{rx}}{M_{cx}} + \\frac{M_{ry}}{M_{cy}}\\right) \\le 1.0",
+     "vars": [
+      {
+       "symbol": "P_r",
+       "value": 0.0,
+       "unit": "kN"
+      },
+      {
+       "symbol": "P_c",
+       "value": 5829.375438,
+       "unit": "kN"
+      },
+      {
+       "symbol": "P_r/P_c",
+       "value": 0.0,
+       "unit": "-"
+      },
+      {
+       "symbol": "M_{rx}",
+       "value": 216.0,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_{cx}",
+       "value": 814.461090328632,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_{ry}",
+       "value": 0.0,
+       "unit": "kN\u00b7m"
+      },
+      {
+       "symbol": "M_{cy}",
+       "value": 422.1593143073074,
+       "unit": "kN\u00b7m"
+      }
+     ],
+     "assumptions": [],
+     "unit": "-",
+     "combo": "1.2D",
+     "station": 0.0
+    }
+   ]
+  },
+  "messages": {
+   "c1": [
+    {
+     "severity": "error",
+     "key": "steel.compressionE4OutOfScope"
+    },
+    {
+     "severity": "error",
+     "key": "steel.interactionNotVerified"
+    },
+    {
+     "severity": "warning",
+     "key": "steel.tensionRuptureNotChecked"
+    },
+    {
+     "severity": "warning",
+     "key": "steel.webHeightApprox"
+    },
+    {
+     "severity": "warning",
+     "key": "steel.defaultLb"
+    },
+    {
+     "severity": "warning",
+     "key": "steel.defaultCb"
+    }
+   ],
+   "b1": [
+    {
+     "severity": "warning",
+     "key": "steel.tensionRuptureNotChecked"
+    },
+    {
+     "severity": "warning",
+     "key": "steel.webHeightApprox"
+    },
+    {
+     "severity": "warning",
+     "key": "steel.defaultLb"
+    },
+    {
+     "severity": "warning",
+     "key": "steel.defaultCb"
+    }
+   ]
+  }
+ }
+}

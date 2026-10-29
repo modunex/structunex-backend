@@ -22,6 +22,16 @@ const {
   sha256,
 } = require("../lib/reporting");
 const s3Service = require("./s3Service");
+const { fromCalcError } = require("./calcService");
+const { runStaleReason } = require("./analysisService");
+const {
+  archiveDesignRuns,
+  buildMembersDocument,
+  hasSheet,
+  memberListRow,
+  memberSnapshot,
+  membersTitle,
+} = require("../lib/reportingMembers");
 
 const LOGO_TYPES = { "image/png": "png", "image/jpeg": "jpg" };
 const MAX_SHEETS = 200;
@@ -99,6 +109,7 @@ async function archive(project) {
   const archived = archiveConnections(connections, runs, { latestSolvedRunId: solvedId });
   const latest = archived.map((c) => c.latest).filter(Boolean);
   return {
+    designRuns: await designRunArchive(project.id, solvedId),
     connections: archived,
     counts: {
       connections: archived.length,
@@ -209,18 +220,33 @@ async function render(document, meta, { lang, unitSystemId }) {
   }
 }
 
-async function exportPdf(project, { scope, runIds = [], lang = "es", title, unitSystemId }) {
+async function exportPdf(project, body) {
+  if (body.scope === "currentMembers" || body.scope === "designRun") return exportMembers(project, body);
+  const { scope, runIds = [], lang = "es", title, unitSystemId } = body;
   const sheets = await selectSheets(project, { scope, runIds });
   const document = buildConnectionsDocument(sheets, lang);
+  return renderAndStore(project, {
+    kind: "connections",
+    title,
+    lang,
+    unitSystemId,
+    runIds: sheets.map((s) => s.snapshot.run.id),
+    document,
+  });
+}
+
+/** Pagina el documento, guarda el PDF en S3 y registra la exportación (también la
+ *  fallida, con su error). */
+async function renderAndStore(project, { kind, title, lang, unitSystemId, runIds, document }) {
   const units = unitSystemId ?? project.units ?? null;
   const meta = reportMeta(project, { title, lang, logoDataUri: await logoDataUri(project) });
   const base = {
     projectId: project.id,
-    kind: "connections",
+    kind,
     title: meta.title,
     lang,
     unitSystemId: units,
-    runIds: sheets.map((s) => s.snapshot.run.id),
+    runIds,
     document,
     documentHash: sha256(document),
   };
@@ -249,6 +275,105 @@ async function exportPdf(project, { scope, runIds = [], lang = "es", title, unit
     omit: { document: true },
   });
   return exportToApi(row);
+}
+
+// ─── Miembros (R2) ────────────────────────────────────────────────────────────────
+
+const DESIGN_RUN_SELECT = {
+  id: true, startedAt: true, finishedAt: true, analysisRunId: true, code: true,
+  steelCode: true, counts: true, summary: true, schemaVersion: true,
+};
+
+async function designRunArchive(projectId, solvedId) {
+  const runs = await prisma.designRun.findMany({
+    where: { projectId, status: "done" },
+    orderBy: { startedAt: "desc" },
+    select: DESIGN_RUN_SELECT,
+  });
+  if (runs.length === 0) return [];
+  // ¿La última sigue siendo del modelo? Solo si se hizo con el análisis vigente y ese
+  // análisis es del modelo actual (un cambio de sección o de geometría lo invalida).
+  const latestStaleReason =
+    solvedId && runs[0].analysisRunId === solvedId ? await runStaleReason(projectId, solvedId) : null;
+  return archiveDesignRuns(runs, { latestSolvedRunId: solvedId, latestStaleReason });
+}
+
+async function findDesignRun(project, designRunId) {
+  if (!isUuid(designRunId)) throw new AppError(404, "Comprobación de diseño no encontrada.");
+  const run = await prisma.designRun.findFirst({
+    where: { id: designRunId, projectId: project.id, status: "done" },
+    select: DESIGN_RUN_SELECT,
+  });
+  if (!run) throw new AppError(404, "Comprobación de diseño no encontrada.");
+  if ((run.schemaVersion ?? 0) < 2) {
+    throw new AppError(409, "Esta comprobación es anterior a las hojas de cálculo. Vuelve a comprobar el diseño.");
+  }
+  return run;
+}
+
+/** Lo que el motor guardó de una ejecución de diseño (solo lectura). */
+async function designSheets(project, designRunId, { elementIds = null, summaryOnly = false } = {}) {
+  try {
+    const { data } = await axios.post(
+      `${env.calcServiceUrl}/design/sheets`,
+      {
+        storage: { projectId: String(project.id), runId: String(designRunId), bucket: env.s3Bucket, prefix: env.s3Prefix },
+        elementIds,
+        summaryOnly,
+      },
+      { timeout: 60000 }
+    );
+    return data;
+  } catch (err) {
+    if (err.response?.status === 404) throw new AppError(404, "No se encontraron los resultados de esta comprobación de diseño.");
+    throw fromCalcError(err);
+  }
+}
+
+async function designRunMembers(project, designRunId) {
+  await findDesignRun(project, designRunId);
+  const sheets = await designSheets(project, designRunId, { summaryOnly: true });
+  return { members: (sheets.members || []).map((m) => ({ ...memberListRow(m), hasSheet: hasSheet(m) })) };
+}
+
+async function memberSheet(project, designRunId, elementId) {
+  const run = await findDesignRun(project, designRunId);
+  const sheets = await designSheets(project, designRunId, { elementIds: [elementId] });
+  const snapshot = memberSnapshot(sheets, elementId, run);
+  if (!snapshot) throw new AppError(404, "Esta barra no tiene hoja de cálculo en esta comprobación.");
+  return { snapshot, snapshotHash: sha256(snapshot) };
+}
+
+async function exportMembers(project, { scope, designRunId, elementIds, lang = "es", title, unitSystemId }) {
+  const archive = await designRunArchive(project.id, await latestSolvedRunId(project.id));
+  let entry;
+  if (scope === "currentMembers") {
+    entry = archive[0];
+    if (!entry || entry.state !== "current") {
+      throw new AppError(409, "No hay una comprobación de diseño vigente para exportar.");
+    }
+  } else {
+    entry = archive.find((e) => e.designRunId === designRunId);
+    if (!entry) throw new AppError(404, "Comprobación de diseño no encontrada.");
+  }
+  const run = await findDesignRun(project, entry.designRunId);
+  const sheets = await designSheets(project, run.id, { elementIds: elementIds?.length ? elementIds : null });
+  const ids = elementIds?.length ? elementIds : (sheets.members || []).filter(hasSheet).map((m) => m.elementId);
+  const snapshots = ids.map((id) => memberSnapshot(sheets, id, run)).filter(Boolean);
+  if (snapshots.length === 0) throw new AppError(409, "Ninguna de las barras pedidas tiene hoja de cálculo.");
+  if (snapshots.length > MAX_SHEETS) {
+    throw new AppError(413, `La comprobación tiene ${snapshots.length} barras: elige como máximo ${MAX_SHEETS} para un documento.`);
+  }
+  const staleReasons = entry.state === "current" ? [] : entry.state === "stale" ? entry.staleReasons : ["run.superseded"];
+  const document = buildMembersDocument(snapshots, { lang, staleReasons });
+  return renderAndStore(project, {
+    kind: "members",
+    title: title || membersTitle(lang),
+    lang,
+    unitSystemId,
+    runIds: [run.id],
+    document,
+  });
 }
 
 const safeName = (s) => s.normalize("NFKD").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80) || "report";
@@ -328,6 +453,8 @@ async function removeLogo(project) {
 module.exports = {
   archive,
   connectionSheet,
+  designRunMembers,
+  memberSheet,
   exportPdf,
   exportDownload,
   logoUploadUrl,

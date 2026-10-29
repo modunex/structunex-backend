@@ -11,6 +11,14 @@ const connectionSheet = asyncHandler(async (req, res) => {
   res.json(await reportingService.connectionSheet(req.project, req.params.runId));
 });
 
+const designRunMembers = asyncHandler(async (req, res) => {
+  res.json(await reportingService.designRunMembers(req.project, req.params.designRunId));
+});
+
+const memberSheet = asyncHandler(async (req, res) => {
+  res.json(await reportingService.memberSheet(req.project, req.params.designRunId, req.params.elementId));
+});
+
 // 201 con la exportación; 409 si no hay nada vigente que exportar; 502/503 si el
 // generador de PDF no responde (la exportación fallida queda registrada).
 const exportPdf = asyncHandler(async (req, res) => {
@@ -37,4 +45,4 @@ const removeLogo = asyncHandler(async (req, res) => {
   res.json(await reportingService.removeLogo(req.project));
 });
 
-module.exports = { archive, connectionSheet, exportPdf, exportDownload, logoUploadUrl, setLogo, getLogo, removeLogo };
+module.exports = { archive, connectionSheet, designRunMembers, memberSheet, exportPdf, exportDownload, logoUploadUrl, setLogo, getLogo, removeLogo };
