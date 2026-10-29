@@ -4,6 +4,7 @@ const { AppError } = require("../middleware/errorHandler");
 const analysisJob = require("./analysisJob");
 const s3Service = require("./s3Service");
 const spectrumGenerators = require("../lib/spectrumGenerators");
+const { modelHash } = require("../lib/modelHash");
 
 // Lo que se devuelve de una ejecución: metadatos y resumen, nunca el payload. Los
 // resultados pesados están en S3 en Parquet y los baja el navegador con una URL
@@ -287,13 +288,19 @@ async function run(project, options) {
     await resolveOptions(projectId, options);
   const model = await assembleModel(projectId);
 
-  await analysisJob.start(projectId, {
-    analysisOptions,
-    model,
-    massSource,
-    modalCases,
-    responseSpectrum,
-  });
+  await analysisJob.start(
+    projectId,
+    { analysisOptions, model, massSource, modalCases, responseSpectrum },
+    {
+      modelHash: modelHash({
+        model,
+        loadPatterns: analysisOptions.loadPatterns,
+        massSource,
+        modalCases,
+        responseSpectrum,
+      }),
+    }
+  );
 
   return {
     status: "solving",
@@ -417,4 +424,37 @@ function cancel(projectId) {
   return analysisJob.cancel(projectId);
 }
 
-module.exports = { run, get, cancel, listRuns, signCase, assembleModel };
+/**
+ * Huella del modelo tal como se analizaría AHORA, con las condiciones guardadas en el
+ * proyecto. Se compara con `analysis_runs.modelHash` para saber si un run sigue vigente.
+ * Devuelve null si el modelo actual ni siquiera se puede armar (p. ej. sin secciones):
+ * entonces no puede coincidir con nada.
+ */
+async function currentModelHash(projectId) {
+  try {
+    const { analysisOptions, massSource, modalCases, responseSpectrum } =
+      await resolveOptions(projectId, undefined);
+    const model = await assembleModel(projectId);
+    return modelHash({
+      model,
+      loadPatterns: analysisOptions.loadPatterns,
+      massSource,
+      modalCases,
+      responseSpectrum,
+    });
+  } catch (err) {
+    if (err instanceof AppError) return null;
+    throw err;
+  }
+}
+
+module.exports = {
+  run,
+  get,
+  cancel,
+  listRuns,
+  signCase,
+  assembleModel,
+  resolveOptions,
+  currentModelHash,
+};

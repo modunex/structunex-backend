@@ -127,7 +127,7 @@ async function pruneRuns(projectId) {
  * `responseSpectrum` (functions already sampled by resolveOptions + the cases) is
  * forwarded verbatim via the spread below; absent/null => static + modal only.
  */
-async function start(projectId, payload) {
+async function start(projectId, payload, { modelHash = null } = {}) {
   const key = String(projectId);
   if (running.has(key)) {
     throw new AppError(409, "Ya hay un análisis en curso para este proyecto");
@@ -138,7 +138,11 @@ async function start(projectId, payload) {
 
   // El run se crea ANTES de lanzar el cálculo: así su id sirve de clave en S3 y las
   // ejecuciones fallidas y canceladas también quedan registradas.
-  const run = await prisma.analysisRun.create({ data: { projectId, status: "solving" } });
+  // `modelHash` es la huella de lo que se resuelve (lib/modelHash.js): permite saber
+  // más tarde si los resultados siguen siendo los del modelo actual.
+  const run = await prisma.analysisRun.create({
+    data: { projectId, status: "solving", modelHash },
+  });
 
   await prisma.project.update({
     where: { id: projectId },

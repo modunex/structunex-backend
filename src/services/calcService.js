@@ -155,4 +155,4 @@ async function designModel(request, { signal } = {}) {
   }
 }
 
-module.exports = { analyzeModel, analyzeModelStream, designModel };
+module.exports = { analyzeModel, analyzeModelStream, designModel, fromCalcError };
