@@ -5,6 +5,7 @@ const analysisJob = require("./analysisJob");
 const s3Service = require("./s3Service");
 const spectrumGenerators = require("../lib/spectrumGenerators");
 const { modelHash } = require("../lib/modelHash");
+const { freshness } = require("../lib/analysisFreshness");
 
 // Lo que se devuelve de una ejecución: metadatos y resumen, nunca el payload. Los
 // resultados pesados están en S3 en Parquet y los baja el navegador con una URL
@@ -369,12 +370,36 @@ async function get(projectId) {
     };
   }
 
+  // ¿Son estos resultados del modelo actual? Solo fuera de un análisis en curso: el
+  // estado se sondea cada segundo mientras resuelve, y armar el modelo entero en cada
+  // sondeo no tiene sentido (además, mientras resuelve el run que vale es el nuevo).
+  if (run && project.status !== "solving") {
+    run.staleReason = await runStaleReason(projectId, run._id);
+  }
+
   return {
     status: project.status,
     progress,
     error: project.analysisError || null,
     run: run || null,
   };
+}
+
+/**
+ * Motivo por el que los resultados del run `runId` ya no son del modelo actual
+ * ("analysis.legacy" | "analysis.stale"), o null si siguen valiendo. Lo usa la interfaz
+ * para avisar en Analysis y para no enseñar comprobaciones de Design caducadas.
+ */
+async function runStaleReason(projectId, runId) {
+  const row = await prisma.analysisRun.findUnique({
+    where: { id: runId },
+    select: { modelHash: true },
+  });
+  const state = freshness({
+    runHash: row?.modelHash ?? null,
+    currentHash: row?.modelHash ? await currentModelHash(projectId) : null,
+  });
+  return state.fresh ? null : state.reason;
 }
 
 /** Historial de ejecuciones del proyecto, de la más reciente a la más antigua. */
@@ -464,4 +489,5 @@ module.exports = {
   assembleModel,
   resolveOptions,
   currentModelHash,
+  runStaleReason,
 };

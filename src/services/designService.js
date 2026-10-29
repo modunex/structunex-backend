@@ -5,7 +5,7 @@ const designJob = require("./designJob");
 const s3Service = require("./s3Service");
 const { getShape } = require("../lib/aiscShapes");
 const { freshness, STALE_MESSAGES } = require("../lib/analysisFreshness");
-const { currentModelHash } = require("./analysisService");
+const { currentModelHash, runStaleReason } = require("./analysisService");
 
 // La comprobación por normativa (sección Design).
 //
@@ -288,6 +288,13 @@ async function get(projectId) {
       await designJob.settleFailure(projectId, inFlight.id, message).catch(() => {});
       return { status: run ? "done" : "idle", progress: null, error: message, run: run || null };
     }
+  }
+
+  // Una comprobación hecha sobre un análisis que ya no es del modelo actual (o de la
+  // convención de ejes anterior) no se enseña como vigente: sus ratios son de otra
+  // estructura. La interfaz la marca y pide volver a analizar.
+  if (run && !(running || inFlight)) {
+    run.staleReason = await runStaleReason(projectId, run.analysisRunId);
   }
 
   return {
