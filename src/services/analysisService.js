@@ -26,8 +26,15 @@ const ALL_DOFS = ["UX", "UY", "UZ", "RX", "RY", "RZ"];
 //
 // Materials and sections are not stored per-project: bars reference a
 // CatalogFrameSection (which carries its material), so we expand those catalog
-// rows into the flat { materials, sections } the engine consumes. Convention
-// (SAP): I33 = strong axis -> Iy, I22 = weak -> Iz. Stiffness modifiers applied.
+// rows into the flat { materials, sections } the engine consumes. Stiffness modifiers
+// applied.
+//
+// AXES (SAP2000). The engine's Frame3D bends in the local 1-2 plane with `Iz` and in
+// the 1-3 plane with `Iy`; local 2 is "up" for a horizontal member (core/geometry).
+// SAP's I33 is the inertia about local 3, i.e. bending in the 1-2 plane, so I33 -> Iz
+// and I22 -> Iy. With roll 0 a W beam then carries gravity on its strong axis and its
+// depth runs along local 2, exactly as in SAP2000. (Until 2026-10 this was crossed;
+// runs from before carry no modelHash and are refused for design and connections.)
 // Bars without an assigned section can't be solved and are omitted. Areas carry
 // no stiffness (v1): they pass through only to lump their surface loads to the
 // boundary nodes.
@@ -102,8 +109,8 @@ async function assembleModel(projectId) {
       id: s.id,
       materialId: s.materialId,
       A: (p.A || 0) * (mod.area != null ? mod.area : 1),
-      Iy: (p.I33 || 0) * (mod.i33 != null ? mod.i33 : 1),
-      Iz: (p.I22 || 0) * (mod.i22 != null ? mod.i22 : 1),
+      Iz: (p.I33 || 0) * (mod.i33 != null ? mod.i33 : 1), // about local 3 (strong)
+      Iy: (p.I22 || 0) * (mod.i22 != null ? mod.i22 : 1), // about local 2 (weak)
       J: (p.J || 0) * (mod.j != null ? mod.j : 1),
     };
   });

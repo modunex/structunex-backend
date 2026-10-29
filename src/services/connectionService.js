@@ -1,7 +1,8 @@
 const axios = require("axios");
 const { prisma } = require("../config/db");
 const { env } = require("../config/env");
-const { buildInspectRequest, freshness } = require("../lib/connections");
+const { buildInspectRequest } = require("../lib/connections");
+const { freshness, STALE_MESSAGES } = require("../lib/analysisFreshness");
 const { AppError } = require("../middleware/errorHandler");
 const { fromCalcError } = require("./calcService");
 const { assembleDesignModel } = require("./designService");
@@ -44,14 +45,9 @@ async function inspect(project, nodeId) {
   const state = freshness({
     runHash: run.modelHash,
     currentHash: run.modelHash ? await currentModelHash(projectId) : null,
-    isLocked: !!project.isLocked,
   });
   if (!state.fresh) {
-    throw new AppError(
-      409,
-      "El modelo cambió después del último análisis. Vuelve a analizar para inspeccionar conexiones.",
-      { error: state.reason }
-    );
+    throw new AppError(409, STALE_MESSAGES[state.reason], { error: state.reason });
   }
 
   // Solo lo del nudo y sus vecinos inmediatos viaja: el calc-service no necesita el

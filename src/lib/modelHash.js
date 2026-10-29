@@ -41,7 +41,9 @@ function stableStringify(value) {
  */
 function modelHash({ model, loadPatterns, massSource, modalCases, responseSpectrum }) {
   const canonical = stableStringify({
-    v: 1, // sube si cambia lo que entra en la huella
+    // v2: inercias en convención SAP2000 (I33 → Iz). Sube si cambia lo que entra en la
+    // huella o cómo se interpreta el modelo.
+    v: 2,
     model,
     loadPatterns: loadPatterns || [],
     massSource: massSource || null,

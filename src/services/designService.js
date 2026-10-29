@@ -4,6 +4,8 @@ const { AppError } = require("../middleware/errorHandler");
 const designJob = require("./designJob");
 const s3Service = require("./s3Service");
 const { getShape } = require("../lib/aiscShapes");
+const { freshness, STALE_MESSAGES } = require("../lib/analysisFreshness");
+const { currentModelHash } = require("./analysisService");
 
 // La comprobación por normativa (sección Design).
 //
@@ -186,13 +188,23 @@ async function run(project, options) {
   const analysisRun = await prisma.analysisRun.findFirst({
     where: { projectId, status: "solved" },
     orderBy: { startedAt: "desc" },
-    select: { id: true, cases: true },
+    select: { id: true, cases: true, modelHash: true },
   });
   if (!analysisRun) {
     throw new AppError(
       409,
       "No hay resultados de análisis que comprobar. Lanza primero el análisis."
     );
+  }
+
+  // Los esfuerzos tienen que ser de ESTE modelo: comprobar barras con los de un modelo
+  // que ya cambió daría ratios de otra estructura.
+  const state = freshness({
+    runHash: analysisRun.modelHash,
+    currentHash: analysisRun.modelHash ? await currentModelHash(projectId) : null,
+  });
+  if (!state.fresh) {
+    throw new AppError(409, STALE_MESSAGES[state.reason], { error: state.reason });
   }
 
   const { preferences, combinations } = await resolvePreferences(

@@ -1,29 +1,8 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { buildInspectRequest, freshness } = require("./connections");
+const { buildInspectRequest } = require("./connections");
 
 // node --test src/lib/connections.test.js
-
-test("un run con huella vale solo si coincide con el modelo actual", () => {
-  assert.deepEqual(freshness({ runHash: "a", currentHash: "a", isLocked: false }), {
-    fresh: true,
-    basis: "modelHash",
-  });
-  // Bloqueado no basta si la huella dice otra cosa.
-  assert.equal(freshness({ runHash: "a", currentHash: "b", isLocked: true }).fresh, false);
-  assert.equal(freshness({ runHash: "a", currentHash: null, isLocked: true }).fresh, false);
-});
-
-test("un run antiguo sin huella solo vale con el modelo bloqueado", () => {
-  assert.deepEqual(freshness({ runHash: null, currentHash: "x", isLocked: true }), {
-    fresh: true,
-    basis: "locked",
-  });
-  assert.deepEqual(freshness({ runHash: null, currentHash: "x", isLocked: false }), {
-    fresh: false,
-    reason: "analysis.staleUnverifiable",
-  });
-});
 
 const SECTION_ID = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
 

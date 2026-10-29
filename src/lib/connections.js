@@ -7,22 +7,6 @@ const isUuid = (v) => typeof v === "string" && UUID_RE.test(v);
 // Casos que tienen esfuerzos de barra. Un caso modal no los tiene.
 const FORCE_CASE_KINDS = new Set(["pattern", "responseSpectrum"]);
 
-/**
- * ¿Siguen siendo válidos los resultados de `run` para el modelo actual?
- * Con huella, se decide por la huella. Un run antiguo, sin huella, solo vale si el
- * proyecto sigue bloqueado desde aquel análisis (el bloqueo impide editar).
- */
-function freshness({ runHash, currentHash, isLocked }) {
-  if (runHash) {
-    return runHash === currentHash
-      ? { fresh: true, basis: "modelHash" }
-      : { fresh: false, reason: "analysis.stale" };
-  }
-  return isLocked
-    ? { fresh: true, basis: "locked" }
-    : { fresh: false, reason: "analysis.staleUnverifiable" };
-}
-
 /** La petición para el calc-service. Pura: se prueba sin base de datos. */
 function buildInspectRequest({
   nodeId,
@@ -87,4 +71,4 @@ function buildInspectRequest({
   };
 }
 
-module.exports = { buildInspectRequest, freshness, FORCE_CASE_KINDS };
+module.exports = { buildInspectRequest, FORCE_CASE_KINDS };
