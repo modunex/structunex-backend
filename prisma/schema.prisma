@@ -169,6 +169,7 @@ model Project {
   aiConversations AiConversation[]
   connections     Connection[]
   reportExports   ReportExport[]
+  reports         Report[]
 
   @@index([ownerId, createdAt(sort: Desc)])
   @@map("projects")
@@ -572,10 +573,49 @@ model ReportExport {
   pages           Int?
   rendererVersion String?
   error           String?
+  // R4: el documento de Report Studio exportado (null en las exportaciones directas
+  // del archivo). Sin FK: borrar el documento no borra el PDF ya emitido.
+  reportId        String?  @db.Uuid
   createdAt       DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId, createdAt(sort: Desc)])
   @@map("report_exports")
+}
+
+// R4: un documento de Report Studio. `document` es el formato propio v1 (el del
+// frontend, model/document.ts): texto del autor + bloques técnicos con vínculo,
+// instantánea y huella. `version` sirve de control de concurrencia optimista.
+model Report {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  projectId String   @db.Uuid
+  title     String
+  lang      String   @default("es")
+  document  Json
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  revisions ReportRevision[]
+
+  @@index([projectId, updatedAt(sort: Desc)])
+  @@map("reports")
+}
+
+// Revisión con nombre: copia congelada del documento ("Rev. A — para revisión").
+model ReportRevision {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  reportId     String   @db.Uuid
+  number       Int
+  name         String
+  document     Json
+  documentHash String
+  createdAt    DateTime @default(now())
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, number])
+  @@map("report_revisions")
 }

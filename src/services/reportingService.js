@@ -248,7 +248,7 @@ async function exportPdf(project, body) {
 
 /** Pagina el documento, guarda el PDF en S3 y registra la exportación (también la
  *  fallida, con su error). */
-async function renderAndStore(project, { kind, title, lang, unitSystemId, runIds, document }) {
+async function renderAndStore(project, { kind, title, lang, unitSystemId, runIds, document, reportId = null }) {
   const units = unitSystemId ?? project.units ?? null;
   const meta = reportMeta(project, { title, lang, logoDataUri: await logoDataUri(project) });
   const base = {
@@ -260,6 +260,7 @@ async function renderAndStore(project, { kind, title, lang, unitSystemId, runIds
     runIds,
     document,
     documentHash: sha256(document),
+    ...(reportId ? { reportId } : {}),
   };
 
   let rendered;
@@ -501,6 +502,22 @@ async function exportAnalysis(project, { lang = "es", title, unitSystemId }) {
  * incompletas) y conexiones. Lo que no está vigente no entra: su capítulo lo avisa.
  */
 async function exportMemoria(project, { lang = "es", title, unitSystemId }) {
+  const { document, runIds, empty } = await buildMemoria(project, lang);
+  if (empty) {
+    throw new AppError(409, "No hay nada vigente que documentar: analiza y comprueba el proyecto primero.");
+  }
+  return renderAndStore(project, {
+    kind: "memoria",
+    title: title || memoriaTitle(lang),
+    lang,
+    unitSystemId,
+    runIds,
+    document,
+  });
+}
+
+/** La memoria con todo lo vigente (también sirve de plantilla de un documento). */
+async function buildMemoria(project, lang = "es") {
   const runIds = [];
   let analysis = null;
   try {
@@ -546,17 +563,28 @@ async function exportMemoria(project, { lang = "es", title, unitSystemId }) {
     if (!(err instanceof AppError) || err.status !== 409) throw err;
   }
 
-  if (!analysis && !members && !connections) {
-    throw new AppError(409, "No hay nada vigente que documentar: analiza y comprueba el proyecto primero.");
-  }
-  return renderAndStore(project, {
-    kind: "memoria",
-    title: title || memoriaTitle(lang),
-    lang,
-    unitSystemId,
-    runIds,
+  return {
     document: buildMemoriaDocument({ analysis, members, connections, lang }),
-  });
+    runIds,
+    empty: !analysis && !members && !connections,
+  };
+}
+
+/** Estado de vigencia de cada comprobación (para avisar en los documentos). */
+async function archiveStates(project) {
+  const connections = await projectConnections(project.id);
+  const [runs, solvedId] = await Promise.all([
+    doneRunSummaries(connections.map((c) => c.id)),
+    latestSolvedRunId(project.id),
+  ]);
+  const states = new Map();
+  for (const c of archiveConnections(connections, runs, { latestSolvedRunId: solvedId })) {
+    for (const e of [c.latest, ...c.history].filter(Boolean)) states.set(`c:${e.runId}`, { state: e.state, staleReasons: e.staleReasons });
+  }
+  for (const r of await designRunArchive(project.id, solvedId)) {
+    states.set(`d:${r.designRunId}`, { state: r.state, staleReasons: r.staleReasons });
+  }
+  return states;
 }
 
 const safeName = (s) => s.normalize("NFKD").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80) || "report";
@@ -634,6 +662,15 @@ async function removeLogo(project) {
 }
 
 module.exports = {
+  // Para los documentos de Report Studio (reportDocumentService).
+  internals: {
+    connectionSheet: (project, runId) => connectionSheet(project, runId),
+    memberSheet: (project, designRunId, elementId) => memberSheet(project, designRunId, elementId),
+    currentAnalysisSnapshot: (project) => currentAnalysisSnapshot(project),
+    archiveStates: (project) => archiveStates(project),
+    buildMemoria: (project, lang) => buildMemoria(project, lang),
+    renderAndStore: (project, opts) => renderAndStore(project, opts),
+  },
   archive,
   analysisSheet,
   connectionSheet,
