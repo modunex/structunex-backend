@@ -58,6 +58,9 @@ const shearTabParamsV1 = z
         // considered → Ec. J3-6a/c; notConsidered → J3-6b/d. null = considered (lo más
         // conservador), y el resultado lo declara como hipótesis.
         bearingDeformation: z.enum(["considered", "notConsidered"]).nullable(),
+        // Del borde superior de la viga al primer perno (opcional). Sin ella solo se
+        // comprueba que la placa cabe por longitud, y el resultado lo declara.
+        topDistance: length,
       })
       .partial()
       .strict(),

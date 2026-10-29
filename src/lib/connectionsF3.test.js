@@ -102,3 +102,9 @@ test("parámetros v1: bearingDeformation admite las dos opciones y null", () => 
   assert.ok(shearTabParamsV1.safeParse({ bolts: { bearingDeformation: null } }).success);
   assert.ok(!shearTabParamsV1.safeParse({ bolts: { bearingDeformation: "maybe" } }).success);
 });
+
+test("parámetros v1: topDistance opcional, positiva", () => {
+  assert.ok(shearTabParamsV1.safeParse({ bolts: { topDistance: 0.076 } }).success);
+  assert.ok(shearTabParamsV1.safeParse({ bolts: { topDistance: null } }).success);
+  assert.ok(!shearTabParamsV1.safeParse({ bolts: { topDistance: -0.01 } }).success);
+});
