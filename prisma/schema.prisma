@@ -495,7 +495,7 @@ model Connection {
   method             String   @default("LRFD")
   paramsVersion      Int      @default(1)
   params             Json     @default("{}")
-  status             String   @default("draft") // draft | checked
+  status             String   @default("draft") // draft | checked (el resultado va en la última ConnectionRun)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 

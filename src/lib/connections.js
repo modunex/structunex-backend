@@ -1,6 +1,9 @@
 // Piezas puras de services/connectionService.js, aparte para poder probarlas sin base
 // de datos (node --test src/lib/connections.test.js). Por eso no importa lib/ids.js,
 // que arrastra @prisma/client: la comprobación de UUID es la misma, en una línea.
+const crypto = require("node:crypto");
+const { stableStringify } = require("./modelHash");
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (v) => typeof v === "string" && UUID_RE.test(v);
 
@@ -102,9 +105,90 @@ function orphanReasons(connection, model) {
   return reasons;
 }
 
+// ─── F3: comprobación ─────────────────────────────────────────────────────────────
+
+/**
+ * La petición de /connections/check: la misma del nudo que la inspección (mismas
+ * fuerzas que ve el usuario en el panel), más la conexión guardada, el material de la
+ * placa y las combinaciones elegidas en Diseño (vacío = todas, como el diseño).
+ */
+function buildCheckRequest({ inspectRequest, connection, plateMaterial, comboNames }) {
+  return {
+    ...inspectRequest,
+    connection: {
+      id: connection.id,
+      typology: connection.typology,
+      paramsVersion: connection.paramsVersion,
+      params: connection.params || {},
+      supportedElementId: connection.supportedElementId,
+    },
+    plateMaterial: plateMaterial
+      ? {
+          id: plateMaterial.id,
+          name: plateMaterial.name,
+          Fy: plateMaterial.Fy ?? null,
+          Fu: plateMaterial.Fu ?? null,
+          E: plateMaterial.E ?? null,
+        }
+      : null,
+    comboNames: comboNames || [],
+  };
+}
+
+/** Huella de TODO lo que entra al motor: dos comprobaciones con la misma huella tienen
+ *  que dar el mismo resultado con la misma versión del motor. */
+function checkInputsHash(request) {
+  return crypto.createHash("sha256").update(stableStringify(request)).digest("hex");
+}
+
+/**
+ * Lo que se guarda como entradas de una ejecución: lo que identifica el cálculo y lo que
+ * lo reproduce (fuerzas por combinación, propiedades de barras y materiales tal como las
+ * usó el motor), sin copiar el modelo entero en cada fila.
+ */
+function runInputs(request, result) {
+  return {
+    source: request.source,
+    nodeId: request.nodeId,
+    connection: request.connection,
+    plateMaterial: request.plateMaterial,
+    comboNames: request.comboNames,
+    combinations: request.combinations,
+    members: result?.members ?? null,
+    context: result?.context ?? null,
+    demands: result?.demands ?? null,
+  };
+}
+
+/** Resumen de la última comprobación para listas y badges. `latestSolvedRunId` dice si
+ *  se hizo con el análisis vigente; una conexión editada después vuelve a "draft". */
+function runSummary(run, { latestSolvedRunId, connectionStatus } = {}) {
+  if (!run) return null;
+  const results = run.results || {};
+  return {
+    id: run.id,
+    createdAt: run.createdAt,
+    status: run.status,
+    result: run.status === "done" ? results.status ?? null : null,
+    governing: results.governing ?? null,
+    engineVersion: run.engineVersion,
+    analysisRunId: run.analysisRunId,
+    current:
+      run.status === "done" &&
+      connectionStatus === "checked" &&
+      !!latestSolvedRunId &&
+      run.analysisRunId === latestSolvedRunId,
+    error: run.error ?? null,
+  };
+}
+
 module.exports = {
   buildInspectRequest,
   membersFromInspection,
   orphanReasons,
+  buildCheckRequest,
+  checkInputsHash,
+  runInputs,
+  runSummary,
   FORCE_CASE_KINDS,
 };

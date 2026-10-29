@@ -34,4 +34,14 @@ const remove = asyncHandler(async (req, res) => {
   res.json(await connectionService.remove(req.project, req.params.connectionId));
 });
 
-module.exports = { inspect, list, getOne, create, update, remove };
+// F3: comprueba con el análisis vigente y guarda la ejecución. 409 si la conexión está
+// huérfana o el análisis caducó; un dato que falta sale como NO VERIFICABLE (200).
+const check = asyncHandler(async (req, res) => {
+  res.json(await connectionService.check(req.project, req.params.connectionId));
+});
+
+const latestRun = asyncHandler(async (req, res) => {
+  res.json(await connectionService.latestRun(req.project, req.params.connectionId));
+});
+
+module.exports = { inspect, list, getOne, create, update, remove, check, latestRun };

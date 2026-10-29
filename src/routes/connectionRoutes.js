@@ -17,5 +17,7 @@ router.post("/", validate(createConnectionSchema), c.create);
 router.get("/:connectionId", c.getOne);
 router.patch("/:connectionId", validate(updateConnectionSchema), c.update);
 router.delete("/:connectionId", c.remove);
+router.post("/:connectionId/check", c.check);
+router.get("/:connectionId/runs/latest", c.latestRun);
 
 module.exports = router;

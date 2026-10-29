@@ -5,6 +5,10 @@ const {
   buildInspectRequest,
   membersFromInspection,
   orphanReasons,
+  buildCheckRequest,
+  checkInputsHash,
+  runInputs,
+  runSummary,
 } = require("../lib/connections");
 const { isUuid, toApi } = require("../lib/ids");
 const { PARAMS_SCHEMAS } = require("../schemas/connectionSchema");
@@ -26,7 +30,12 @@ const { currentModelHash } = require("./analysisService");
 // conexión, son el error que este módulo existe para impedir; por eso un run caducado
 // es un 409 y no un aviso.
 
-async function inspect(project, nodeId) {
+/**
+ * La ejecución vigente y la petición del nudo para el calc-service. La comparten la
+ * inspección (F1) y la comprobación (F3): una conexión se comprueba exactamente con las
+ * fuerzas que el panel le enseña al usuario.
+ */
+async function jointRequest(project, nodeId) {
   const projectId = project.id;
 
   const node = await prisma.modelNode.findUnique({
@@ -84,7 +93,7 @@ async function inspect(project, nodeId) {
     }),
     prisma.modelConfiguration.findUnique({
       where: { projectId },
-      select: { loadCombinations: true },
+      select: { loadCombinations: true, designPreferences: true },
     }),
   ]);
 
@@ -105,6 +114,11 @@ async function inspect(project, nodeId) {
     bucket: env.s3Bucket,
     prefix: env.s3Prefix,
   });
+  return { run, state, request, designPreferences: configuration?.designPreferences || {} };
+}
+
+async function inspect(project, nodeId) {
+  const { run, state, request } = await jointRequest(project, nodeId);
 
   let data;
   try {
@@ -125,14 +139,35 @@ async function inspect(project, nodeId) {
 
 const WITH_MEMBERS = {
   members: { select: { elementId: true, end: true, role: true }, orderBy: { role: "asc" } }, // supported antes que supporting
+  runs: {
+    orderBy: { createdAt: "desc" },
+    take: 1,
+    select: {
+      id: true, createdAt: true, status: true, results: true, engineVersion: true,
+      analysisRunId: true, error: true,
+    },
+  },
 };
 
-const connectionToApi = (row, orphan = []) => ({
-  ...toApi(row, "connection"),
-  members: row.members || [],
-  orphaned: orphan.length > 0,
-  orphanReasons: orphan,
-});
+const connectionToApi = (row, orphan = [], latestSolvedRunId = null) => {
+  const { runs, ...rest } = row;
+  return {
+    ...toApi(rest, "connection"),
+    members: row.members || [],
+    orphaned: orphan.length > 0,
+    orphanReasons: orphan,
+    lastRun: runSummary(runs?.[0], { latestSolvedRunId, connectionStatus: row.status }),
+  };
+};
+
+async function latestSolvedRunId(projectId) {
+  const run = await prisma.analysisRun.findFirst({
+    where: { projectId, status: "solved" },
+    orderBy: { startedAt: "desc" },
+    select: { id: true },
+  });
+  return run?.id ?? null;
+}
 
 /** Nudos y barras del modelo ACTUAL, para saber qué conexiones quedaron huérfanas. */
 async function modelIndex(projectId) {
@@ -156,8 +191,11 @@ async function list(project, { nodeId } = {}) {
     include: WITH_MEMBERS,
   });
   if (rows.length === 0) return [];
-  const model = await modelIndex(project.id);
-  return rows.map((row) => connectionToApi(row, orphanReasons(row, model)));
+  const [model, solvedId] = await Promise.all([
+    modelIndex(project.id),
+    latestSolvedRunId(project.id),
+  ]);
+  return rows.map((row) => connectionToApi(row, orphanReasons(row, model), solvedId));
 }
 
 async function findOwned(project, connectionId) {
@@ -172,7 +210,11 @@ async function findOwned(project, connectionId) {
 
 async function getOne(project, connectionId) {
   const row = await findOwned(project, connectionId);
-  return connectionToApi(row, orphanReasons(row, await modelIndex(project.id)));
+  const [model, solvedId] = await Promise.all([
+    modelIndex(project.id),
+    latestSolvedRunId(project.id),
+  ]);
+  return connectionToApi(row, orphanReasons(row, model), solvedId);
 }
 
 /**
@@ -244,7 +286,11 @@ async function update(project, connectionId, { name, params }) {
     data,
     include: WITH_MEMBERS,
   });
-  return connectionToApi(updated, orphanReasons(updated, await modelIndex(project.id)));
+  const [model, solvedId] = await Promise.all([
+    modelIndex(project.id),
+    latestSolvedRunId(project.id),
+  ]);
+  return connectionToApi(updated, orphanReasons(updated, model), solvedId);
 }
 
 async function remove(project, connectionId) {
@@ -253,4 +299,109 @@ async function remove(project, connectionId) {
   return { deleted: true };
 }
 
-module.exports = { inspect, list, getOne, create, update, remove };
+// ─── F3: comprobación ─────────────────────────────────────────────────────────────
+
+const runToApi = (run) => ({ ...toApi(run, "connectionRun") });
+
+/**
+ * Comprueba una conexión con el análisis vigente y guarda la ejecución: entradas, su
+ * huella, versión del motor, norma y resultado. Síncrona: es un nudo.
+ *
+ * 409 si la conexión quedó huérfana o si el análisis no es del modelo actual (las mismas
+ * reglas que la inspección). Un dato que falta NO es un error HTTP: el motor responde
+ * NO VERIFICABLE con el motivo, y eso también se guarda.
+ */
+async function check(project, connectionId) {
+  const row = await findOwned(project, connectionId);
+  const orphan = orphanReasons(row, await modelIndex(project.id));
+  if (orphan.length) {
+    throw new AppError(409, "La conexión ya no corresponde al modelo (nudo o barra cambiados).", {
+      error: "connection.orphaned",
+      reasons: orphan,
+    });
+  }
+
+  const { run, request: inspectRequest, designPreferences } = await jointRequest(
+    project,
+    row.nodeId
+  );
+
+  const materialId = row.params?.plate?.materialId;
+  const plateMaterial = materialId
+    ? await prisma.catalogMaterial.findFirst({
+        where: { id: materialId, ownerId: project.ownerId },
+        select: { id: true, name: true, Fy: true, Fu: true, E: true },
+      })
+    : null;
+
+  const request = buildCheckRequest({
+    inspectRequest,
+    connection: row,
+    plateMaterial,
+    comboNames: designPreferences.comboNames || [],
+  });
+  const inputsHash = checkInputsHash(request);
+
+  let data;
+  try {
+    ({ data } = await axios.post(`${env.calcServiceUrl}/connections/check`, request, {
+      timeout: 60000,
+    }));
+  } catch (err) {
+    const appErr = fromCalcError(err);
+    await prisma.connectionRun.create({
+      data: {
+        connectionId: row.id,
+        analysisRunId: run.id,
+        status: "error",
+        engineVersion: "unknown",
+        code: row.code,
+        method: row.method,
+        inputsHash,
+        inputs: runInputs(request, null),
+        error: appErr.message,
+      },
+    });
+    throw appErr;
+  }
+
+  const saved = await prisma.connectionRun.create({
+    data: {
+      connectionId: row.id,
+      analysisRunId: run.id,
+      status: "done",
+      engineVersion: data.engineVersion,
+      code: data.code,
+      method: data.method,
+      inputsHash,
+      inputs: runInputs(request, data),
+      results: data,
+    },
+  });
+
+  // "checked" solo si nadie cambió la conexión mientras se comprobaba: si cambió, la
+  // ejecución es de los parámetros anteriores y la conexión sigue en borrador.
+  await prisma.connection.updateMany({
+    where: { id: row.id, updatedAt: row.updatedAt },
+    data: { status: "checked" },
+  });
+
+  return { connection: await getOne(project, row.id), run: runToApi(saved) };
+}
+
+/** La última comprobación completa (con todos los estados límite), o 404. */
+async function latestRun(project, connectionId) {
+  const row = await findOwned(project, connectionId);
+  const runRow = await prisma.connectionRun.findFirst({
+    where: { connectionId: row.id },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!runRow) throw new AppError(404, "Esta conexión todavía no se ha comprobado.");
+  const solvedId = await latestSolvedRunId(project.id);
+  return {
+    ...runToApi(runRow),
+    summary: runSummary(runRow, { latestSolvedRunId: solvedId, connectionStatus: row.status }),
+  };
+}
+
+module.exports = { inspect, list, getOne, create, update, remove, check, latestRun };

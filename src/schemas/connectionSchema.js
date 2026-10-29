@@ -54,6 +54,10 @@ const shearTabParamsV1 = z
         edgeVertical: length, // distancia al borde vertical (placa y alma)
         edgeHorizontalPlate: length, // perno → borde libre de la placa
         edgeHorizontalBeam: length, // perno → extremo del alma de la viga
+        // ¿La deformación del agujero en servicio es un criterio de diseño? (J3.10)
+        // considered → Ec. J3-6a/c; notConsidered → J3-6b/d. null = considered (lo más
+        // conservador), y el resultado lo declara como hipótesis.
+        bearingDeformation: z.enum(["considered", "notConsidered"]).nullable(),
       })
       .partial()
       .strict(),
