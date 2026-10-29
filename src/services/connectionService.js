@@ -31,7 +31,9 @@ async function inspect(project, nodeId) {
   const run = await prisma.analysisRun.findFirst({
     where: { projectId, status: "solved" },
     orderBy: { startedAt: "desc" },
-    select: { id: true, projectId: true, cases: true, modelHash: true, solvedAt: true },
+    select: {
+      id: true, projectId: true, cases: true, modelHash: true, solvedAt: true, activeDofs: true,
+    },
   });
   if (!run) {
     throw new AppError(409, "No hay resultados de análisis. Analiza el modelo primero.", {
@@ -65,7 +67,8 @@ async function inspect(project, nodeId) {
     neighbourIds.add(e.nodeB);
   }
 
-  const [design, supports, areas, loads, configuration] = await Promise.all([
+  const elementIds = elements.map((e) => e.id);
+  const [design, supports, areas, loads, frameLoads, configuration] = await Promise.all([
     assembleDesignModel(projectId),
     prisma.modelSupport.findMany({
       where: { projectId, nodeId },
@@ -77,6 +80,10 @@ async function inspect(project, nodeId) {
       select: {
         nodeId: true, loadPattern: true, fx: true, fy: true, fz: true, mx: true, my: true, mz: true,
       },
+    }),
+    prisma.modelFrameLoad.findMany({
+      where: { projectId, elementId: { in: elementIds } },
+      select: { elementId: true, loadPattern: true, kind: true, dir: true, value: true, dist: true },
     }),
     prisma.modelConfiguration.findUnique({
       where: { projectId },
@@ -97,6 +104,7 @@ async function inspect(project, nodeId) {
     supports,
     areas,
     loads,
+    frameLoads,
     combinations: configuration?.loadCombinations || [],
     bucket: env.s3Bucket,
     prefix: env.s3Prefix,
