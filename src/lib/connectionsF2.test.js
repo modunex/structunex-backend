@@ -17,7 +17,16 @@ const INSPECTION = {
       { elementId: "C2", end: "A", role: "supporting", typologies: [] },
       {
         elementId: "G1", end: "A", role: "supported",
-        typologies: [{ typology: "shear_tab", applicable: true, reasons: [], supporting: ["C1", "C2"] }],
+        typologies: [
+          { typology: "shear_tab", applicable: true, reasons: [], supporting: ["C1", "C2"] },
+          {
+            typology: "extended_end_plate", applicable: true, reasons: [], supporting: ["C1", "C2"],
+            configurations: [
+              { id: "4E", applicable: true, reasons: [] },
+              { id: "8ES", applicable: false, reasons: ["endPlate.d.belowMin"] },
+            ],
+          },
+        ],
       },
       {
         elementId: "G2", end: "B", role: "supported",
@@ -111,4 +120,25 @@ test("la edición de AISC 360 es opcional al crear y solo admite las que el moto
   assert.equal(createConnectionSchema.safeParse({ ...base, code: "AISC360-10" }).success, false);
   assert.equal(updateConnectionSchema.safeParse({ code: "AISC360-22" }).success, true);
   assert.equal(updateConnectionSchema.safeParse({ code: "360-22" }).success, false);
+});
+
+test("la placa extendida se crea solo en una configuración que el motor ofrece", () => {
+  assert.equal(membersFromInspection(INSPECTION, "G1", "extended_end_plate", "4E").ok, true);
+  assert.deepEqual(membersFromInspection(INSPECTION, "G1", "extended_end_plate", "8ES"), {
+    ok: false,
+    reasons: ["endPlate.d.belowMin"],
+  });
+  assert.deepEqual(membersFromInspection(INSPECTION, "G1", "extended_end_plate", "4ES"), {
+    ok: false,
+    reasons: ["typology.configurationUnknown"],
+  });
+});
+
+test("crear una placa extendida exige su configuración, y el shear tab no la admite", () => {
+  const base = { nodeId: "J", elementId: "G1" };
+  const ok = (body) => createConnectionSchema.safeParse({ ...base, ...body }).success;
+  assert.equal(ok({ typology: "extended_end_plate", configuration: "4ES" }), true);
+  assert.equal(ok({ typology: "extended_end_plate" }), false);
+  assert.equal(ok({ typology: "extended_end_plate", configuration: "6E" }), false);
+  assert.equal(ok({ typology: "shear_tab", configuration: "4E" }), false);
 });

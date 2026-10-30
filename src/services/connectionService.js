@@ -71,7 +71,10 @@ async function jointRequest(project, nodeId) {
   const elements = await prisma.modelElement.findMany({
     where: { projectId, OR: [{ nodeA: nodeId }, { nodeB: nodeId }] },
     orderBy: { seq: "asc" },
-    select: { id: true, nodeA: true, nodeB: true, frameSectionId: true, roll: true, releases: true },
+    select: {
+      id: true, nodeA: true, nodeB: true, frameSectionId: true, roll: true, releases: true,
+      lateralSystem: true,
+    },
   });
   const neighbourIds = new Set([nodeId]);
   for (const e of elements) {
@@ -94,7 +97,7 @@ async function jointRequest(project, nodeId) {
     }),
     prisma.modelConfiguration.findUnique({
       where: { projectId },
-      select: { loadCombinations: true, designPreferences: true },
+      select: { loadCombinations: true, designPreferences: true, lateralSystems: true },
     }),
   ]);
 
@@ -112,6 +115,7 @@ async function jointRequest(project, nodeId) {
     areas,
     loads,
     combinations: configuration?.loadCombinations || [],
+    lateralSystems: configuration?.lateralSystems || [],
     bucket: env.s3Bucket,
     prefix: env.s3Prefix,
   });
@@ -239,9 +243,11 @@ async function getOne(project, connectionId) {
  * comprueba) y que el MOTOR diga que la tipología aplica: el servidor no se fía de que
  * el cliente solo ofrezca el botón cuando toca.
  */
-async function create(project, { nodeId, elementId, typology, name, code }) {
+const NAME_PREFIX = { shear_tab: "ST", extended_end_plate: "EP" };
+
+async function create(project, { nodeId, elementId, typology, name, code, configuration }) {
   const inspection = await inspect(project, nodeId);
-  const picked = membersFromInspection(inspection, elementId, typology);
+  const picked = membersFromInspection(inspection, elementId, typology, configuration);
   if (!picked.ok) {
     throw new AppError(422, "Esta tipología no aplica a esa barra en ese nudo.", {
       error: "typology.notApplicable",
@@ -253,11 +259,11 @@ async function create(project, { nodeId, elementId, typology, name, code }) {
       projectId: project.id,
       nodeId,
       supportedElementId: elementId,
-      name: name || `ST-${nodeId}-${elementId}`,
+      name: name || `${NAME_PREFIX[typology] || "C"}-${nodeId}-${elementId}`,
       typology,
       code: code || DEFAULT_CODE,
       paramsVersion: 1,
-      params: {},
+      params: configuration ? { configuration } : {},
       members: { create: picked.members },
     },
     include: WITH_MEMBERS,

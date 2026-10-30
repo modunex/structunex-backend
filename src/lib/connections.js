@@ -21,9 +21,20 @@ function buildInspectRequest({
   areas,
   loads,
   combinations,
+  lateralSystems,
   bucket,
   prefix,
 }) {
+  // Sistema resistente de cada barra del nudo que tiene uno DEFINIDO (un nombre que ya no
+  // existe en la configuración no cuenta).
+  const systemsByName = new Map((lateralSystems || []).map((s) => [s.name, s]));
+  const memberSystems = elements
+    .filter((e) => e.lateralSystem && systemsByName.has(e.lateralSystem))
+    .map((e) => ({
+      elementId: e.id,
+      name: e.lateralSystem,
+      type: systemsByName.get(e.lateralSystem).type,
+    }));
   return {
     source: {
       projectId: String(run.projectId),
@@ -61,6 +72,7 @@ function buildInspectRequest({
         seismic: !!f.seismic,
       })),
     })),
+    lateralSystems: memberSystems,
   };
 }
 
@@ -71,13 +83,18 @@ function buildInspectRequest({
  *
  * @returns {{ ok: true, members: {elementId, end, role}[] } | { ok: false, reasons: string[] }}
  */
-function membersFromInspection(inspection, elementId, typology) {
+function membersFromInspection(inspection, elementId, typology, configuration) {
   const rows = inspection?.joint?.members || [];
   const supported = rows.find((m) => m.elementId === elementId);
   if (!supported) return { ok: false, reasons: ["typology.memberNotAtJoint"] };
   const entry = (supported.typologies || []).find((t) => t.typology === typology);
   if (!entry) return { ok: false, reasons: ["typology.notOffered"] };
   if (!entry.applicable) return { ok: false, reasons: entry.reasons || [] };
+  if (configuration !== undefined) {
+    const conf = (entry.configurations || []).find((c) => c.id === configuration);
+    if (!conf) return { ok: false, reasons: ["typology.configurationUnknown"] };
+    if (!conf.applicable) return { ok: false, reasons: conf.reasons || [] };
+  }
   const members = [{ elementId, end: supported.end, role: "supported" }];
   for (const id of entry.supporting || []) {
     const row = rows.find((m) => m.elementId === id);

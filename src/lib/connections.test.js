@@ -51,3 +51,24 @@ test("la petición lleva todas las barras, solo casos con esfuerzos y combos nor
   assert.deepEqual(req.activeDofs, ["UX", "UZ", "RY"]);
   assert.equal(req.frameLoads, undefined);
 });
+
+test("la petición lleva el sistema resistente de las barras del nudo que tienen uno definido", () => {
+  const req = buildInspectRequest({
+    nodeId: "N2",
+    run: { id: "r", projectId: "p", cases: [] },
+    design: { nodes: [], sections: [], materials: [] },
+    elements: [
+      { id: "B1", nodeA: "N2", nodeB: "N3", lateralSystem: "Pórtico B" },
+      { id: "B2", nodeA: "N1", nodeB: "N2", lateralSystem: null },
+      { id: "B3", nodeA: "N2", nodeB: "N4", lateralSystem: "Borrado" },
+    ],
+    supports: [],
+    areas: [],
+    loads: [],
+    combinations: [],
+    lateralSystems: [{ name: "Pórtico B", type: "SMF", code: "AISC341-22" }],
+  });
+  assert.deepEqual(req.lateralSystems, [{ elementId: "B1", name: "Pórtico B", type: "SMF" }]);
+  // El sistema no viaja dentro de la barra: no es geometría.
+  assert.equal(req.elements[0].lateralSystem, undefined);
+});

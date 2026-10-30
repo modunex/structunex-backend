@@ -8,7 +8,10 @@ const inspectConnectionSchema = z.object({
 });
 
 // Tipologías que el motor sabe evaluar (ver calc-service app/connections/typologies.py).
-const TYPOLOGIES = ["shear_tab"];
+const TYPOLOGIES = ["shear_tab", "extended_end_plate"];
+
+// AISC 358-22 Cap. 6: placa extendida de 4 pernos sin y con rigidizador, y de 8 pernos.
+const END_PLATE_CONFIGURATIONS = ["4E", "4ES", "8ES"];
 
 // Ediciones de AISC 360 que el motor sabe aplicar (calc-service
 // app/connections/aisc/editions.py). Las conexiones nuevas usan la vigente; las guardadas
@@ -23,7 +26,21 @@ const createConnectionSchema = z
     typology: z.enum(TYPOLOGIES),
     name: z.string().trim().min(1).max(80).optional(),
     code: z.enum(CODES).optional(),
+    // Solo la placa extendida: la configuración que se crea (el motor dice cuáles aplican).
+    configuration: z.enum(END_PLATE_CONFIGURATIONS).optional(),
   })
+  .strict()
+  .refine((b) => (b.typology === "extended_end_plate") === (b.configuration !== undefined), {
+    message: "La placa extendida necesita su configuración (4E, 4ES u 8ES), y solo ella.",
+    path: ["configuration"],
+  });
+
+// ─── Parámetros de la placa extendida (AISC 358-22), versión 1 ───
+// De momento solo la configuración: placa, pernos, rigidizador y soldaduras llegan con su
+// comprobación (E3). `.strict()`: un campo desconocido se rechaza.
+const endPlateParamsV1 = z
+  .object({ configuration: z.enum(END_PLATE_CONFIGURATIONS).nullable() })
+  .partial()
   .strict();
 
 // ─── Parámetros del shear tab, versión 1 ───
@@ -87,7 +104,10 @@ const shearTabParamsV1 = z
   .partial()
   .strict();
 
-const PARAMS_SCHEMAS = { shear_tab: { 1: shearTabParamsV1 } };
+const PARAMS_SCHEMAS = {
+  shear_tab: { 1: shearTabParamsV1 },
+  extended_end_plate: { 1: endPlateParamsV1 },
+};
 
 const updateConnectionSchema = z
   .object({
@@ -109,6 +129,8 @@ module.exports = {
   shearTabParamsV1,
   PARAMS_SCHEMAS,
   TYPOLOGIES,
+  END_PLATE_CONFIGURATIONS,
+  endPlateParamsV1,
   CODES,
   DEFAULT_CODE,
 };
