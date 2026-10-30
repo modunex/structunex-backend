@@ -40,6 +40,8 @@ const DIM_FIELDS = [
 const AISC_FIELDS = [
   "type", "A", "d", "bf", "tw", "tf", "OD", "ID", "tdes",
   "I33", "I22", "J", "Cw", "rx", "ry", "Sx", "Sy", "Zx", "Zy",
+  // Radio de acuerdo (perfiles EN): kc = tf + r en las conexiones a momento (AISC 358).
+  "r",
 ];
 
 function pick(source, fields) {

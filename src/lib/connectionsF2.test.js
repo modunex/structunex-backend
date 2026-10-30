@@ -142,3 +142,22 @@ test("crear una placa extendida exige su configuración, y el shear tab no la ad
   assert.equal(ok({ typology: "extended_end_plate", configuration: "6E" }), false);
   assert.equal(ok({ typology: "shear_tab", configuration: "4E" }), false);
 });
+
+test("los parámetros de la placa extendida validan su forma y rechazan lo desconocido", () => {
+  const { endPlateParamsV1 } = require("../schemas/connectionSchema");
+  const ok = endPlateParamsV1.safeParse({
+    configuration: "4E",
+    plate: { thickness: 0.025, width: 0.2, materialId: null },
+    bolts: { diameter: 0.0254, grade: "A490", threads: "N" },
+    geometry: { gage: 0.1, pfi: 0.045, pfo: 0.045, de: 0.032 },
+    welds: { reinforcingFillet: 0.008, webFillet: 0.008 },
+    column: { continuityPlates: true },
+    demand: { Ry: 1.1, gravityCombination: "1.2D+0.5L" },
+    declarations: { flangeWeldCJP: true, slab: null },
+  });
+  assert.equal(ok.success, true, JSON.stringify(ok.error?.issues));
+  assert.equal(endPlateParamsV1.safeParse({ plate: { thickness: -1 } }).success, false);
+  assert.equal(endPlateParamsV1.safeParse({ demand: { Ry: 0.8 } }).success, false);
+  assert.equal(endPlateParamsV1.safeParse({ bolts: { grade: "A307" } }).success, false);
+  assert.equal(endPlateParamsV1.safeParse({ declarations: { other: true } }).success, false);
+});

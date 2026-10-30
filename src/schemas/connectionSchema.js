@@ -35,11 +35,58 @@ const createConnectionSchema = z
     path: ["configuration"],
   });
 
+// Longitud en unidades base (m): positiva y finita; null = sin definir.
+const length = z.number().positive().finite().nullable();
+
 // ─── Parámetros de la placa extendida (AISC 358-22), versión 1 ───
-// De momento solo la configuración: placa, pernos, rigidizador y soldaduras llegan con su
-// comprobación (E3). `.strict()`: un campo desconocido se rechaza.
+// Unidades base (m). Todo opcional y anulable: lo que falte lo trata el motor como NO
+// VERIFICABLE, nunca con un valor por defecto. Aquí solo la FORMA; los límites (Tabla 6.1,
+// §6.6) los comprueba el motor con su referencia. `.strict()`: lo desconocido se rechaza.
+const yesNo = z.boolean().nullable();
 const endPlateParamsV1 = z
-  .object({ configuration: z.enum(END_PLATE_CONFIGURATIONS).nullable() })
+  .object({
+    configuration: z.enum(END_PLATE_CONFIGURATIONS).nullable(),
+    plate: z
+      .object({ thickness: length, width: length, materialId: z.string().uuid().nullable() })
+      .partial()
+      .strict(),
+    bolts: z
+      .object({
+        diameter: length,
+        grade: z.enum(["A325", "A490"]).nullable(),
+        threads: z.enum(["N", "X"]).nullable(),
+      })
+      .partial()
+      .strict(),
+    geometry: z
+      .object({ gage: length, pfi: length, pfo: length, pb: length, de: length })
+      .partial()
+      .strict(),
+    stiffener: z.object({ thickness: length, length: length }).partial().strict(),
+    welds: z.object({ reinforcingFillet: length, webFillet: length }).partial().strict(),
+    column: z.object({ continuityPlates: yesNo }).partial().strict(),
+    demand: z
+      .object({
+        Ry: z.number().min(1).max(2).nullable(),
+        RyColumn: z.number().min(1).max(2).nullable(),
+        gravityCombination: z.string().trim().min(1).max(120).nullable(),
+        hingeDistance: length,
+      })
+      .partial()
+      .strict(),
+    declarations: z
+      .object({
+        flangeWeldCJP: yesNo,
+        noWeldAccessHoles: yesNo,
+        boltsPretensioned: yesNo,
+        lateralBracing: yesNo,
+        protectedZone: yesNo,
+        slab: yesNo,
+        materials: yesNo,
+      })
+      .partial()
+      .strict(),
+  })
   .partial()
   .strict();
 
@@ -53,7 +100,6 @@ const endPlateParamsV1 = z
 //
 // `.strict()` en todos los niveles: un campo que no se conoce se RECHAZA en vez de
 // descartarse en silencio. Perder un dato de entrada sin avisar es peor que un 400.
-const length = z.number().positive().finite().nullable();
 
 const shearTabParamsV1 = z
   .object({
