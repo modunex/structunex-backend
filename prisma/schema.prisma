@@ -412,6 +412,9 @@ model DesignRun {
   notes         String[]
   bytes         BigInt    @default(0)
   summary       Json      @default("{}")
+  // Huella de combinaciones + preferencias con que se comprobó (lib/designInputs.js):
+  // si cambian, la comprobación deja de ser vigente aunque el análisis lo sea.
+  inputsHash    String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -581,6 +584,7 @@ model ReportExport {
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId, createdAt(sort: Desc)])
+  @@index([reportId])
   @@map("report_exports")
 }
 

@@ -58,8 +58,9 @@ function connectionSnapshot(connection, run) {
     version: CONNECTION_SNAPSHOT_VERSION,
     connection: {
       id: connection.id,
+      // Nombre de hoy (cosmético: queda fuera de la huella, ver `snapshotFingerprint`).
       name: connection.name,
-      nodeId: connection.nodeId,
+      nodeId: inputs.nodeId ?? connection.nodeId,
       typology: inputs.connection?.typology ?? connection.typology,
       code: run.code,
       method: run.method,
@@ -109,7 +110,20 @@ function connectionSnapshot(connection, run) {
 }
 
 const sha256 = (value) =>
-  crypto.createHash("sha256").update(typeof value === "string" ? value : stableStringify(value)).digest("hex");
+  crypto.createHash("sha256").update(typeof value === "string" || Buffer.isBuffer(value) ? value : stableStringify(value)).digest("hex");
+
+/**
+ * Huella de una instantánea: lo que identifica el CÁLCULO. Los campos cosméticos (el
+ * nombre de la conexión, que el usuario puede cambiar sin tocar nada de ingeniería) se
+ * excluyen para que renombrar no deje "desactualizados" los documentos que la usan.
+ */
+function snapshotFingerprint(snapshot) {
+  if (snapshot && snapshot.kind === "connectionCheck" && snapshot.connection) {
+    const { name, ...connection } = snapshot.connection; // eslint-disable-line no-unused-vars
+    return sha256({ ...snapshot, connection });
+  }
+  return sha256(snapshot);
+}
 
 // ─── Archivo ──────────────────────────────────────────────────────────────────────
 
@@ -126,7 +140,7 @@ const sha256 = (value) =>
  * `runs`: ejecuciones TERMINADAS (status done) con { id, connectionId, createdAt,
  *          engineVersion, analysisRunId, inputsHash, code, method, result, governing }.
  */
-function archiveConnections(connections, runs, { latestSolvedRunId }) {
+function archiveConnections(connections, runs, { latestSolvedRunId, latestStaleReason = null, currentLoadsHash = null }) {
   const byConnection = new Map(connections.map((c) => [c.id, []]));
   for (const r of runs) byConnection.get(r.connectionId)?.push(r);
 
@@ -143,6 +157,11 @@ function archiveConnections(connections, runs, { latestSolvedRunId }) {
         if (c.status !== "checked") staleReasons.push("connection.edited");
         if (!latestSolvedRunId) staleReasons.push("analysis.missing");
         else if (r.analysisRunId !== latestSolvedRunId) staleReasons.push("analysis.outdated");
+        // El análisis vigente ya no es del modelo actual (sección, geometría, cargas…).
+        else if (latestStaleReason) staleReasons.push("model.changed");
+        // Combinaciones (o las elegidas para comprobar) distintas de las de la ejecución.
+        // Sin huella guardada no se puede afirmar que coincidan: no es vigente.
+        if (currentLoadsHash && r.loadsHash !== currentLoadsHash) staleReasons.push("loads.changed");
         state = staleReasons.length ? "stale" : "current";
       }
       return {
@@ -186,6 +205,8 @@ const TEXT = {
       "analysis.outdated": "se hizo con un análisis anterior al vigente",
       "analysis.missing": "el proyecto no tiene un análisis vigente",
       "run.superseded": "hay una comprobación posterior de esta conexión",
+      "model.changed": "el modelo cambió después del análisis",
+      "loads.changed": "las combinaciones de carga cambiaron después de comprobarla",
     },
   },
   en: {
@@ -197,6 +218,8 @@ const TEXT = {
       "analysis.outdated": "it used an analysis older than the current one",
       "analysis.missing": "the project has no current analysis",
       "run.superseded": "there is a later check of this connection",
+      "model.changed": "the model changed after the analysis",
+      "loads.changed": "the load combinations changed after it was checked",
     },
   },
 };
@@ -229,7 +252,7 @@ function buildConnectionsDocument(sheets, lang = "es") {
       type: "connectionCheck",
       binding: { source: "connectionRun", connectionId: snapshot.connection.id, runId: id },
       snapshot,
-      snapshotHash: sha256(snapshot),
+      snapshotHash: snapshotFingerprint(snapshot),
       display: "full",
     });
   });
@@ -251,6 +274,7 @@ function reportMeta(project, { title, lang = "es", revision = "0", date = new Da
 }
 
 module.exports = {
+  snapshotFingerprint,
   CONNECTION_SNAPSHOT_VERSION,
   connectionSnapshot,
   archiveConnections,

@@ -20,7 +20,9 @@ const {
   connectionSnapshot,
   reportMeta,
   sha256,
+  snapshotFingerprint,
 } = require("../lib/reporting");
+const { connectionLoadsHash, designInputsHash } = require("../lib/designInputs");
 const s3Service = require("./s3Service");
 const { fromCalcError } = require("./calcService");
 const { runStaleReason } = require("./analysisService");
@@ -87,11 +89,48 @@ async function doneRunSummaries(connectionIds) {
   const rows = await prisma.$queryRaw`
     SELECT "id", "connectionId", "createdAt", "engineVersion", "analysisRunId",
            "inputsHash", "code", "method",
-           "results"->>'status' AS "result", "results"->'governing' AS "governing"
+           "results"->>'status' AS "result", "results"->'governing' AS "governing",
+           "inputs"->'combinations' AS "combinations", "inputs"->'comboNames' AS "comboNames"
       FROM "connection_runs"
      WHERE "connectionId" = ANY(${connectionIds}::uuid[]) AND "status" = 'done'
      ORDER BY "createdAt" DESC`;
-  return rows;
+  // Huella de las combinaciones con que se comprobó (para saber si siguen vigentes).
+  return rows.map(({ combinations, comboNames, ...r }) => ({ ...r, loadsHash: connectionLoadsHash(combinations, comboNames) }));
+}
+
+/** Combinaciones y preferencias vigentes del proyecto (lo que NO está en la huella del
+ *  modelo y sí cambia el resultado de una comprobación). */
+async function currentLoadInputs(projectId) {
+  const configuration = await prisma.modelConfiguration.findUnique({
+    where: { projectId },
+    select: { loadCombinations: true, designPreferences: true },
+  });
+  const combinations = configuration?.loadCombinations || [];
+  const prefs = configuration?.designPreferences || {};
+  const { DEFAULT_PREFERENCES } = require("./designService");
+  return {
+    connectionsHash: connectionLoadsHash(combinations, prefs.comboNames || []),
+    designHash: designInputsHash(combinations, { ...DEFAULT_PREFERENCES, ...prefs }),
+  };
+}
+
+/** Archivo de conexiones con todos los motivos de vigencia. */
+async function connectionArchive(projectId) {
+  const connections = await projectConnections(projectId);
+  const [runs, solvedId, loads] = await Promise.all([
+    doneRunSummaries(connections.map((c) => c.id)),
+    latestSolvedRunId(projectId),
+    currentLoadInputs(projectId),
+  ]);
+  const latestStaleReason = solvedId ? await runStaleReason(projectId, solvedId) : null;
+  return {
+    solvedId,
+    archived: archiveConnections(connections, runs, {
+      latestSolvedRunId: solvedId,
+      latestStaleReason,
+      currentLoadsHash: loads.connectionsHash,
+    }),
+  };
 }
 
 const exportToApi = (row) => {
@@ -103,10 +142,8 @@ const exportToApi = (row) => {
 // ─── Archivo ──────────────────────────────────────────────────────────────────────
 
 async function archive(project) {
-  const connections = await projectConnections(project.id);
-  const [runs, solvedId, exports] = await Promise.all([
-    doneRunSummaries(connections.map((c) => c.id)),
-    latestSolvedRunId(project.id),
+  const [{ archived, solvedId }, exports] = await Promise.all([
+    connectionArchive(project.id),
     prisma.reportExport.findMany({
       where: { projectId: project.id },
       orderBy: { createdAt: "desc" },
@@ -114,7 +151,6 @@ async function archive(project) {
       omit: { document: true },
     }),
   ]);
-  const archived = archiveConnections(connections, runs, { latestSolvedRunId: solvedId });
   const latest = archived.map((c) => c.latest).filter(Boolean);
   return {
     analysis: await analysisArchive(project.id),
@@ -140,7 +176,7 @@ async function connectionSheet(project, runId) {
   });
   if (!run) throw new AppError(404, "Comprobación no encontrada.");
   const snapshot = connectionSnapshot(run.connection, run);
-  return { snapshot, snapshotHash: sha256(snapshot) };
+  return { snapshot, snapshotHash: snapshotFingerprint(snapshot) };
 }
 
 // ─── Exportar ─────────────────────────────────────────────────────────────────────
@@ -152,13 +188,8 @@ async function connectionSheet(project, runId) {
  *   runs: las comprobaciones pedidas, en ese orden; una que ya no es vigente sale con
  *     un aviso delante.
  */
-async function selectSheets(project, { scope, runIds }) {
-  const connections = await projectConnections(project.id);
-  const [runs, solvedId] = await Promise.all([
-    doneRunSummaries(connections.map((c) => c.id)),
-    latestSolvedRunId(project.id),
-  ]);
-  const archived = archiveConnections(connections, runs, { latestSolvedRunId: solvedId });
+async function selectSheets(project, { scope, runIds, truncate = false }) {
+  const { archived } = await connectionArchive(project.id);
   const entries = new Map();
   for (const c of archived) for (const e of [c.latest, ...c.history].filter(Boolean)) entries.set(e.runId, e);
 
@@ -173,14 +204,18 @@ async function selectSheets(project, { scope, runIds }) {
     if (unknown.length) throw new AppError(404, "Alguna comprobación no existe en este proyecto.", { runIds: unknown });
     chosen = [...new Set(runIds)].map((id) => entries.get(id));
   }
-  if (chosen.length > MAX_SHEETS) throw new AppError(413, `Como máximo ${MAX_SHEETS} hojas por documento.`);
+  if (chosen.length > MAX_SHEETS) {
+    if (!truncate) throw new AppError(413, `Como máximo ${MAX_SHEETS} hojas por documento.`);
+    chosen = chosen.slice(0, MAX_SHEETS);
+  }
 
   const full = await prisma.connectionRun.findMany({
     where: { id: { in: chosen.map((e) => e.runId) } },
     include: { connection: true },
   });
   const byId = new Map(full.map((r) => [r.id, r]));
-  return chosen.map((e) => {
+  // Una ejecución borrada entre las dos lecturas (conexión eliminada) se omite.
+  return chosen.filter((e) => byId.has(e.runId)).map((e) => {
     const run = byId.get(e.runId);
     return {
       snapshot: connectionSnapshot(run.connection, run),
@@ -273,27 +308,37 @@ async function renderAndStore(project, { kind, title, lang, unitSystemId, runIds
 
   const id = crypto.randomUUID();
   const key = `${s3Service.reportsPrefix(project.id)}/exports/${id}.pdf`;
-  await s3Service.putObject(key, rendered.pdf, "application/pdf");
-  const row = await prisma.reportExport.create({
-    data: {
-      ...base,
-      id,
-      s3Key: key,
-      sha256: sha256(rendered.pdf),
-      bytes: rendered.pdf.length,
-      pages: rendered.pages,
-      rendererVersion: rendered.rendererVersion,
-    },
-    omit: { document: true },
-  });
-  return exportToApi(row);
+  const pdfInfo = {
+    sha256: sha256(rendered.pdf),
+    bytes: rendered.pdf.length,
+    pages: rendered.pages,
+    rendererVersion: rendered.rendererVersion,
+  };
+  try {
+    await s3Service.putObject(key, rendered.pdf, "application/pdf");
+  } catch (err) {
+    await prisma.reportExport
+      .create({ data: { ...base, ...pdfInfo, status: "error", error: `No se pudo guardar el PDF: ${err.message}` } })
+      .catch(() => {});
+    throw new AppError(502, "No se pudo guardar el PDF en el almacenamiento.");
+  }
+  try {
+    const row = await prisma.reportExport.create({
+      data: { ...base, ...pdfInfo, id, s3Key: key },
+      omit: { document: true },
+    });
+    return exportToApi(row);
+  } catch (err) {
+    await s3Service.deleteObject(key).catch(() => {}); // sin fila, el PDF no tiene dueño
+    throw err;
+  }
 }
 
 // ─── Miembros (R2) ────────────────────────────────────────────────────────────────
 
 const DESIGN_RUN_SELECT = {
   id: true, startedAt: true, finishedAt: true, analysisRunId: true, code: true,
-  steelCode: true, counts: true, summary: true, schemaVersion: true,
+  steelCode: true, counts: true, summary: true, schemaVersion: true, inputsHash: true,
 };
 
 async function designRunArchive(projectId, solvedId) {
@@ -307,7 +352,8 @@ async function designRunArchive(projectId, solvedId) {
   // análisis es del modelo actual (un cambio de sección o de geometría lo invalida).
   const latestStaleReason =
     solvedId && runs[0].analysisRunId === solvedId ? await runStaleReason(projectId, solvedId) : null;
-  return archiveDesignRuns(runs, { latestSolvedRunId: solvedId, latestStaleReason });
+  const { designHash } = await currentLoadInputs(projectId);
+  return archiveDesignRuns(runs, { latestSolvedRunId: solvedId, latestStaleReason, currentInputsHash: designHash });
 }
 
 async function findDesignRun(project, designRunId) {
@@ -353,7 +399,7 @@ async function memberSheet(project, designRunId, elementId) {
   const sheets = await designSheets(project, designRunId, { elementIds: [elementId] });
   const snapshot = memberSnapshot(sheets, elementId, run);
   if (!snapshot) throw new AppError(404, "Esta barra no tiene hoja de cálculo en esta comprobación.");
-  return { snapshot, snapshotHash: sha256(snapshot) };
+  return { snapshot, snapshotHash: snapshotFingerprint(snapshot) };
 }
 
 async function exportMembers(project, { scope, designRunId, elementIds, lang = "es", title, unitSystemId }) {
@@ -369,8 +415,16 @@ async function exportMembers(project, { scope, designRunId, elementIds, lang = "
     if (!entry) throw new AppError(404, "Comprobación de diseño no encontrada.");
   }
   const run = await findDesignRun(project, entry.designRunId);
-  const sheets = await designSheets(project, run.id, { elementIds: elementIds?.length ? elementIds : null });
-  const ids = elementIds?.length ? elementIds : (sheets.members || []).filter(hasSheet).map((m) => m.elementId);
+  let ids = elementIds?.length ? [...new Set(elementIds)] : null;
+  if (!ids) {
+    // Primero la lista (ligera) para comprobar el límite antes de leer todas las hojas.
+    const summary = await designSheets(project, run.id, { summaryOnly: true });
+    ids = (summary.members || []).filter(hasSheet).map((m) => m.elementId);
+    if (ids.length > MAX_SHEETS) {
+      throw new AppError(413, `La comprobación tiene ${ids.length} barras: elige como máximo ${MAX_SHEETS} para un documento.`);
+    }
+  }
+  const sheets = await designSheets(project, run.id, { elementIds: ids });
   const snapshots = ids.map((id) => memberSnapshot(sheets, id, run)).filter(Boolean);
   if (snapshots.length === 0) throw new AppError(409, "Ninguna de las barras pedidas tiene hoja de cálculo.");
   if (snapshots.length > MAX_SHEETS) {
@@ -481,7 +535,7 @@ async function currentAnalysisSnapshot(project) {
 
 async function analysisSheet(project) {
   const snapshot = await currentAnalysisSnapshot(project);
-  return { snapshot, snapshotHash: sha256(snapshot) };
+  return { snapshot, snapshotHash: snapshotFingerprint(snapshot) };
 }
 
 async function exportAnalysis(project, { lang = "es", title, unitSystemId }) {
@@ -556,8 +610,12 @@ async function buildMemoria(project, lang = "es") {
 
   let connections = null;
   try {
-    const sheets = await selectSheets(project, { scope: "currentConnections" });
-    connections = { document: buildConnectionsDocument(sheets, lang), count: sheets.length };
+    const sheets = await selectSheets(project, { scope: "currentConnections", truncate: true });
+    connections = {
+      document: buildConnectionsDocument(sheets, lang),
+      count: sheets.length,
+      truncated: sheets.length >= MAX_SHEETS,
+    };
     runIds.push(...sheets.map((x) => x.snapshot.run.id));
   } catch (err) {
     if (!(err instanceof AppError) || err.status !== 409) throw err;
@@ -572,13 +630,9 @@ async function buildMemoria(project, lang = "es") {
 
 /** Estado de vigencia de cada comprobación (para avisar en los documentos). */
 async function archiveStates(project) {
-  const connections = await projectConnections(project.id);
-  const [runs, solvedId] = await Promise.all([
-    doneRunSummaries(connections.map((c) => c.id)),
-    latestSolvedRunId(project.id),
-  ]);
+  const { archived, solvedId } = await connectionArchive(project.id);
   const states = new Map();
-  for (const c of archiveConnections(connections, runs, { latestSolvedRunId: solvedId })) {
+  for (const c of archived) {
     for (const e of [c.latest, ...c.history].filter(Boolean)) states.set(`c:${e.runId}`, { state: e.state, staleReasons: e.staleReasons });
   }
   for (const r of await designRunArchive(project.id, solvedId)) {
@@ -625,6 +679,17 @@ async function setLogo(project, { key }) {
   const ext = key.split(".").pop();
   if (!key.startsWith(prefix) || !["png", "jpg"].includes(ext) || key.includes("..")) {
     throw new AppError(400, "Clave de logo no válida.");
+  }
+  // El tamaño se mira ANTES de descargar: la URL firmada no limita lo que se sube.
+  let size;
+  try {
+    size = await s3Service.objectSize(key);
+  } catch {
+    throw new AppError(404, "No se encontró el logo subido.");
+  }
+  if (!(size > 0 && size <= env.logoMaxBytes)) {
+    await deleteKey(key);
+    throw new AppError(400, "El logo no puede pasar de 1 MB.");
   }
   let buf;
   try {

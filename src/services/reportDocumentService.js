@@ -10,6 +10,7 @@ const { sha256 } = require("../lib/reporting");
 const {
   blankDocument,
   bindingKey,
+  templateBlocks,
   technicalBlocks,
   validateDocument,
   verifyDocument,
@@ -52,7 +53,10 @@ async function create(project, { title, lang = "es", template = "blank" }) {
     if (memo.empty) {
       throw new AppError(409, "No hay nada vigente para la plantilla de memoria: analiza y comprueba el proyecto primero.");
     }
-    document = { version: 1, blocks: [{ id: "h-title", type: "heading", level: 1, content: [{ text: title }] }, ...memo.document.blocks] };
+    document = {
+      version: 1,
+      blocks: [{ id: "h-title", type: "heading", level: 1, content: [{ text: title }] }, ...templateBlocks(memo.document.blocks)],
+    };
   }
   checkDocument(document);
   const row = await prisma.report.create({ data: { projectId: project.id, title, lang, document } });
@@ -141,10 +145,11 @@ async function serverSnapshots(project, document) {
     try {
       if (b.type === "connectionCheck") {
         const { snapshot } = await internals.connectionSheet(project, b.binding.runId);
-        out.set(key, { snapshot, ...(states.get(`c:${b.binding.runId}`) || { state: "current" }) });
+        // Sin estado conocido no se supone vigente.
+        out.set(key, { snapshot, ...(states.get(`c:${b.binding.runId}`) || { state: "stale", staleReasons: ["state.unknown"] }) });
       } else if (b.type === "memberCheck") {
         const { snapshot } = await internals.memberSheet(project, b.binding.designRunId, b.binding.elementId);
-        out.set(key, { snapshot, ...(states.get(`d:${b.binding.designRunId}`) || { state: "current" }) });
+        out.set(key, { snapshot, ...(states.get(`d:${b.binding.designRunId}`) || { state: "stale", staleReasons: ["state.unknown"] }) });
       } else if (b.type === "analysisSummary") {
         if (analysis === undefined) {
           analysis = await internals.currentAnalysisSnapshot(project).catch((err) => {
@@ -198,7 +203,8 @@ async function exportDocument(project, reportId, { unitSystemId, revisionId } = 
     title,
     lang: report.lang,
     unitSystemId,
-    runIds: [...new Set(technicalBlocks(document).map((b) => bindingKey(b)))],
+    // Mismo criterio que el resto de exportaciones: ids de ejecución sin prefijo.
+    runIds: [...new Set(technicalBlocks(document).map((b) => b.binding.runId || b.binding.designRunId || b.binding.analysisRunId))],
     document,
     reportId,
   });

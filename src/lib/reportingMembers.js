@@ -5,7 +5,7 @@
 // Cada barra de una ejecución es una hoja, y su instantánea sale SOLO de lo que el
 // motor guardó (`/design/sheets`): fila de la barra, entradas, criterios con traza y
 // mensajes. Aquí no se calcula nada de ingeniería.
-const { sha256 } = require("./reporting");
+const { sha256, snapshotFingerprint } = require("./reporting");
 
 const MEMBER_SNAPSHOT_VERSION = 1;
 
@@ -14,7 +14,7 @@ const CRITERION_STATUS = new Set(["ok", "fail", "notVerified"]);
 
 /** Estado de las ejecuciones de diseño (más reciente primero en el resultado).
  *  `latestStaleReason`: por qué la última ya no es del modelo (null = lo es). */
-function archiveDesignRuns(runs, { latestSolvedRunId, latestStaleReason }) {
+function archiveDesignRuns(runs, { latestSolvedRunId, latestStaleReason, currentInputsHash = null }) {
   const sorted = runs.slice().sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt));
   return sorted.map((r, i) => {
     let state = "superseded";
@@ -23,6 +23,9 @@ function archiveDesignRuns(runs, { latestSolvedRunId, latestStaleReason }) {
       if (!latestSolvedRunId) staleReasons.push("analysis.missing");
       else if (r.analysisRunId !== latestSolvedRunId) staleReasons.push("analysis.outdated");
       else if (latestStaleReason) staleReasons.push("model.changed");
+      // Combinaciones o preferencias de diseño (K, Lb, Cb, normas…) distintas de las de la
+      // ejecución; sin huella guardada no se puede afirmar que coincidan.
+      if (currentInputsHash && r.inputsHash !== currentInputsHash) staleReasons.push("inputs.changed");
       state = staleReasons.length ? "stale" : "current";
     }
     return {
@@ -72,7 +75,8 @@ function memberSnapshot(sheets, elementId, designRun) {
     const ratio = num(c.ratio);
     const out = {
       name: c.name,
-      status: CRITERION_STATUS.has(c.status) ? c.status : ratio != null && ratio > 1 ? "fail" : "ok",
+      // Sin estado conocido nunca se deduce "cumple": solo un ratio finito > 1 es fallo.
+      status: CRITERION_STATUS.has(c.status) ? c.status : ratio != null && ratio > 1 ? "fail" : "notVerified",
       demand: num(c.demand),
       capacity: num(c.capacity),
       ratio,
@@ -127,6 +131,7 @@ const TEXT = {
       "analysis.outdated": "se hizo con un análisis anterior al vigente",
       "analysis.missing": "el proyecto no tiene un análisis vigente",
       "model.changed": "el modelo cambió después del análisis",
+      "inputs.changed": "las combinaciones o las preferencias de diseño cambiaron después de comprobar",
       "run.superseded": "hay una comprobación de diseño posterior",
     },
     incomplete: "Verificación incompleta: hay estados límite con demanda que el motor no pudo evaluar. Esta barra no puede darse por buena.",
@@ -141,6 +146,7 @@ const TEXT = {
       "analysis.outdated": "it used an analysis older than the current one",
       "analysis.missing": "the project has no current analysis",
       "model.changed": "the model changed after the analysis",
+      "inputs.changed": "the load combinations or design preferences changed after the check",
       "run.superseded": "there is a later design check",
     },
     incomplete: "Incomplete verification: some limit states with demand could not be evaluated by the engine. This member cannot be taken as adequate.",
@@ -212,7 +218,7 @@ function buildMembersDocument(snapshots, { lang = "es", staleReasons = [], summa
       type: "memberCheck",
       binding: { source: "designRun", designRunId: s.run.id, elementId: s.member.elementId },
       snapshot: s,
-      snapshotHash: sha256(s),
+      snapshotHash: snapshotFingerprint(s),
       display: "full",
     });
   }

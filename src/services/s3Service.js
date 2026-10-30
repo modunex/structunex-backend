@@ -11,6 +11,7 @@ const {
   PutObjectCommand,
   DeleteObjectsCommand,
   DeleteObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
 } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
@@ -153,6 +154,12 @@ async function getObjectBuffer(key) {
   return Buffer.from(await out.Body.transformToByteArray());
 }
 
+/** Tamaño en bytes de un objeto (HeadObject: no descarga nada). */
+async function objectSize(key) {
+  const out = await s3().send(new HeadObjectCommand({ Bucket: env.s3Bucket, Key: key }));
+  return Number(out.ContentLength ?? 0);
+}
+
 /** Borra un objeto suelto. */
 async function deleteObject(key) {
   if (!env.s3Bucket) return;
@@ -173,6 +180,7 @@ module.exports = {
   signPut,
   putObject,
   deleteObject,
+  objectSize,
   reportsPrefix,
   getObjectBuffer,
   deletePrefix,

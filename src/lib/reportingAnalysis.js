@@ -6,7 +6,7 @@
 // (materiales, secciones, patrones, combinaciones) se leen de la base SOLO cuando el
 // análisis es del modelo actual (misma huella): entonces describen exactamente lo
 // analizado. Si no lo es, no hay hoja: el servicio responde que hay que reanalizar.
-const { sha256 } = require("./reporting");
+const { sha256, snapshotFingerprint } = require("./reporting");
 
 const ANALYSIS_SNAPSHOT_VERSION = 1;
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -91,10 +91,10 @@ function modelSummary({ nodes, elements, supports, areas, sections, materials, c
     // la base devuelva las filas (se recalcula al exportar y tiene que coincidir).
     materials: materials
       .map((m) => ({ name: m.name, type: m.type, E: num(m.E), Fy: num(m.Fy), Fu: num(m.Fu), fc: num(m.fc) }))
-      .sort((a, b) => String(a.name).localeCompare(String(b.name))),
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)) || JSON.stringify(a).localeCompare(JSON.stringify(b))),
     sections: sections
       .map((s) => ({ name: s.name, material: matName.get(s.materialId) || null, source: s.source, members: useCount.get(String(s.id)) || 0 }))
-      .sort((a, b) => b.members - a.members || String(a.name).localeCompare(String(b.name))),
+      .sort((a, b) => b.members - a.members || String(a.name).localeCompare(String(b.name)) || JSON.stringify(a).localeCompare(JSON.stringify(b))),
     loadPatterns: (configuration?.loadPatterns || []).map((p) => ({
       name: p.name, type: p.type || null, selfWeight: num(p.selfWeightMultiplier) ?? 0,
     })),
@@ -115,6 +115,7 @@ const TEXT = {
       members: "No hay una comprobación de diseño vigente: este capítulo no se incluye.",
       connections: "No hay comprobaciones de conexiones vigentes: este capítulo no se incluye.",
       membersTooMany: "La comprobación tiene más barras que el máximo de hojas por documento: se incluye el resumen y las hojas de las barras que no cumplen o están incompletas.",
+      connectionsTooMany: "Hay más conexiones vigentes que el máximo de hojas por documento: solo se incluyen las primeras. Exporta el resto desde Informes ▸ Conexiones.",
     },
     intro: {
       members: (n, all) => `${n} hojas de cálculo de barras${all ? "" : " (solo las que no cumplen o están incompletas)"}.`,
@@ -130,6 +131,7 @@ const TEXT = {
       members: "There is no current design check: this chapter is not included.",
       connections: "There are no current connection checks: this chapter is not included.",
       membersTooMany: "The check has more members than the maximum number of sheets per document: the summary is included, with sheets only for failing or incomplete members.",
+      connectionsTooMany: "There are more current connections than the maximum number of sheets per document: only the first ones are included. Export the rest from Reports ▸ Connections.",
     },
     intro: {
       members: (n, all) => `${n} member calculation sheets${all ? "" : " (failing or incomplete members only)"}.`,
@@ -145,7 +147,7 @@ function analysisBlock(snapshot) {
     type: "analysisSummary",
     binding: { source: "analysisRun", analysisRunId: snapshot.run.id },
     snapshot,
-    snapshotHash: sha256(snapshot),
+    snapshotHash: snapshotFingerprint(snapshot),
     display: "full",
   };
 }
@@ -187,6 +189,7 @@ function buildMemoriaDocument({ analysis, members, connections, lang = "es" }) {
 
   chapter("connections", 3);
   if (connections) {
+    if (connections.truncated) warn("connections-many", tx.missing.connectionsTooMany);
     blocks.push({ id: "p-connections", type: "paragraph", content: [{ text: tx.intro.connections(connections.count) }] });
     blocks.push(...connections.document.blocks.filter((b) => b.type !== "pageBreak"));
   } else warn("connections", tx.missing.connections);

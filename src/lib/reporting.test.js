@@ -139,7 +139,7 @@ test("documento: una hoja completa por comprobación; aviso delante de la no vig
   const [, k1, , , warn, k2] = doc.blocks;
   assert.equal(k1.display, "full");
   assert.deepEqual(k1.binding, { source: "connectionRun", connectionId: "c1", runId: "r1" });
-  assert.equal(k1.snapshotHash, sha256(a));
+  assert.equal(k1.snapshotHash, require("./reporting").snapshotFingerprint(a));
   assert.equal(k2.binding.runId, "r0");
   assert.equal(warn.tone, "warning");
   assert.match(warn.content.map((c) => c.text).join(""), /análisis anterior/);
@@ -160,4 +160,26 @@ test("metadatos de portada desde el proyecto", () => {
     title: "Connection design report", project: "Torre A", client: "ACME", company: null,
     engineer: "FM", revision: "0", date: "2026-10-29", logoUrl: null,
   });
+});
+
+test("archivo: el modelo cambiado o las combinaciones cambiadas dejan la conexión desactualizada", () => {
+  const runs = [summary("r", "2026-10-02T00:00:00Z", "a2")];
+  const conn = [{ ...connection, orphanReasons: [] }];
+  const [a] = archiveConnections(conn, runs, { latestSolvedRunId: "a2", latestStaleReason: "analysis.stale" });
+  assert.deepEqual(a.latest.staleReasons, ["model.changed"]);
+  const [b] = archiveConnections(conn, [{ ...runs[0], loadsHash: "h1" }], { latestSolvedRunId: "a2", currentLoadsHash: "h2" });
+  assert.deepEqual(b.latest.staleReasons, ["loads.changed"]);
+  const [c] = archiveConnections(conn, [{ ...runs[0], loadsHash: "h2" }], { latestSolvedRunId: "a2", currentLoadsHash: "h2" });
+  assert.equal(c.latest.state, "current");
+});
+
+test("renombrar una conexión no cambia la huella de su hoja", () => {
+  const { snapshotFingerprint } = require("./reporting");
+  const a = connectionSnapshot(connection, run);
+  const b = connectionSnapshot({ ...connection, name: "Otra" }, run);
+  assert.notEqual(a.connection.name, b.connection.name);
+  assert.equal(snapshotFingerprint(a), snapshotFingerprint(b));
+  // Pero cualquier dato de cálculo sí.
+  const c = connectionSnapshot(connection, { ...run, results: { ...run.results, status: "fail" } });
+  assert.notEqual(snapshotFingerprint(a), snapshotFingerprint(c));
 });

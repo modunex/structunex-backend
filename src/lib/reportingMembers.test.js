@@ -91,3 +91,20 @@ test("documento de miembros: resumen, aviso de vigencia y una hoja por barra", (
   assert.equal(k.snapshotHash, sha256(a));
   assert.match(doc.blocks[6].content[0].text, /no puede darse por buena/);
 });
+
+test("un criterio sin estado nunca se deduce como cumple", () => {
+  const sheets = JSON.parse(JSON.stringify(fixtures.w));
+  for (const c of sheets.criteria.c1) delete c.status;
+  sheets.criteria.c1[0].ratio = 1.5;
+  const s = memberSnapshot(sheets, "c1", designRun);
+  assert.equal(s.criteria[0].status, "fail");
+  assert.ok(s.criteria.slice(1).every((c) => c.status === "notVerified"));
+});
+
+test("archivo de diseño: combinaciones o preferencias cambiadas", () => {
+  const runs = [{ id: "r", startedAt: "2026-10-02T00:00:00Z", analysisRunId: "a1", schemaVersion: 2, inputsHash: "x" }];
+  assert.deepEqual(archiveDesignRuns(runs, { latestSolvedRunId: "a1", currentInputsHash: "y" })[0].staleReasons, ["inputs.changed"]);
+  assert.equal(archiveDesignRuns(runs, { latestSolvedRunId: "a1", currentInputsHash: "x" })[0].state, "current");
+  // Sin huella guardada (ejecución anterior) no se puede afirmar que coincidan.
+  assert.equal(archiveDesignRuns([{ ...runs[0], inputsHash: null }], { latestSolvedRunId: "a1", currentInputsHash: "x" })[0].state, "stale");
+});

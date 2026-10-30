@@ -69,3 +69,20 @@ test("un bloque no vigente sale con un aviso delante", () => {
 test("documento en blanco", () => {
   assert.equal(validateDocument(blankDocument("Memoria")), null);
 });
+
+test("la plantilla solo guarda títulos y bloques técnicos (lo verificable)", () => {
+  const { templateBlocks } = require("./reportDocuments");
+  const kept = templateBlocks([
+    { id: "h", type: "heading" }, { id: "t", type: "table" }, { id: "p", type: "paragraph" },
+    { id: "w", type: "callout" }, { id: "m", type: "memberCheck" },
+  ]);
+  assert.deepEqual(kept.map((b) => b.id), ["h", "m"]);
+});
+
+test("los ids reservados del servidor no se aceptan en un documento", () => {
+  assert.match(validateDocument({ version: 1, blocks: [{ id: "__warn-x", type: "divider" }] }), /reserved/);
+});
+
+test("el aviso de un bloque no vigente explica el motivo en texto, no con claves", () => {
+  assert.match(warningText("es")("stale", ["loads.changed"]), /combinaciones de carga cambiaron/);
+});

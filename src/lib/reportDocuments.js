@@ -6,7 +6,7 @@
 // huella: si coincide, el PDF lleva la instantánea del servidor; si no, la exportación
 // se rechaza y se dice qué bloques hay que actualizar. Así un PDF nunca lleva números de
 // ingeniería que no salieron del motor, aunque el documento sea editable.
-const { sha256 } = require("./reporting");
+const { sha256, snapshotFingerprint } = require("./reporting");
 
 const TECHNICAL = new Set(["connectionCheck", "memberCheck", "analysisSummary"]);
 const SIMPLE = new Set(["heading", "paragraph", "bulletList", "numberedList", "callout", "divider", "pageBreak", "equation", "table"]);
@@ -21,6 +21,7 @@ function validateDocument(doc) {
   const ids = new Set();
   for (const b of doc.blocks) {
     if (!b || typeof b.id !== "string" || !b.id) return "every block needs an id";
+    if (b.id.startsWith("__")) return `block ${b.id}: ids starting with __ are reserved`;
     if (ids.has(b.id)) return `duplicate block id ${b.id}`;
     ids.add(b.id);
     if (!SIMPLE.has(b.type) && !TECHNICAL.has(b.type)) return `unknown block type ${b.type}`;
@@ -66,14 +67,14 @@ function verifyDocument(doc, server, { warningText }) {
       problems.push({ blockId: b.id, type: b.type, reason: got?.error || "missing" });
       continue;
     }
-    const hash = sha256(got.snapshot);
+    const hash = snapshotFingerprint(got.snapshot);
     if (hash !== b.snapshotHash) {
       problems.push({ blockId: b.id, type: b.type, reason: "changed" });
       continue;
     }
     if (got.state && got.state !== "current") {
       blocks.push({
-        id: `w-${b.id}`,
+        id: `__warn-${b.id}`, // reservado: no choca con ids del autor
         type: "callout",
         tone: "warning",
         content: [{ text: warningText(got.state, got.staleReasons || []) }],
@@ -95,12 +96,44 @@ function blankDocument(title) {
   };
 }
 
+const REASONS = {
+  es: {
+    "connection.orphaned": "la conexión ya no coincide con el modelo",
+    "connection.edited": "la conexión se modificó después de comprobarla",
+    "analysis.outdated": "se hizo con un análisis anterior al vigente",
+    "analysis.missing": "el proyecto no tiene un análisis vigente",
+    "model.changed": "el modelo cambió después del análisis",
+    "loads.changed": "las combinaciones de carga cambiaron",
+    "inputs.changed": "las combinaciones o las preferencias de diseño cambiaron",
+    "state.unknown": "no se pudo determinar su vigencia",
+  },
+  en: {
+    "connection.orphaned": "the connection no longer matches the model",
+    "connection.edited": "the connection was edited after it was checked",
+    "analysis.outdated": "it used an analysis older than the current one",
+    "analysis.missing": "the project has no current analysis",
+    "model.changed": "the model changed after the analysis",
+    "loads.changed": "the load combinations changed",
+    "inputs.changed": "the load combinations or design preferences changed",
+    "state.unknown": "its currency could not be determined",
+  },
+};
 const WARN = {
   es: (state, reasons) =>
-    `Bloque no vigente (${state === "superseded" ? "hay una comprobación posterior" : reasons.join(", ") || "desactualizado"}): sus valores son los de la comprobación indicada en su pie, no los del estado actual del proyecto.`,
+    `Bloque no vigente (${state === "superseded" ? "hay una comprobación posterior" : reasons.map((r) => REASONS.es[r] || r).join("; ") || "desactualizado"}): sus valores son los de la comprobación indicada en su pie, no los del estado actual del proyecto.`,
   en: (state, reasons) =>
-    `Non-current block (${state === "superseded" ? "there is a later check" : reasons.join(", ") || "out of date"}): its values are those of the check named in its footer, not the current state of the project.`,
+    `Non-current block (${state === "superseded" ? "there is a later check" : reasons.map((r) => REASONS.en[r] || r).join("; ") || "out of date"}): its values are those of the check named in its footer, not the current state of the project.`,
 };
+
+/**
+ * La plantilla "memoria" guarda en el documento SOLO lo que se puede volver a verificar:
+ * títulos y bloques técnicos. Las tablas resumen, los recuentos y los avisos de vigencia
+ * que arma el servidor para la exportación directa son texto que el editor no vuelve a
+ * comprobar, así que no se guardan (los avisos se añaden de nuevo al exportar).
+ */
+function templateBlocks(blocks) {
+  return blocks.filter((b) => b.type === "heading" || TECHNICAL.has(b.type));
+}
 
 module.exports = {
   TECHNICAL,
@@ -109,5 +142,6 @@ module.exports = {
   technicalBlocks,
   verifyDocument,
   blankDocument,
+  templateBlocks,
   warningText: (lang) => WARN[lang] || WARN.es,
 };

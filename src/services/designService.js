@@ -6,6 +6,7 @@ const s3Service = require("./s3Service");
 const { getShape } = require("../lib/aiscShapes");
 const { freshness, STALE_MESSAGES } = require("../lib/analysisFreshness");
 const { currentModelHash, runStaleReason } = require("./analysisService");
+const { designInputsHash } = require("../lib/designInputs");
 
 // La comprobación por normativa (sección Design).
 //
@@ -228,6 +229,7 @@ async function run(project, options) {
 
   await designJob.start(projectId, {
     analysisRunId: analysisRun.id,
+    inputsHash: designInputsHash(combinations, preferences),
     cases: analysisRun.cases.map((c) => ({ name: c.name, key: c.key, kind: c.kind })),
     model,
     combinations: combinations.map((c) => ({
@@ -352,4 +354,5 @@ module.exports = {
   signRun,
   assembleDesignModel,
   resolvePreferences,
+  DEFAULT_PREFERENCES,
 };
