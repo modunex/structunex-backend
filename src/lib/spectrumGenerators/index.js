@@ -8,6 +8,7 @@
 // Añadir una norma es una entrada aquí + su módulo, igual que en el front.
 const { getCode } = require("../seismicCodeCatalog");
 const covenin1756 = require("./covenin1756");
+const covenin1756v2019 = require("./covenin1756-2019");
 const nch433 = require("./nch433");
 const asce7 = require("./asce7-22");
 const userTable = require("./userTable");
@@ -17,6 +18,7 @@ const userTable = require("./userTable");
 // (params) para la de usuario.
 const GENERATORS = {
   covenin1756: { codeId: "covenin-1756", generate: covenin1756.sample },
+  "covenin1756-2019": { codeId: "covenin-1756-2019", generate: covenin1756v2019.sample },
   nch433: { codeId: "nch433", generate: nch433.sample },
   "asce7-22": { codeId: "asce7-22", generate: asce7.sample },
   userTable: { codeId: null, generate: userTable.sample },

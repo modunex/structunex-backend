@@ -71,16 +71,42 @@ const load = z.object({
 
 const loadDir = z.enum(["gx", "gy", "gz", "gravity"]);
 
-// Carga sobre una barra: distribuida uniforme (fuerza/longitud) o puntual
-// (fuerza en la posición relativa `dist` 0..1).
-const frameLoad = z.object({
-  elementId: z.string().min(1),
-  loadPattern: z.string().min(1),
-  kind: z.enum(["distributed", "point"]).optional(),
-  dir: loadDir.optional(),
-  value: z.number().optional(),
-  dist: z.number().min(0).max(1).optional(),
-});
+// Las barras admiten además los ejes locales (SAP2000: 1 = eje de la barra).
+const frameLoadDir = z.enum(["gx", "gy", "gz", "gravity", "local1", "local2", "local3"]);
+
+// Carga sobre una barra (misma forma que FrameLoad del frontend):
+//  - puntual: fuerza `value` en `dist`;
+//  - distribuida: `value` (fuerza/longitud) al inicio y `value2` al final
+//    (trapezoidal; sin value2 = uniforme), entre `dist` y `dist2` (sin ellas = vano
+//    completo).
+// Las distancias son relativas 0..1 o, con distAbsolute, metros desde el nudo I.
+// `.strict()`: un campo desconocido es un 400 explícito, no un dato que se pierde.
+const frameLoad = z
+  .object({
+    elementId: z.string().min(1),
+    loadPattern: z.string().min(1),
+    kind: z.enum(["distributed", "point"]).optional(),
+    dir: frameLoadDir.optional(),
+    value: z.number().optional(),
+    value2: z.number().optional(),
+    dist: z.number().min(0).optional(),
+    dist2: z.number().min(0).optional(),
+    distAbsolute: z.boolean().optional(),
+  })
+  .strict()
+  .superRefine((l, ctx) => {
+    const issue = (path, message) => ctx.addIssue({ code: "custom", path: [path], message });
+    if (l.kind === "point" && (l.value2 != null || l.dist2 != null)) {
+      issue("value2", "una carga puntual no lleva value2 ni dist2");
+    }
+    if (!l.distAbsolute) {
+      if (l.dist != null && l.dist > 1) issue("dist", "distancia relativa fuera de 0..1");
+      if (l.dist2 != null && l.dist2 > 1) issue("dist2", "distancia relativa fuera de 0..1");
+    }
+    if (l.dist != null && l.dist2 != null && l.dist2 < l.dist) {
+      issue("dist2", "dist2 debe ser mayor o igual que dist");
+    }
+  });
 
 // Carga uniforme de superficie sobre un área (fuerza/área).
 const areaLoad = z.object({

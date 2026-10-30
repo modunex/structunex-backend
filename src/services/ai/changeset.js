@@ -29,6 +29,18 @@ const MATERIAL_DEFAULTS = {
 // E = 4700·√f'c (MPa), con f'c y E en kPa (concreteE del frontend).
 const concreteE = (fcKpa) => 4700 * Math.sqrt(fcKpa / 1000) * 1000;
 
+// GDL de cada formulación. Debe concordar con ANALYSIS_TYPE_DOFS del frontend
+// (src/utils/dofs.ts): los modelos planos viven en XZ.
+const DOF_KEYS = ["UX", "UY", "UZ", "RX", "RY", "RZ"];
+const ANALYSIS_TYPE_DOFS = {
+  beam: ["UZ", "RY"],
+  plane_truss: ["UX", "UZ"],
+  plane_frame: ["UX", "UZ", "RY"],
+  space_truss: ["UX", "UY", "UZ"],
+  space_frame: DOF_KEYS,
+};
+const LOAD_COMPONENT_DOF = { fx: "UX", fy: "UY", fz: "UZ", mx: "RX", my: "RY", mz: "RZ" };
+
 // ─── Esquema de entrada (lo que escribe el LLM, en unidades de display) ───
 
 const xyz = z.tuple([z.number(), z.number(), z.number()]);
@@ -58,6 +70,8 @@ const SECTION_SHAPES = [
   "general",
 ];
 const DIM_KEYS = ["b", "h", "d", "t", "tw", "tf", "bf", "bfTop", "tfTop", "bfBot", "tfBot"];
+const GRID_AXES = ["x", "y", "z"];
+const gridAxis = z.array(z.object({ id: z.string().min(1), at: num })).optional();
 
 const operation = z.discriminatedUnion("type", [
   z.object({
@@ -138,7 +152,10 @@ const operation = z.discriminatedUnion("type", [
     kind: z.enum(["distributed", "point"]),
     dir: z.enum(["gravity", "gx", "gy", "gz", "local1", "local2", "local3"]),
     value: num,
-    dist: z.number().min(0).max(1).optional(),
+    value2: num.optional(),
+    dist: z.number().min(0).optional(),
+    dist2: z.number().min(0).optional(),
+    distAbsolute: z.boolean().optional(),
   }),
   z.object({
     type: z.literal("assign_section"),
@@ -150,6 +167,8 @@ const operation = z.discriminatedUnion("type", [
     elements: z.array(z.string().min(1)).min(1),
     deleteOrphanNodes: z.boolean().optional(),
   }),
+  z.object({ type: z.literal("set_grid"), x: gridAxis, y: gridAxis, z: gridAxis }),
+  z.object({ type: z.literal("set_active_dofs"), dofs: z.array(z.enum(DOF_KEYS)).min(1).nullable() }),
 ]);
 
 const proposeInput = z.object({
@@ -185,17 +204,23 @@ function formatZodError(err, prefix) {
  * Copia de trabajo del modelo para un turno de conversación. Acumula las
  * operaciones de todas las llamadas a propose_changes del turno.
  *
- * @param snapshot  { nodes, elements, supports, loads, frameLoads, configuration }
- *                  tal como lo manda el frontend (base kN·m).
+ * @param snapshot  { nodes, elements, supports, loads, frameLoads, configuration,
+ *                  dim, analysisType, activeDofs } tal como lo manda el frontend
+ *                  (base kN·m).
  * @param catalog   { materials, sections } del usuario (filas de Prisma).
  * @param unitSystemId  sistema de display activo del usuario.
  */
 function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
+  // Tipo de modelo: fijo para el proyecto. En un modelo plano todo vive en Y = 0.
+  const typeDofs = ANALYSIS_TYPE_DOFS[snapshot.analysisType] || null;
+  const plane =
+    snapshot.dim === "2D" || ["beam", "plane_truss", "plane_frame"].includes(snapshot.analysisType);
   const state = {
     nodes: clone(snapshot.nodes || []),
     elements: clone(snapshot.elements || []),
     supports: clone(snapshot.supports || []),
     loadPatterns: (snapshot.configuration?.loadPatterns || []).map((p) => p.name),
+    activeDofs: snapshot.activeDofs?.length ? [...snapshot.activeDofs] : null,
     // Catálogo: filas reales + temporales creadas en este turno.
     materials: (catalog.materials || []).map((m) => ({ ref: m.id, name: m.name, type: m.type })),
     sections: (catalog.sections || []).map((s) => ({
@@ -255,6 +280,13 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
       const p = { x: L(ref[0]), y: L(ref[1]), z: L(ref[2]) };
       const hit = state.nodes.find((n) => dist3(n, p) < COINCIDENT_TOL);
       if (hit) return hit.id;
+      if (plane && Math.abs(p.y) > COINCIDENT_TOL) {
+        errors.push(
+          `${where}: el modelo es plano (${snapshot.analysisType || "2D"}, plano XZ) y el nudo ` +
+            `[${ref.join(", ")}] tiene Y ≠ 0. Usa Y = 0; el tipo de modelo no se puede cambiar.`
+        );
+        return null;
+      }
       const node = { id: nextFreeId(nodeIds(), "N"), ...p };
       state.nodes.push(node);
       state.ops.push({ op: "addNode", node });
@@ -458,6 +490,15 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
             if (!requirePattern(l.loadPattern, w)) return;
             const id = resolveNode(l.node, w);
             if (!id) return;
+            const inactive = Object.keys(LOAD_COMPONENT_DOF).filter(
+              (c) => l[c] && state.activeDofs && !state.activeDofs.includes(LOAD_COMPONENT_DOF[c])
+            );
+            if (inactive.length) {
+              errors.push(
+                `${w}: ${inactive.join(", ")} actúan sobre GDL inactivos (activos: ${state.activeDofs.join(", ")}); el análisis los ignoraría`
+              );
+              return;
+            }
             const load = { nodeId: id, loadPattern: l.loadPattern };
             for (const c of ["fx", "fy", "fz"]) if (l[c] != null) load[c] = Q(l[c], "force");
             for (const c of ["mx", "my", "mz"]) if (l[c] != null) load[c] = Q(l[c], "moment");
@@ -468,20 +509,45 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
         case "add_frame_loads": {
           if (!requirePattern(op.loadPattern, where)) break;
           if (!requireElements(op.elements, where)) break;
-          if (op.kind === "point" && op.dist == null) {
-            errors.push(`${where}: una carga puntual necesita dist (posición relativa 0..1)`);
+          const point = op.kind === "point";
+          if (point && op.dist == null) {
+            errors.push(`${where}: una carga puntual necesita dist`);
             break;
           }
-          const value = Q(op.value, op.kind === "point" ? "force" : "lineweight");
+          if (point && (op.value2 != null || op.dist2 != null)) {
+            errors.push(`${where}: una carga puntual no lleva value2 ni dist2`);
+            break;
+          }
+          if (!op.distAbsolute && [op.dist, op.dist2].some((d) => d != null && d > 1)) {
+            errors.push(`${where}: distancias relativas fuera de 0..1 (usa distAbsolute para longitudes)`);
+            break;
+          }
+          if (op.dist != null && op.dist2 != null && op.dist2 < op.dist) {
+            errors.push(`${where}: dist2 debe ser mayor o igual que dist`);
+            break;
+          }
+          const q = point ? "force" : "lineweight";
+          const value = Q(op.value, q);
+          // Las distancias absolutas van en longitud de inputUnits; se guardan en m.
+          const pos = (d) => (d == null ? d : op.distAbsolute ? L(d) : d);
+          const dist = pos(op.dist);
+          const dist2 = pos(op.dist2);
           for (const elementId of op.elements) {
-            const frameLoad = {
-              elementId,
-              loadPattern: op.loadPattern,
-              kind: op.kind,
-              dir: op.dir,
-              value,
-            };
-            if (op.kind === "point") frameLoad.dist = op.dist;
+            if (op.distAbsolute) {
+              const e = state.elements.find((x) => x.id === elementId);
+              const [a, b] = [e.nodeA, e.nodeB].map((id) => state.nodes.find((n) => n.id === id));
+              const len = a && b ? dist3(a, b) : Infinity;
+              const reach = Math.max(dist ?? 0, dist2 ?? 0);
+              if (reach > len + COINCIDENT_TOL) {
+                errors.push(`${where}: la carga sobre ${elementId} llega más allá de la barra`);
+                continue;
+              }
+            }
+            const frameLoad = { elementId, loadPattern: op.loadPattern, kind: op.kind, dir: op.dir, value };
+            if (op.value2 != null) frameLoad.value2 = Q(op.value2, q);
+            if (dist != null) frameLoad.dist = dist;
+            if (dist2 != null) frameLoad.dist2 = dist2;
+            if (op.distAbsolute) frameLoad.distAbsolute = true;
             state.ops.push({ op: "addFrameLoad", frameLoad });
           }
           break;
@@ -517,6 +583,46 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
           }
           break;
         }
+
+        case "set_grid": {
+          const grid = {};
+          for (const a of GRID_AXES) {
+            if (!op[a]) continue;
+            const ids = op[a].map((g) => g.id);
+            const dupId = ids.find((id, k) => ids.indexOf(id) !== k);
+            if (dupId) errors.push(`${where}.${a}: el id de eje "${dupId}" está repetido`);
+            const lines = op[a].map((g) => ({ id: g.id, ordinate: L(g.at) })).sort((p, q) => p.ordinate - q.ordinate);
+            if (lines.some((g, k) => k > 0 && g.ordinate - lines[k - 1].ordinate < COINCIDENT_TOL)) {
+              errors.push(`${where}.${a}: hay dos ejes en la misma posición`);
+            }
+            grid[a] = lines;
+          }
+          if (plane && grid.y?.some((g) => Math.abs(g.ordinate) > COINCIDENT_TOL)) {
+            errors.push(`${where}.y: el modelo es plano (XZ); no admite ejes Y fuera de Y = 0. Omite y.`);
+          }
+          if (!Object.keys(grid).length) {
+            errors.push(`${where}: indica al menos un eje (x, y o z)`);
+            break;
+          }
+          state.ops.push({ op: "setGrid", grid });
+          break;
+        }
+
+        case "set_active_dofs": {
+          if (op.dofs && typeDofs) {
+            const extra = op.dofs.filter((d) => !typeDofs.includes(d));
+            if (extra.length) {
+              errors.push(
+                `${where}: la formulación ${snapshot.analysisType} solo resuelve ${typeDofs.join(", ")}; ` +
+                  `${extra.join(", ")} no son posibles (el tipo de análisis no se puede cambiar)`
+              );
+              break;
+            }
+          }
+          state.activeDofs = op.dofs ? [...op.dofs] : typeDofs;
+          state.ops.push({ op: "setActiveDofs", dofs: op.dofs });
+          break;
+        }
       }
     });
 
@@ -535,7 +641,8 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
         status: "proposed",
         note:
           "Propuesta registrada. El usuario la verá como vista previa y decidirá si la aplica; " +
-          "no está aplicada todavía.",
+          "no está aplicada todavía. Al aplicarla, la rejilla se amplía sola con los ejes y niveles " +
+          "que necesiten los nudos nuevos.",
         created,
         counts: {
           materials: count("createMaterial"),
@@ -549,6 +656,8 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
           sectionAssignments: count("assignSection"),
           deletedElements: count("deleteElement"),
           deletedNodes: count("deleteNode"),
+          gridChanges: count("setGrid"),
+          activeDofsChanges: count("setActiveDofs"),
         },
         warnings,
       },

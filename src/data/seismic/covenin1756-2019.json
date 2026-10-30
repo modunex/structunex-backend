@@ -1,0 +1,158 @@
+{
+  "_meta": {
+    "fuente": "COVENIN 1756-1:2019 Construcciones Sismorresistentes, Parte 1: Requisitos (2da. revisión), versión final prepublicada 2020",
+    "advertencia": "Tablas transcritas a mano desde el PDF de la norma. Herramienta educativa: verifique siempre contra la norma.",
+    "unidades": "Ordenadas espectrales en fracción de g; periodos en s; H en m; g = 981 cm/s2"
+  },
+  "sismos": {
+    "diseno": {
+      "titulo": "Sismo de Diseño (Tabla 4)",
+      "grupos": {
+        "A1": { "excedencia": "2,5% en 50 años", "PMR": 1975, "alpha": 2.0 },
+        "A2": { "excedencia": "5% en 50 años", "PMR": 975, "alpha": 1.5 },
+        "B1": { "excedencia": "7% en 50 años", "PMR": 689, "alpha": 1.2 },
+        "B2": { "excedencia": "10% en 50 años", "PMR": 475, "alpha": 1.0 },
+        "C": { "excedencia": "20% en 50 años", "PMR": 225, "alpha": 0.7 }
+      }
+    },
+    "extremo": {
+      "titulo": "Sismo Extremo (Tabla 5)",
+      "grupos": {
+        "A1": { "excedencia": "0,5% en 50 años", "PMR": 9975, "alpha": 3.5 },
+        "A2": { "excedencia": "1% en 50 años", "PMR": 4975, "alpha": 2.8 },
+        "B1": { "excedencia": "1,5% en 50 años", "PMR": 3309, "alpha": 2.4 },
+        "B2": { "excedencia": "2% en 50 años", "PMR": 2475, "alpha": 2.2 }
+      }
+    },
+    "frecuente": {
+      "titulo": "Sismo Frecuente (Tabla 6)",
+      "TLfactor": 0.85,
+      "grupos": {
+        "A1": { "excedencia": "50% en 50 años", "PMR": 72, "alpha": 0.45 },
+        "A2": { "excedencia": "50% en 25 años", "PMR": 36, "alpha": 0.3 }
+      }
+    }
+  },
+  "clasesSitio": ["A", "AB", "B", "BC", "C", "CD", "D", "DE", "E"],
+  "FAC": {
+    "titulo": "Tabla 8. Factor de clase de sitio para periodos cortos (entrada: alpha·A0)",
+    "x": [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5],
+    "valores": {
+      "A":  [0.80, 0.80, 0.80, 0.80, 0.80, 0.80, 0.80],
+      "AB": [0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85],
+      "B":  [0.90, 0.90, 0.90, 0.90, 0.90, 0.90, 0.90],
+      "BC": [1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00],
+      "C":  [1.30, 1.30, 1.25, 1.25, 1.20, 1.20, 1.15],
+      "CD": [1.60, 1.50, 1.45, 1.35, 1.25, 1.20, 1.15],
+      "D":  [1.90, 1.75, 1.60, 1.40, 1.25, 1.15, 1.00],
+      "DE": [2.40, 2.05, 1.75, 1.35, 1.10, 0.95, 0.80],
+      "E":  [2.70, 2.20, 1.85, 1.35, 1.00, 0.85, 0.70]
+    }
+  },
+  "FVC": {
+    "titulo": "Tabla 9. Factor de clase de sitio para periodos intermedios (entrada: alpha·A1)",
+    "x": [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5],
+    "valores": {
+      "A":  [0.80, 0.80, 0.80, 0.80, 0.80, 0.80, 0.80],
+      "AB": [0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85],
+      "B":  [0.90, 0.90, 0.90, 0.90, 0.90, 0.90, 0.90],
+      "BC": [1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00],
+      "C":  [1.40, 1.40, 1.40, 1.40, 1.40, 1.40, 1.40],
+      "CD": [1.80, 1.75, 1.75, 1.70, 1.70, 1.65, 1.65],
+      "D":  [2.30, 2.20, 2.10, 2.00, 1.95, 1.90, 1.85],
+      "DE": [3.30, 3.00, 2.70, 2.50, 2.30, 2.15, 2.00],
+      "E":  [4.00, 3.30, 3.00, 2.70, 2.45, 2.30, 2.15]
+    }
+  },
+  "FDC": {
+    "titulo": "Tabla 10. Factor de clase de sitio para periodos largos",
+    "valores": { "A": 0.85, "AB": 0.90, "B": 0.95, "BC": 1.00, "C": 1.20, "CD": 1.40, "D": 1.70, "DE": 2.25, "E": 2.65 }
+  },
+  "topografia": {
+    "titulo": "Tabla 11. Factores de condición topográfica",
+    "leve":     { "FAT": 1.00, "FVT": 1.00, "FDT": 1.00 },
+    "moderada": { "FAT": 1.20, "FVT": 1.10, "FDT": 1.05 },
+    "severa":   { "FAT": 1.40, "FVT": 1.20, "FDT": 1.10 }
+  },
+  "basamento": {
+    "titulo": "Tabla 12. Factores de profundidad del basamento rocoso (H ≥ 1000 m usa la última fila)",
+    "H":   [0, 10, 30, 60, 100, 200, 300, 500, 750, 1000],
+    "FAH": [1.00, 1.00, 1.00, 1.00, 1.01, 1.02, 1.03, 1.05, 1.07, 1.10],
+    "FVH": [0.98, 1.00, 1.00, 1.02, 1.05, 1.08, 1.10, 1.20, 1.30, 1.40],
+    "FDH": [0.93, 0.96, 1.00, 1.05, 1.10, 1.20, 1.30, 1.60, 2.10, 2.80]
+  },
+  "beta": 2.4,
+  "TA": { "factor": 0.20, "min": 0.02, "max": 0.05 },
+  "TB_factor": 0.25,
+  "TC_divisor": 2.4,
+  "q": {
+    "titulo": "Tabla 17. Coeficiente de la rama de periodos largos",
+    "valores": { "A": 1.5, "AB": 1.5, "B": 1.5, "BC": 1.7, "C": 1.7, "CD": 1.9, "D": 1.9, "DE": 2.0, "E": 2.0 }
+  },
+  "Tplus": {
+    "titulo": "Tabla 18 y fórmula 7.23: T+ = 0,1(R−1) si R < 5; 0,4 si R ≥ 5; acotado a [0,25·TC, TC]",
+    "Rlimite": 5, "factor": 0.1, "constante": 0.4, "minTC": 0.25, "maxTC": 1.0
+  },
+  "redundancia": {
+    "titulo": "Tabla 13. Factor de Redundancia (no se interpola)",
+    "casos": [
+      { "id": "3planos3vanos", "texto": "Al menos tres planos en la dirección de análisis, cada uno con al menos tres vanos", "rho": 1.0 },
+      { "id": "2planos2vanos", "texto": "Al menos dos planos, cada uno con al menos dos vanos", "rho": 1.2 },
+      { "id": "2planos1vano", "texto": "Al menos dos planos, con un solo vano", "rho": 1.5 },
+      { "id": "1plano", "texto": "Un solo plano sismorresistente en la dirección de análisis", "rho": 2.0 }
+    ]
+  },
+  "irregularidad": {
+    "titulo": "Tabla 14. Factor de Irregularidad (producto de los presentes, máximo 1,4)",
+    "maximo": 1.4,
+    "vertical": {
+      "a": { "texto": "Entrepiso blando", "FI": 1.3 },
+      "b": { "texto": "Entrepiso débil", "FI": 1.3 },
+      "c": { "texto": "Distribución irregular de masas de uno de los pisos contiguos", "FI": 1.1 },
+      "d": { "texto": "Aumento de las masas con la elevación", "FI": 1.1 },
+      "e": { "texto": "Esbeltez excesiva", "FI": 1.1 },
+      "f": { "texto": "Variaciones en las dimensiones del sistema estructural", "FI": 1.1 },
+      "g": { "texto": "Discontinuidad en el plano del sistema resistente a cargas laterales", "FI": 1.3 },
+      "h": { "texto": "Falta de conexión entre planos resistentes", "FI": 1.2 }
+    },
+    "planta": {
+      "a": { "texto": "Gran excentricidad", "FI": 1.3 },
+      "b": { "texto": "Riesgo torsional elevado", "FI": 1.3 },
+      "c": { "texto": "Sistema no ortogonal", "FI": 1.1 },
+      "d": { "texto": "Diafragma flexible", "FI": 1.1 }
+    }
+  },
+  "sistemas": {
+    "titulo": "Tabla 15 (extracto). R, Ωo y Cd por tipo/subtipo, material y nivel de diseño (null = no aplica)",
+    "filas": [
+      { "id": "Ia-concreto", "subtipo": "I-a", "texto": "Pórticos de concreto armado (vigas y columnas)", "material": "concreto", "R": { "ND3": 6, "ND2": 4, "ND1": 2 }, "omega0": 3, "Cd": { "ND3": 4.25, "ND2": 3.75, "ND1": 1.75 } },
+      { "id": "Ia-acero", "subtipo": "I-a", "texto": "Pórticos de acero estructural (vigas y columnas)", "material": "acero", "R": { "ND3": 6, "ND2": 3.5, "ND1": 2.5 }, "omega0": 3, "Cd": { "ND3": 4.25, "ND2": 3.25, "ND1": 2.25 } },
+      { "id": "Ia-mixto", "subtipo": "I-a", "texto": "Pórticos mixtos restringidos (vigas y columnas)", "material": "mixto", "R": { "ND3": 6, "ND2": 4, "ND1": 2.25 }, "omega0": 3, "Cd": { "ND3": 4.25, "ND2": 3.75, "ND1": 2 } },
+      { "id": "Ib-acero", "subtipo": "I-b", "texto": "Pórticos de acero con vigas de celosía conectadas a momento", "material": "acero", "R": { "ND3": 5, "ND2": null, "ND1": 2 }, "omega0": 3, "Cd": { "ND3": 4, "ND2": null, "ND1": 1.75 } },
+      { "id": "Ic-acero", "subtipo": "I-c", "texto": "Pórticos de acero con columnas articuladas en la base", "material": "acero", "R": { "ND3": 4.5, "ND2": 3.5, "ND1": 2 }, "omega0": 3, "Cd": { "ND3": 3.25, "ND2": 3, "ND1": 1.75 } },
+      { "id": "IIa-acero", "subtipo": "II-a", "texto": "Dual: pórticos y arriostrados excéntricamente o de pandeo restringido", "material": "acero", "R": { "ND3": 6, "ND2": 5, "ND1": null }, "omega0": 2.5, "Cd": { "ND3": 4.25, "ND2": 3.75, "ND1": null } },
+      { "id": "IIb-acero", "subtipo": "II-b", "texto": "Dual: pórticos y arriostrados concéntricamente", "material": "acero", "R": { "ND3": 5, "ND2": 4, "ND1": 3 }, "omega0": 2.5, "Cd": { "ND3": 4, "ND2": 3.5, "ND1": 3 } }
+    ]
+  },
+  "vertical": {
+    "titulo": "Tabla 19. Parámetros del espectro de la componente vertical (válido para Tv ≤ 2 s)",
+    "TvMax": 2.0,
+    "grupos": [
+      { "clases": ["A", "AB", "B", "BC"], "gamma0": 0.7, "gammaMax": 1.0, "gammaMin": 0.42, "TCV": 0.2, "eta0": [0.85, 0.5], "etaC": [1.45, -1.5] },
+      { "clases": ["C", "CD"], "gamma0": 0.8, "gammaMax": 1.3, "gammaMin": 0.36, "TCV": 0.3, "eta0": [0.7, 1.0], "etaC": [1.36, -1.2] },
+      { "clases": ["D", "DE", "E"], "gamma0": 0.9, "gammaMax": 1.6, "gammaMin": 0.3, "TCV": 0.4, "eta0": [0.55, 1.5], "etaC": [1.3, -1.0] }
+    ],
+    "nota": "eta0 y etaC son [a, b] con eta = a + b·(alpha·A0)"
+  },
+  "derivas": {
+    "titulo": "Tabla 25. Límites de la relación de deriva lateral total para el Sismo de Diseño (el Sismo Extremo admite el doble; el Frecuente 0,003 o 0,005)",
+    "fragiles":      { "A1": 0.008, "A2": 0.008, "B1": 0.010, "B2": 0.012, "C": 0.012 },
+    "ductiles":      { "A1": 0.012, "A2": 0.012, "B1": 0.016, "B2": 0.018, "C": 0.018 },
+    "noSusceptibles":{ "A1": 0.016, "A2": 0.016, "B1": 0.020, "B2": 0.022, "C": 0.022 },
+    "factorExtremo": 2,
+    "frecuente": { "fragiles": 0.003, "otros": 0.005 },
+    "ec10_1": "δTi = Cd·δei",
+    "ec10_3": "ΔTi = Cd·Δei",
+    "ec10_4": "Δ̄i = ΔTi / Hi"
+  }
+}

@@ -22,6 +22,15 @@ const nodeRefSchema = {
   ],
 };
 
+const gridLineSchema = {
+  type: "object",
+  properties: {
+    id: { type: "string", description: 'Etiqueta del eje o nivel ("A", "1", "P1").' },
+    at: { type: "number", description: "Ordenada en las unidades de longitud de inputUnits." },
+  },
+  required: ["id", "at"],
+};
+
 const TOOLS = [
   {
     name: "get_model_summary",
@@ -66,13 +75,14 @@ const TOOLS = [
   {
     name: "search_aisc_shapes",
     description:
-      "Busca perfiles del catálogo AISC (W, HSS, PIPE, C, MC, L, WT, 2L…) por texto en la etiqueta, " +
-      'p. ej. "W14X" o "HSS6X6". Devuelve hasta 20 perfiles con sus propiedades.',
+      "Busca perfiles de acero del catálogo del sistema por texto en la etiqueta: AISC (W, HSS, PIPE, C, MC, " +
+      'L, WT, 2L…) y europeos EN 10365 (IPE, HEA, HEB, HEM), p. ej. "W14X", "HSS6X6", "HEB3" o "IPE". ' +
+      "Devuelve hasta 20 perfiles con sus propiedades.",
     input_schema: {
       type: "object",
       properties: {
         query: { type: "string" },
-        family: { type: "string", description: 'Familia opcional: "W", "HSS", "PIPE"…' },
+        family: { type: "string", description: 'Familia opcional: "W", "HSS", "PIPE", "IPE", "HEB"…' },
       },
       required: ["query"],
     },
@@ -100,9 +110,13 @@ const TOOLS = [
       "- set_supports: nodes [ref…], restraint (fixed|pinned|rollerZ|free|custom), custom {dx,dy,dz,rx,ry,rz}.\n" +
       "- add_load_patterns: patterns [{name, patternType (dead|superDead|live|roofLive|wind|snow|rain|quake|other), selfWeightMultiplier?}].\n" +
       "- add_nodal_loads: loads [{node, loadPattern, fx?, fy?, fz?, mx?, my?, mz?}] (ejes globales).\n" +
-      "- add_frame_loads: elements [ids], loadPattern, kind (distributed|point), dir (gravity|gx|gy|gz|local1|local2|local3), value, dist? (0..1, obligatorio en point). gravity = hacia −Z con value positivo.\n" +
+      "- add_frame_loads: elements [ids], loadPattern, kind (distributed|point), dir (gravity|gx|gy|gz|local1|local2|local3), value, dist? (obligatorio en point). Distribuida: value al inicio y value2? al final (trapezoidal; sin value2 = uniforme) entre dist? y dist2? (sin ellas = barra completa). Distancias relativas 0..1, o en longitud de inputUnits con distAbsolute true. gravity = hacia −Z con value positivo; local1/2/3 = ejes locales (SAP2000: 2 hacia arriba en una viga horizontal).\n" +
       "- assign_section: elements [ids], section (id, tempId o nombre).\n" +
-      "- delete_elements: elements [ids], deleteOrphanNodes?.",
+      "- delete_elements: elements [ids], deleteOrphanNodes?.\n" +
+      "- set_grid: x?, y?, z? = [{id, at}] (z = niveles de planta). Cada eje indicado sustituye al actual; los omitidos se conservan. " +
+      "Úsala para nombrar ejes y plantas (A, B…, 1, 2…, PB, P1…) o fijar ejes sin elementos. No hace falta para cubrir la geometría: " +
+      "al aplicar, la rejilla se amplía sola con las coordenadas de los nudos (y en un proyecto vacío se genera entera a partir de ellos).\n" +
+      "- set_active_dofs: dofs [UX|UY|UZ|RX|RY|RZ] o null (automático). Solo dentro de los GDL de la formulación del proyecto.",
     input_schema: {
       type: "object",
       properties: {
@@ -135,6 +149,8 @@ const TOOLS = [
                   "add_frame_loads",
                   "assign_section",
                   "delete_elements",
+                  "set_grid",
+                  "set_active_dofs",
                 ],
               },
               tempId: { type: "string" },
@@ -163,8 +179,20 @@ const TOOLS = [
               kind: { type: "string", enum: ["distributed", "point"] },
               dir: { type: "string" },
               value: { type: "number" },
+              value2: { type: "number" },
               dist: { type: "number" },
+              dist2: { type: "number" },
+              distAbsolute: { type: "boolean" },
               deleteOrphanNodes: { type: "boolean" },
+              x: { type: "array", items: gridLineSchema },
+              y: { type: "array", items: gridLineSchema },
+              z: { type: "array", items: gridLineSchema },
+              dofs: {
+                anyOf: [
+                  { type: "array", items: { type: "string", enum: ["UX", "UY", "UZ", "RX", "RY", "RZ"] } },
+                  { type: "null" },
+                ],
+              },
             },
             required: ["type"],
           },
@@ -320,7 +348,10 @@ function queryModel(ctx, input) {
         kind: l.kind,
         dir: l.dir,
         value: disp(l.value, sys, l.kind === "point" ? "force" : "lineweight"),
-        dist: l.dist,
+        value2: l.value2 == null ? undefined : disp(l.value2, sys, "lineweight"),
+        dist: l.distAbsolute ? disp(l.dist, sys, "length") : l.dist,
+        dist2: l.distAbsolute ? disp(l.dist2, sys, "length") : l.dist2,
+        distAbsolute: l.distAbsolute || undefined,
       })),
     truncated: nodeSet.size > QUERY_MAX || elemSet.size > QUERY_MAX,
   };

@@ -300,17 +300,20 @@ model ModelArea {
 }
 
 model ModelFrameLoad {
-  pk          String   @id @default(uuid(7)) @db.Uuid
-  seq         BigInt   @default(autoincrement())
-  projectId   String   @db.Uuid
-  elementId   String
-  loadPattern String
-  kind        String   @default("distributed") // distributed | point
-  dir         String   @default("gravity") // gx | gy | gz | gravity
-  value       Float    @default(0)
-  dist        Float? // point: posición relativa 0..1
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  pk           String   @id @default(uuid(7)) @db.Uuid
+  seq          BigInt   @default(autoincrement())
+  projectId    String   @db.Uuid
+  elementId    String
+  loadPattern  String
+  kind         String   @default("distributed") // distributed | point
+  dir          String   @default("gravity") // gx | gy | gz | gravity | local1 | local2 | local3
+  value        Float    @default(0) // puntual: fuerza; distribuida: fuerza/longitud al inicio
+  value2       Float? // distribuida trapezoidal: fuerza/longitud al final (null = uniforme)
+  dist         Float? // puntual: posición; distribuida: inicio (null = 0)
+  dist2        Float? // distribuida: fin (null = final de la barra)
+  distAbsolute Boolean  @default(false) // false = dist/dist2 relativas 0..1; true = metros desde I
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 

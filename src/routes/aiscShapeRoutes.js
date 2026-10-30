@@ -9,6 +9,7 @@ router.use(requireAuth);
 
 router.get("/", c.search);
 router.get("/families", c.families); // before "/:label" so it isn't parsed as a label
+router.get("/catalogs", c.catalogs); // AISC, EN…
 router.get("/:label", c.getOne);
 
 module.exports = router;

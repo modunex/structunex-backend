@@ -120,9 +120,17 @@ async function assembleDesignModel(projectId) {
       ...pick(s, DIM_FIELDS),
     };
     if (s.source === "catalog" && s.catalogLabel) {
-      // El catálogo AISC ya está en SI (m, m², m⁴): se adjunta tal cual, sin convertir.
+      // Los catálogos (AISC y EN) ya están en SI (m, m², m⁴): se adjunta tal cual, sin convertir.
       const shape = getShape(s.catalogLabel);
-      if (shape) out.aisc = pick(shape, AISC_FIELDS);
+      if (shape) {
+        out.aisc = pick(shape, AISC_FIELDS);
+        // Perfiles de otros catálogos (IPE/HEA/HEB/HEM) viajan con su familia AISC
+        // equivalente: el motor de diseño elige las comprobaciones por `type`.
+        if (shape.aiscType) {
+          out.aisc.type = shape.aiscType;
+          out.aisc.family = shape.type;
+        }
+      }
     }
     return out;
   });

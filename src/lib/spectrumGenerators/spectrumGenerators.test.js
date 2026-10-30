@@ -112,3 +112,83 @@ test("every source yields a fraction-of-g curve with >= 2 points", () => {
     }
   }
 });
+
+// ── COVENIN 1756-1:2019 ───────────────────────────────────────────────────────────
+// Caso resuelto a mano: Caracas (A0=0,30; A1=0,24; TL=3,6), grupo B2, clase CD, H=60 m,
+// topografía leve, pórtico de acero I-a ND3 (R=6, Cd=4,25), ρ=FI=1.
+//   αA0=0,30 → FAC=1,25 ; αA1=0,24 → FVC=1,70 ; FDC=1,40 ; FAH=1,00 FVH=1,02 FDH=1,05
+//   FA=1,25  FV=1,734  FD=1,47  AA=0,375  AV=0,41616  β*=2,4
+//   TC=AV/(2,4·AA)=0,4624  TB=0,1156  TA=0,02312  TD=3,6·1,47/1,734=3,05190  q=1,9  T⁺=0,4
+const cov2019 = require("./covenin1756-2019");
+const CARACAS = {
+  A0: 0.3, A1: 0.24, TL: 3.6, grupo: "B2", claseSitio: "CD", H: 60, topografia: "leve",
+  sistemaId: "Ia-acero", nivelDiseno: "ND3",
+};
+const near = (a, b, tol = 1e-6) => Math.abs(a - b) < tol;
+
+test("COVENIN 2019: site factors and corner periods, hand-solved Caracas case", () => {
+  const r = cov2019.resolve(getCode("covenin-1756-2019"), CARACAS);
+  assert.ok(near(r.FA, 1.25) && near(r.FV, 1.734) && near(r.FD, 1.47), "F_A, F_V, F_D");
+  assert.ok(near(r.AA, 0.375) && near(r.AV, 0.41616), "AA, AV");
+  assert.equal(r.betaStar, 2.4);
+  assert.ok(near(r.TC, 0.4624) && near(r.TB, 0.1156) && near(r.TA, 0.02312), "TA, TB, TC");
+  assert.ok(near(r.TD, (3.6 * 1.47) / 1.734), "TD = TL·FD/FV");
+  assert.equal(r.R, 6);
+  assert.equal(r.Cd, 4.25);
+  assert.equal(r.Tplus, 0.4);
+});
+
+test("COVENIN 2019: elastic and inelastic branches", () => {
+  const r = cov2019.resolve(getCode("covenin-1756-2019"), CARACAS);
+  assert.ok(near(cov2019.elastic(r, 0), 0.375), "A(0) = AA");
+  assert.ok(near(cov2019.elastic(r, 0.3), 0.9), "meseta β*·AA");
+  assert.ok(near(cov2019.elastic(r, 1.0), 0.9 * 0.4624), "β*AA·TC/T");
+  const T = 3.5;
+  assert.ok(near(cov2019.elastic(r, T), 0.9 * (0.4624 / r.TD) * Math.pow(r.TD / T, 1.9)), "rama larga");
+  assert.ok(near(cov2019.inelastic(r, 0), 0.25), "Ad(0) = AA/1,5");
+  assert.ok(near(cov2019.inelastic(r, 0.42), 0.15), "meseta β*AA/R");
+  assert.ok(near(cov2019.inelastic(r, 0.4), 0.15), "continuidad en T⁺");
+  assert.ok(near(cov2019.inelastic(r, 2.0), 0.15 * 0.4624 / 2), "Ad·TC/T");
+});
+
+test("COVENIN 2019: displacement spectra in cm (7.24, 7.25)", () => {
+  const r = cov2019.resolve(getCode("covenin-1756-2019"), CARACAS);
+  const w = (T) => 981 * Math.pow(T / (2 * Math.PI), 2);
+  assert.ok(near(cov2019.displacement(r, 1.0), 0.9 * 0.4624 * w(1)), "D = A·g·(T/2π)²");
+  assert.ok(near(cov2019.totalDisplacement(r, 1.0), 4.25 * 0.15 * 0.4624 * w(1)), "DT = Cd·Ad·g·(T/2π)²");
+});
+
+test("COVENIN 2019: vertical component for class CD", () => {
+  const r = cov2019.resolve(getCode("covenin-1756-2019"), CARACAS);
+  // CD: γ0=0,8 γmax=1,3 γmin=0,36 TCV=0,3 ; η0=0,7+αA0=1,0 ; ηc=1,36−1,2αA0=1,0
+  assert.ok(near(cov2019.verticalOrdinate(r, 0), 0.375 * 0.8 * 1.0), "Tv=0");
+  // Tv=0,08 cae en la rampa del horizontal (TB=0,1156) y en la meseta γmax del vertical.
+  const A008 = 0.375 * (1 + ((0.08 - 0.02312) / (0.1156 - 0.02312)) * 1.4);
+  assert.ok(near(cov2019.verticalOrdinate(r, 0.08), A008 * 1.3 * 1.0), "γmax sobre la rampa");
+  assert.ok(near(cov2019.verticalOrdinate(r, 1.0), 0.9 * 0.4624 * 0.36 * 1.0), "Tv ≥ TCV: γmin·ηc");
+  assert.equal(cov2019.verticalOrdinate(r, 2.5), null, "Tv > 2 s exige estudio especial");
+});
+
+test("COVENIN 2019: extreme earthquake uses αE and clamps αA0 past table 8", () => {
+  const r = cov2019.resolve(getCode("covenin-1756-2019"), { ...CARACAS, sismo: "extremo" });
+  assert.equal(r.alpha, 2.2);
+  assert.equal(r.PMR, 2475);
+  assert.ok(near(r.aA0, 0.66), "αE·A0");
+  assert.equal(r.FAC, 1.15, "αA0 > 0,5: última fila de la tabla 8");
+  assert.ok(r.notes.some((n) => n.includes("Tabla 8")), "deja aviso del recorte");
+});
+
+test("COVENIN 2019: sample() feeds the analysis with the inelastic curve", () => {
+  const pts = generators.sample({ source: "covenin1756-2019", params: CARACAS });
+  assert.ok(near(at(pts, 0), 0.25));
+  assert.ok(near(at(pts, 0.42), 0.15));
+  assert.ok(pts[pts.length - 1].T >= 10);
+});
+
+test("COVENIN 2019: table() has every 0,02 s row up to 4 s", () => {
+  const { rows } = cov2019.table(getCode("covenin-1756-2019"), CARACAS);
+  assert.equal(rows.length, 201);
+  assert.equal(rows[1].T, 0.02);
+  assert.equal(rows[200].T, 4);
+  assert.equal(rows[200].Av, null);
+});
