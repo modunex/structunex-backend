@@ -154,10 +154,14 @@ test("los parámetros de la placa extendida validan su forma y rechazan lo desco
     column: { continuityPlates: true },
     demand: { Ry: 1.1, gravityCombination: "1.2D+0.5L" },
     declarations: { flangeWeldCJP: true, slab: null },
+    continuityPlate: { thickness: 0.0127, width: 0.095, clip: 0.019, flangeWeld: "CJP", webFillet: 0.005 },
   });
   assert.equal(ok.success, true, JSON.stringify(ok.error?.issues));
   assert.equal(endPlateParamsV1.safeParse({ plate: { thickness: -1 } }).success, false);
   assert.equal(endPlateParamsV1.safeParse({ demand: { Ry: 0.8 } }).success, false);
   assert.equal(endPlateParamsV1.safeParse({ bolts: { grade: "A307" } }).success, false);
   assert.equal(endPlateParamsV1.safeParse({ declarations: { other: true } }).success, false);
+  assert.equal(endPlateParamsV1.safeParse({ demand: { columnPr: 500, panelZoneInStability: true } }).success, true);
+  assert.equal(endPlateParamsV1.safeParse({ demand: { columnPr: -1 } }).success, false);
+  assert.equal(endPlateParamsV1.safeParse({ continuityPlate: { flangeWeld: "PJP" } }).success, false);
 });

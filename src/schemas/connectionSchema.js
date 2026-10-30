@@ -65,12 +65,30 @@ const endPlateParamsV1 = z
     stiffener: z.object({ thickness: length, length: length }).partial().strict(),
     welds: z.object({ reinforcingFillet: length, webFillet: length }).partial().strict(),
     column: z.object({ continuityPlates: yesNo }).partial().strict(),
+    // Placas de continuidad (AISC 341-22 E3.6f.2), si están.
+    continuityPlate: z
+      .object({
+        thickness: length,
+        width: length, // por lado: del alma al borde
+        clip: length,
+        flangeWeld: z.enum(["CJP", "fillet"]).nullable(),
+        flangeFillet: length,
+        webFillet: length,
+      })
+      .partial()
+      .strict(),
     demand: z
       .object({
         Ry: z.number().min(1).max(2).nullable(),
         RyColumn: z.number().min(1).max(2).nullable(),
         gravityCombination: z.string().trim().min(1).max(120).nullable(),
         hingeDistance: length,
+        // Axial de compresión de la columna según AISC 341-22 D1.4a (incluye la carga
+        // sísmica con sobrerresistencia), en kN. 0 = sin compresión.
+        columnPr: z.number().min(0).finite().nullable(),
+        // ¿El análisis de estabilidad considera la deformación inelástica de la zona de
+        // panel? (AISC 360-22 J10.6(b)). null/false = J10.6(a).
+        panelZoneInStability: yesNo,
       })
       .partial()
       .strict(),
