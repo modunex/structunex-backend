@@ -22,6 +22,7 @@ const inspectRequest = {
 const connection = {
   id: "c1",
   typology: "shear_tab",
+  code: "AISC360-22",
   paramsVersion: 1,
   params: { plate: { thickness: 0.0127 } },
   supportedElementId: "B1",
@@ -40,6 +41,7 @@ test("la petición de comprobación lleva la conexión, el material y las combin
   assert.deepEqual(req.connection, {
     id: "c1",
     typology: "shear_tab",
+    code: "AISC360-22",
     paramsVersion: 1,
     params: { plate: { thickness: 0.0127 } },
     supportedElementId: "B1",

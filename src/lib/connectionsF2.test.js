@@ -1,7 +1,11 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { membersFromInspection, orphanReasons } = require("./connections");
-const { shearTabParamsV1, createConnectionSchema } = require("../schemas/connectionSchema");
+const {
+  shearTabParamsV1,
+  createConnectionSchema,
+  updateConnectionSchema,
+} = require("../schemas/connectionSchema");
 
 // node --test src/lib/connectionsF2.test.js
 
@@ -98,4 +102,13 @@ test("crear exige nudo, barra y una tipología conocida", () => {
     createConnectionSchema.safeParse({ nodeId: "J", elementId: "G1", typology: "end_plate" }).success,
     false
   );
+});
+
+test("la edición de AISC 360 es opcional al crear y solo admite las que el motor conoce", () => {
+  const base = { nodeId: "J", elementId: "G1", typology: "shear_tab" };
+  assert.equal(createConnectionSchema.safeParse({ ...base, code: "AISC360-22" }).success, true);
+  assert.equal(createConnectionSchema.safeParse({ ...base, code: "AISC360-16" }).success, true);
+  assert.equal(createConnectionSchema.safeParse({ ...base, code: "AISC360-10" }).success, false);
+  assert.equal(updateConnectionSchema.safeParse({ code: "AISC360-22" }).success, true);
+  assert.equal(updateConnectionSchema.safeParse({ code: "360-22" }).success, false);
 });

@@ -119,6 +119,7 @@ function buildCheckRequest({ inspectRequest, connection, plateMaterial, comboNam
     connection: {
       id: connection.id,
       typology: connection.typology,
+      code: connection.code,
       paramsVersion: connection.paramsVersion,
       params: connection.params || {},
       supportedElementId: connection.supportedElementId,

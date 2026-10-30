@@ -11,7 +11,7 @@ const {
   runSummary,
 } = require("../lib/connections");
 const { isUuid, toApi } = require("../lib/ids");
-const { PARAMS_SCHEMAS } = require("../schemas/connectionSchema");
+const { PARAMS_SCHEMAS, DEFAULT_CODE } = require("../schemas/connectionSchema");
 const { freshness, STALE_MESSAGES } = require("../lib/analysisFreshness");
 const { AppError } = require("../middleware/errorHandler");
 const { fromCalcError } = require("./calcService");
@@ -239,7 +239,7 @@ async function getOne(project, connectionId) {
  * comprueba) y que el MOTOR diga que la tipología aplica: el servidor no se fía de que
  * el cliente solo ofrezca el botón cuando toca.
  */
-async function create(project, { nodeId, elementId, typology, name }) {
+async function create(project, { nodeId, elementId, typology, name, code }) {
   const inspection = await inspect(project, nodeId);
   const picked = membersFromInspection(inspection, elementId, typology);
   if (!picked.ok) {
@@ -255,6 +255,7 @@ async function create(project, { nodeId, elementId, typology, name }) {
       supportedElementId: elementId,
       name: name || `ST-${nodeId}-${elementId}`,
       typology,
+      code: code || DEFAULT_CODE,
       paramsVersion: 1,
       params: {},
       members: { create: picked.members },
@@ -289,10 +290,15 @@ async function validateParams(project, connection, params) {
   return parsed.data;
 }
 
-async function update(project, connectionId, { name, params }) {
+async function update(project, connectionId, { name, params, code }) {
   const row = await findOwned(project, connectionId);
   const data = {};
   if (name !== undefined) data.name = name;
+  if (code !== undefined && code !== row.code) {
+    data.code = code;
+    // Otra edición es otra comprobación: la última deja de valer.
+    data.status = "draft";
+  }
   if (params !== undefined) {
     data.params = await validateParams(project, row, params);
     // Cambiar la conexión invalida su última comprobación.

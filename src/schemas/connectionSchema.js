@@ -10,12 +10,19 @@ const inspectConnectionSchema = z.object({
 // Tipologías que el motor sabe evaluar (ver calc-service app/connections/typologies.py).
 const TYPOLOGIES = ["shear_tab"];
 
+// Ediciones de AISC 360 que el motor sabe aplicar (calc-service
+// app/connections/aisc/editions.py). Las conexiones nuevas usan la vigente; las guardadas
+// antes de existir este campo siguen en 360-16 (default de la columna).
+const CODES = ["AISC360-16", "AISC360-22"];
+const DEFAULT_CODE = "AISC360-22";
+
 const createConnectionSchema = z
   .object({
     nodeId: domainId,
     elementId: domainId, // la barra apoyada
     typology: z.enum(TYPOLOGIES),
     name: z.string().trim().min(1).max(80).optional(),
+    code: z.enum(CODES).optional(),
   })
   .strict();
 
@@ -85,6 +92,8 @@ const PARAMS_SCHEMAS = { shear_tab: { 1: shearTabParamsV1 } };
 const updateConnectionSchema = z
   .object({
     name: z.string().trim().min(1).max(80).optional(),
+    // Cambiar la edición invalida la última comprobación, igual que cambiar parámetros.
+    code: z.enum(CODES).optional(),
     // Se valida contra la tipología de la conexión en el servicio (depende de ella).
     params: z.record(z.any()).optional(),
   })
@@ -100,4 +109,6 @@ module.exports = {
   shearTabParamsV1,
   PARAMS_SCHEMAS,
   TYPOLOGIES,
+  CODES,
+  DEFAULT_CODE,
 };
