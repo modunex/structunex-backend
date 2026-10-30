@@ -71,6 +71,7 @@ async function updateProject(project, patch) {
 async function deleteProject(projectId) {
   await prisma.project.delete({ where: { id: projectId } });
   await s3Service.deleteProjectResults(projectId).catch(() => {});
+  await s3Service.deletePrefix(s3Service.reportsPrefix(projectId)).catch(() => {});
   return { deleted: true };
 }
 

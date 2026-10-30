@@ -150,6 +150,8 @@ model Project {
   company          String?
   engineer         String?
   description      String?
+  // Logo para portadas y encabezados de los reportes (clave S3, PNG/JPEG).
+  logoKey          String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -165,6 +167,9 @@ model Project {
   analysisRuns    AnalysisRun[]
   designRuns      DesignRun[]
   aiConversations AiConversation[]
+  connections     Connection[]
+  reportExports   ReportExport[]
+  reports         Report[]
 
   @@index([ownerId, createdAt(sort: Desc)])
   @@map("projects")
@@ -383,8 +388,9 @@ model AnalysisRun {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  designRuns DesignRun[]
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  designRuns     DesignRun[]
+  connectionRuns ConnectionRun[]
 
   @@index([projectId, startedAt(sort: Desc)])
   @@map("analysis_runs")
@@ -409,6 +415,9 @@ model DesignRun {
   notes         String[]
   bytes         BigInt    @default(0)
   summary       Json      @default("{}")
+  // Huella de combinaciones + preferencias con que se comprobó (lib/designInputs.js):
+  // si cambian, la comprobación deja de ser vigente aunque el análisis lo sea.
+  inputsHash    String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -472,4 +481,148 @@ model AiAttachment {
 
   @@index([conversationId])
   @@map("ai_attachments")
+}
+
+// ─── Conexiones de acero ───
+//
+// Una conexión es UN extremo de barra apoyado en un nudo (un shear tab por viga): por eso
+// es única por (proyecto, nudo, barra apoyada). Nudo y barras se referencian por su id de
+// dominio ("N12", "B7"), como el resto del modelo; si el modelo cambia y desaparecen, la
+// conexión queda huérfana (lo detecta el servicio) en vez de borrarse en cascada.
+//
+// `params` lleva su propia versión (`paramsVersion`): placa, pernos, soldadura y
+// distancias, en unidades base (m, kN). Un parámetro sin definir es null, y la
+// comprobación (F3) lo trata como NO VERIFICABLE, nunca como un valor por defecto.
+
+model Connection {
+  id                 String   @id @default(uuid(7)) @db.Uuid
+  projectId          String   @db.Uuid
+  nodeId             String // id de dominio del nudo
+  supportedElementId String // la barra apoyada (id de dominio)
+  name               String
+  typology           String // shear_tab
+  code               String   @default("AISC360-16")
+  method             String   @default("LRFD")
+  paramsVersion      Int      @default(1)
+  params             Json     @default("{}")
+  status             String   @default("draft") // draft | checked (el resultado va en la última ConnectionRun)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  project Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  members ConnectionMember[]
+  runs    ConnectionRun[]
+
+  @@unique([projectId, nodeId, supportedElementId])
+  @@index([projectId, createdAt])
+  @@map("connections")
+}
+
+model ConnectionMember {
+  id           String @id @default(uuid(7)) @db.Uuid
+  connectionId String @db.Uuid
+  elementId    String // id de dominio de la barra
+  end          String // A | B: qué extremo de la barra está en el nudo
+  role         String // supported | supporting
+
+  connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, elementId])
+  @@map("connection_members")
+}
+
+// Una comprobación de una conexión (F3). Guarda TODO lo que la produjo —la copia de las
+// entradas (fuerzas por combinación, geometría, materiales), su hash, la versión del
+// motor y la norma— para que un resultado sea reproducible aunque el modelo cambie o el
+// análisis de origen se pode (por eso analysisRunId es SetNull: el id también va en
+// `inputs`).
+model ConnectionRun {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  connectionId  String    @db.Uuid
+  analysisRunId String?   @db.Uuid
+  status        String    @default("done") // done | error
+  engineVersion String
+  code          String
+  method        String
+  inputsHash    String
+  inputs        Json
+  results       Json      @default("{}")
+  schemaVersion Int       @default(1)
+  error         String?
+  createdAt     DateTime  @default(now())
+
+  connection  Connection   @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  analysisRun AnalysisRun? @relation(fields: [analysisRunId], references: [id], onDelete: SetNull)
+
+  @@index([connectionId, createdAt(sort: Desc)])
+  @@index([analysisRunId])
+  @@map("connection_runs")
+}
+
+// Reporting (R1): un PDF exportado. Guarda el documento EXACTO que se paginó (con las
+// instantáneas de cada ejecución), las ejecuciones de origen y la huella del PDF, para
+// poder decir siempre de qué cálculos sale cada hoja.
+model ReportExport {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  projectId       String   @db.Uuid
+  kind            String // connections | members | analysis | memoria
+  title           String
+  lang            String   @default("es")
+  unitSystemId    String?
+  status          String   @default("done") // done | error
+  runIds          String[]
+  document        Json
+  documentHash    String
+  s3Key           String?
+  sha256          String?
+  bytes           Int?
+  pages           Int?
+  rendererVersion String?
+  error           String?
+  // R4: el documento de Report Studio exportado (null en las exportaciones directas
+  // del archivo). Sin FK: borrar el documento no borra el PDF ya emitido.
+  reportId        String?  @db.Uuid
+  createdAt       DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([reportId])
+  @@map("report_exports")
+}
+
+// R4: un documento de Report Studio. `document` es el formato propio v1 (el del
+// frontend, model/document.ts): texto del autor + bloques técnicos con vínculo,
+// instantánea y huella. `version` sirve de control de concurrencia optimista.
+model Report {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  projectId String   @db.Uuid
+  title     String
+  lang      String   @default("es")
+  document  Json
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  revisions ReportRevision[]
+
+  @@index([projectId, updatedAt(sort: Desc)])
+  @@map("reports")
+}
+
+// Revisión con nombre: copia congelada del documento ("Rev. A — para revisión").
+model ReportRevision {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  reportId     String   @db.Uuid
+  number       Int
+  name         String
+  document     Json
+  documentHash String
+  createdAt    DateTime @default(now())
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, number])
+  @@map("report_revisions")
 }

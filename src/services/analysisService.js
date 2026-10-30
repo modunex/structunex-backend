@@ -4,6 +4,8 @@ const { AppError } = require("../middleware/errorHandler");
 const analysisJob = require("./analysisJob");
 const s3Service = require("./s3Service");
 const spectrumGenerators = require("../lib/spectrumGenerators");
+const { modelHash } = require("../lib/modelHash");
+const { freshness } = require("../lib/analysisFreshness");
 
 // Lo que se devuelve de una ejecución: metadatos y resumen, nunca el payload. Los
 // resultados pesados están en S3 en Parquet y los baja el navegador con una URL
@@ -25,8 +27,15 @@ const ALL_DOFS = ["UX", "UY", "UZ", "RX", "RY", "RZ"];
 //
 // Materials and sections are not stored per-project: bars reference a
 // CatalogFrameSection (which carries its material), so we expand those catalog
-// rows into the flat { materials, sections } the engine consumes. Convention
-// (SAP): I33 = strong axis -> Iy, I22 = weak -> Iz. Stiffness modifiers applied.
+// rows into the flat { materials, sections } the engine consumes. Stiffness modifiers
+// applied.
+//
+// AXES (SAP2000). The engine's Frame3D bends in the local 1-2 plane with `Iz` and in
+// the 1-3 plane with `Iy`; local 2 is "up" for a horizontal member (core/geometry).
+// SAP's I33 is the inertia about local 3, i.e. bending in the 1-2 plane, so I33 -> Iz
+// and I22 -> Iy. With roll 0 a W beam then carries gravity on its strong axis and its
+// depth runs along local 2, exactly as in SAP2000. (Until 2026-10 this was crossed;
+// runs from before carry no modelHash and are refused for design and connections.)
 // Bars without an assigned section can't be solved and are omitted. Areas carry
 // no stiffness (v1): they pass through only to lump their surface loads to the
 // boundary nodes.
@@ -101,8 +110,8 @@ async function assembleModel(projectId) {
       id: s.id,
       materialId: s.materialId,
       A: (p.A || 0) * (mod.area != null ? mod.area : 1),
-      Iy: (p.I33 || 0) * (mod.i33 != null ? mod.i33 : 1),
-      Iz: (p.I22 || 0) * (mod.i22 != null ? mod.i22 : 1),
+      Iz: (p.I33 || 0) * (mod.i33 != null ? mod.i33 : 1), // about local 3 (strong)
+      Iy: (p.I22 || 0) * (mod.i22 != null ? mod.i22 : 1), // about local 2 (weak)
       J: (p.J || 0) * (mod.j != null ? mod.j : 1),
     };
   });
@@ -287,13 +296,19 @@ async function run(project, options) {
     await resolveOptions(projectId, options);
   const model = await assembleModel(projectId);
 
-  await analysisJob.start(projectId, {
-    analysisOptions,
-    model,
-    massSource,
-    modalCases,
-    responseSpectrum,
-  });
+  await analysisJob.start(
+    projectId,
+    { analysisOptions, model, massSource, modalCases, responseSpectrum },
+    {
+      modelHash: modelHash({
+        model,
+        loadPatterns: analysisOptions.loadPatterns,
+        massSource,
+        modalCases,
+        responseSpectrum,
+      }),
+    }
+  );
 
   return {
     status: "solving",
@@ -355,12 +370,36 @@ async function get(projectId) {
     };
   }
 
+  // ¿Son estos resultados del modelo actual? Solo fuera de un análisis en curso: el
+  // estado se sondea cada segundo mientras resuelve, y armar el modelo entero en cada
+  // sondeo no tiene sentido (además, mientras resuelve el run que vale es el nuevo).
+  if (run && project.status !== "solving") {
+    run.staleReason = await runStaleReason(projectId, run._id);
+  }
+
   return {
     status: project.status,
     progress,
     error: project.analysisError || null,
     run: run || null,
   };
+}
+
+/**
+ * Motivo por el que los resultados del run `runId` ya no son del modelo actual
+ * ("analysis.legacy" | "analysis.stale"), o null si siguen valiendo. Lo usa la interfaz
+ * para avisar en Analysis y para no enseñar comprobaciones de Design caducadas.
+ */
+async function runStaleReason(projectId, runId) {
+  const row = await prisma.analysisRun.findUnique({
+    where: { id: runId },
+    select: { modelHash: true },
+  });
+  const state = freshness({
+    runHash: row?.modelHash ?? null,
+    currentHash: row?.modelHash ? await currentModelHash(projectId) : null,
+  });
+  return state.fresh ? null : state.reason;
 }
 
 /** Historial de ejecuciones del proyecto, de la más reciente a la más antigua. */
@@ -417,4 +456,38 @@ function cancel(projectId) {
   return analysisJob.cancel(projectId);
 }
 
-module.exports = { run, get, cancel, listRuns, signCase, assembleModel };
+/**
+ * Huella del modelo tal como se analizaría AHORA, con las condiciones guardadas en el
+ * proyecto. Se compara con `analysis_runs.modelHash` para saber si un run sigue vigente.
+ * Devuelve null si el modelo actual ni siquiera se puede armar (p. ej. sin secciones):
+ * entonces no puede coincidir con nada.
+ */
+async function currentModelHash(projectId) {
+  try {
+    const { analysisOptions, massSource, modalCases, responseSpectrum } =
+      await resolveOptions(projectId, undefined);
+    const model = await assembleModel(projectId);
+    return modelHash({
+      model,
+      loadPatterns: analysisOptions.loadPatterns,
+      massSource,
+      modalCases,
+      responseSpectrum,
+    });
+  } catch (err) {
+    if (err instanceof AppError) return null;
+    throw err;
+  }
+}
+
+module.exports = {
+  run,
+  get,
+  cancel,
+  listRuns,
+  signCase,
+  assembleModel,
+  resolveOptions,
+  currentModelHash,
+  runStaleReason,
+};

@@ -111,6 +111,7 @@ async function start(projectId, payload) {
     data: {
       projectId,
       analysisRunId: payload.analysisRunId,
+      inputsHash: payload.inputsHash ?? null,
       status: "designing",
       code: payload.preferences?.code ?? null,
       steelCode: payload.preferences?.steelCode ?? null,

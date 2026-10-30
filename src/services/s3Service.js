@@ -10,6 +10,8 @@ const {
   GetObjectCommand,
   PutObjectCommand,
   DeleteObjectsCommand,
+  DeleteObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
 } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
@@ -56,12 +58,26 @@ function projectPrefix(projectId) {
   return [env.s3Prefix, String(projectId)].filter(Boolean).join("/");
 }
 
-/** URL prefirmada de lectura para una clave concreta. */
-async function signGet(key) {
+/** URL prefirmada de lectura para una clave concreta. `filename` fuerza la descarga
+ *  con ese nombre (Content-Disposition). */
+async function signGet(key, { filename } = {}) {
   return getSignedUrl(
     s3(),
-    new GetObjectCommand({ Bucket: env.s3Bucket, Key: key }),
+    new GetObjectCommand({
+      Bucket: env.s3Bucket,
+      Key: key,
+      ...(filename
+        ? { ResponseContentDisposition: `attachment; filename="${filename.replace(/["\\\r\n]/g, "_")}"` }
+        : {}),
+    }),
     { expiresIn: env.s3UrlTtlS }
+  );
+}
+
+/** Sube un objeto pequeño desde memoria (PDF de un reporte). */
+async function putObject(key, body, contentType) {
+  await s3().send(
+    new PutObjectCommand({ Bucket: env.s3Bucket, Key: key, Body: body, ContentType: contentType })
   );
 }
 
@@ -138,6 +154,21 @@ async function getObjectBuffer(key) {
   return Buffer.from(await out.Body.transformToByteArray());
 }
 
+/** Tamaño en bytes de un objeto (HeadObject: no descarga nada). */
+async function objectSize(key) {
+  const out = await s3().send(new HeadObjectCommand({ Bucket: env.s3Bucket, Key: key }));
+  return Number(out.ContentLength ?? 0);
+}
+
+/** Borra un objeto suelto. */
+async function deleteObject(key) {
+  if (!env.s3Bucket) return;
+  await s3().send(new DeleteObjectCommand({ Bucket: env.s3Bucket, Key: key }));
+}
+
+/** Prefijo de los reportes (PDF y logo) de un proyecto: "reports/{projectId}". */
+const reportsPrefix = (projectId) => [env.reportsS3Prefix, String(projectId)].filter(Boolean).join("/");
+
 const deleteRun = (projectId, runId) => deletePrefix(runPrefix(projectId, runId));
 const deleteProjectResults = (projectId) => deletePrefix(projectPrefix(projectId));
 
@@ -147,6 +178,10 @@ module.exports = {
   signGet,
   signRunPaths,
   signPut,
+  putObject,
+  deleteObject,
+  objectSize,
+  reportsPrefix,
   getObjectBuffer,
   deletePrefix,
   deleteRun,
