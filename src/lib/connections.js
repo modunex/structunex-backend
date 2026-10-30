@@ -3,6 +3,7 @@
 // que arrastra @prisma/client: la comprobación de UUID es la misma, en una línea.
 const crypto = require("node:crypto");
 const { stableStringify } = require("./modelHash");
+const { connectionLoadsHash } = require("./designInputs");
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isUuid = (v) => typeof v === "string" && UUID_RE.test(v);
@@ -162,7 +163,7 @@ function runInputs(request, result) {
 
 /** Resumen de la última comprobación para listas y badges. `latestSolvedRunId` dice si
  *  se hizo con el análisis vigente; una conexión editada después vuelve a "draft". */
-function runSummary(run, { latestSolvedRunId, connectionStatus } = {}) {
+function runSummary(run, { latestSolvedRunId, connectionStatus, currentLoadsHash = null } = {}) {
   if (!run) return null;
   const results = run.results || {};
   return {
@@ -173,11 +174,15 @@ function runSummary(run, { latestSolvedRunId, connectionStatus } = {}) {
     governing: results.governing ?? null,
     engineVersion: run.engineVersion,
     analysisRunId: run.analysisRunId,
+    // Vigente: hecha con el análisis vigente (que el llamante solo pasa si es del modelo
+    // actual), sin cambios en la conexión y con las mismas combinaciones.
     current:
       run.status === "done" &&
       connectionStatus === "checked" &&
       !!latestSolvedRunId &&
-      run.analysisRunId === latestSolvedRunId,
+      run.analysisRunId === latestSolvedRunId &&
+      (!currentLoadsHash ||
+        connectionLoadsHash(run.inputs?.combinations, run.inputs?.comboNames) === currentLoadsHash),
     error: run.error ?? null,
   };
 }

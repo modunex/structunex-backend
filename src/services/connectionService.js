@@ -16,7 +16,8 @@ const { freshness, STALE_MESSAGES } = require("../lib/analysisFreshness");
 const { AppError } = require("../middleware/errorHandler");
 const { fromCalcError } = require("./calcService");
 const { assembleDesignModel } = require("./designService");
-const { currentModelHash } = require("./analysisService");
+const { currentModelHash, runStaleReason } = require("./analysisService");
+const { connectionLoadsHash } = require("../lib/designInputs");
 
 // Conexiones de acero — F1: inspeccionar un nudo.
 //
@@ -144,29 +145,43 @@ const WITH_MEMBERS = {
     take: 1,
     select: {
       id: true, createdAt: true, status: true, results: true, engineVersion: true,
-      analysisRunId: true, error: true,
+      analysisRunId: true, error: true, inputs: true,
     },
   },
 };
 
-const connectionToApi = (row, orphan = [], latestSolvedRunId = null) => {
+const connectionToApi = (row, orphan = [], latestSolvedRunId = null, currentLoadsHash = null) => {
   const { runs, ...rest } = row;
   return {
     ...toApi(rest, "connection"),
     members: row.members || [],
     orphaned: orphan.length > 0,
     orphanReasons: orphan,
-    lastRun: runSummary(runs?.[0], { latestSolvedRunId, connectionStatus: row.status }),
+    lastRun: runSummary(runs?.[0], { latestSolvedRunId, connectionStatus: row.status, currentLoadsHash }),
   };
 };
 
+/**
+ * El análisis contra el que una comprobación es vigente: el último resuelto, y solo si es
+ * del modelo actual (un cambio de sección o de carga sin reanalizar deja todas las
+ * comprobaciones desactualizadas). Con las combinaciones vigentes, para comparar.
+ */
 async function latestSolvedRunId(projectId) {
   const run = await prisma.analysisRun.findFirst({
     where: { projectId, status: "solved" },
     orderBy: { startedAt: "desc" },
     select: { id: true },
   });
-  return run?.id ?? null;
+  if (!run || (await runStaleReason(projectId, run.id))) return null;
+  return run.id;
+}
+
+async function currentLoadsHash(projectId) {
+  const configuration = await prisma.modelConfiguration.findUnique({
+    where: { projectId },
+    select: { loadCombinations: true, designPreferences: true },
+  });
+  return connectionLoadsHash(configuration?.loadCombinations || [], configuration?.designPreferences?.comboNames || []);
 }
 
 /** Nudos y barras del modelo ACTUAL, para saber qué conexiones quedaron huérfanas. */
@@ -191,11 +206,12 @@ async function list(project, { nodeId } = {}) {
     include: WITH_MEMBERS,
   });
   if (rows.length === 0) return [];
-  const [model, solvedId] = await Promise.all([
+  const [model, solvedId, loadsHash] = await Promise.all([
     modelIndex(project.id),
     latestSolvedRunId(project.id),
+    currentLoadsHash(project.id),
   ]);
-  return rows.map((row) => connectionToApi(row, orphanReasons(row, model), solvedId));
+  return rows.map((row) => connectionToApi(row, orphanReasons(row, model), solvedId, loadsHash));
 }
 
 async function findOwned(project, connectionId) {
@@ -210,11 +226,12 @@ async function findOwned(project, connectionId) {
 
 async function getOne(project, connectionId) {
   const row = await findOwned(project, connectionId);
-  const [model, solvedId] = await Promise.all([
+  const [model, solvedId, loadsHash] = await Promise.all([
     modelIndex(project.id),
     latestSolvedRunId(project.id),
+    currentLoadsHash(project.id),
   ]);
-  return connectionToApi(row, orphanReasons(row, model), solvedId);
+  return connectionToApi(row, orphanReasons(row, model), solvedId, loadsHash);
 }
 
 /**
@@ -286,11 +303,12 @@ async function update(project, connectionId, { name, params }) {
     data,
     include: WITH_MEMBERS,
   });
-  const [model, solvedId] = await Promise.all([
+  const [model, solvedId, loadsHash] = await Promise.all([
     modelIndex(project.id),
     latestSolvedRunId(project.id),
+    currentLoadsHash(project.id),
   ]);
-  return connectionToApi(updated, orphanReasons(updated, model), solvedId);
+  return connectionToApi(updated, orphanReasons(updated, model), solvedId, loadsHash);
 }
 
 async function remove(project, connectionId) {
@@ -397,10 +415,10 @@ async function latestRun(project, connectionId) {
     orderBy: { createdAt: "desc" },
   });
   if (!runRow) throw new AppError(404, "Esta conexión todavía no se ha comprobado.");
-  const solvedId = await latestSolvedRunId(project.id);
+  const [solvedId, loadsHash] = await Promise.all([latestSolvedRunId(project.id), currentLoadsHash(project.id)]);
   return {
     ...runToApi(runRow),
-    summary: runSummary(runRow, { latestSolvedRunId: solvedId, connectionStatus: row.status }),
+    summary: runSummary(runRow, { latestSolvedRunId: solvedId, connectionStatus: row.status, currentLoadsHash: loadsHash }),
   };
 }
 
