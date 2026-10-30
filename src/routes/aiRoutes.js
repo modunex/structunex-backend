@@ -10,6 +10,7 @@ router.post("/conversations", c.create);
 router.get("/conversations/:conversationId", c.getOne);
 router.delete("/conversations/:conversationId", c.remove);
 router.post("/conversations/:conversationId/attachments", c.presign);
+router.get("/conversations/:conversationId/attachments/:attachmentId/url", c.attachmentUrl);
 router.post("/conversations/:conversationId/messages", c.sendMessage);
 router.patch(
   "/conversations/:conversationId/messages/:messageId/changeset",

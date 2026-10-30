@@ -58,6 +58,10 @@ const env = {
   bedrockRegion: process.env.BEDROCK_REGION || process.env.AWS_REGION || "eu-west-1",
   // Esfuerzo de razonamiento: low | medium | high | xhigh | max.
   aiEffort: process.env.AI_EFFORT || "medium",
+  // Razonamiento visible en el chat: "summarized" (resumen legible, se transmite en
+  // vivo) u "omitted" (más rápido hasta el primer texto, sin razonamiento visible).
+  // En los modelos Claude 5 el valor por defecto de la API es "omitted".
+  aiThinkingDisplay: process.env.AI_THINKING_DISPLAY === "omitted" ? "omitted" : "summarized",
   aiMaxUploadMb: Number(process.env.AI_MAX_UPLOAD_MB || 20),
   aiS3Prefix: (process.env.AI_S3_PREFIX || "chat").replace(/^\/+|\/+$/g, ""),
 

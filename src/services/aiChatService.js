@@ -6,7 +6,7 @@ const { prisma } = require("../config/db");
 const { env } = require("../config/env");
 const { AppError } = require("../middleware/errorHandler");
 const { isUuid } = require("../lib/ids");
-const { signPut, deletePrefix } = require("./s3Service");
+const { signPut, signGet, deletePrefix } = require("./s3Service");
 const { ALLOWED_MIMES } = require("./ai/attachments");
 
 const notFound = () => new AppError(404, "Conversation not found");
@@ -21,7 +21,7 @@ async function getConversation(projectId, ownerId, conversationId) {
 }
 
 /**
- * Mensajes en forma "de pantalla": sin thinking, con los adjuntos resueltos a
+ * Mensajes en forma "de pantalla": con el resumen del razonamiento (si lo hay), con los adjuntos resueltos a
  * {id, name, mime} y sin los mensajes que solo llevan resultados de herramientas.
  */
 function toDisplay(rows, attById) {
@@ -43,6 +43,8 @@ function toDisplay(rows, attById) {
         });
       } else if (b.type === "tool_use") {
         parts.push({ type: "tool", name: b.name });
+      } else if (b.type === "thinking" && b.thinking) {
+        parts.push({ type: "thinking", text: b.thinking });
       }
     }
     out.push({
@@ -113,6 +115,20 @@ module.exports = {
       data: { conversationId: conv.id, s3Key: key, mime, name: String(name).slice(0, 200), size },
     });
     return { attachmentId: att.id, uploadUrl: await signPut(key, mime) };
+  },
+
+  /** URL temporal para ver un adjunto: imágenes y PDF se abren en el navegador. */
+  attachmentUrl: async (projectId, ownerId, conversationId, attachmentId) => {
+    const conv = await getConversation(projectId, ownerId, conversationId);
+    if (!isUuid(attachmentId)) throw new AppError(404, "Adjunto no encontrado");
+    const att = await prisma.aiAttachment.findFirst({ where: { id: attachmentId, conversationId: conv.id } });
+    if (!att) throw new AppError(404, "Adjunto no encontrado");
+    const viewable = att.mime === "application/pdf" || att.mime.startsWith("image/");
+    return {
+      url: await signGet(att.s3Key, { filename: att.name, inline: viewable, contentType: att.mime }),
+      mime: att.mime,
+      name: att.name,
+    };
   },
 
   /** Adjuntos de un mensaje: deben ser de esta conversación. */

@@ -81,6 +81,12 @@ module.exports = {
     res.json(await svc.presignAttachment(req.projectId, req.userId, req.params.conversationId, body));
   }),
 
+  attachmentUrl: asyncHandler(async (req, res) => {
+    res.json(
+      await svc.attachmentUrl(req.projectId, req.userId, req.params.conversationId, req.params.attachmentId)
+    );
+  }),
+
   setChangesetStatus: asyncHandler(async (req, res) => {
     const { status } = parseBody(z.object({ status: z.enum(["applied", "discarded"]) }), req.body);
     await svc.setChangesetStatus(

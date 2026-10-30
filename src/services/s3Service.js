@@ -60,15 +60,19 @@ function projectPrefix(projectId) {
 
 /** URL prefirmada de lectura para una clave concreta. `filename` fuerza la descarga
  *  con ese nombre (Content-Disposition). */
-async function signGet(key, { filename } = {}) {
+async function signGet(key, { filename, inline = false, contentType } = {}) {
+  // Cabecera en ASCII + nombre UTF-8 (RFC 6266) para nombres con tildes o eñes.
+  const safe = filename
+    ? `${filename.replace(/[^\x20-\x7e]|["\\]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(filename)}`
+    : null;
   return getSignedUrl(
     s3(),
     new GetObjectCommand({
       Bucket: env.s3Bucket,
       Key: key,
-      ...(filename
-        ? { ResponseContentDisposition: `attachment; filename="${filename.replace(/["\\\r\n]/g, "_")}"` }
-        : {}),
+      // inline: el navegador lo abre en una pestaña (PDF, imagen) en vez de descargarlo.
+      ...(safe ? { ResponseContentDisposition: `${inline ? "inline" : "attachment"}; filename="${safe}` } : {}),
+      ...(contentType ? { ResponseContentType: contentType } : {}),
     }),
     { expiresIn: env.s3UrlTtlS }
   );

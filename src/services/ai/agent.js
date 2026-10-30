@@ -122,7 +122,7 @@ async function runTurn(p) {
         system,
         tools: TOOLS,
         messages,
-        thinking: { type: "adaptive" },
+        thinking: { type: "adaptive", display: env.aiThinkingDisplay },
         output_config: { effort: env.aiEffort },
         // Caché automática del prefijo (tools → system → historial).
         cache_control: { type: "ephemeral" },
@@ -135,11 +135,15 @@ async function runTurn(p) {
         const block = event.content_block;
         if (block.type === "thinking") send("status", { state: "thinking" });
         if (block.type === "tool_use") {
-          send("tool", { name: block.name, label: TOOL_LABELS[block.name] || block.name });
+          send("tool", { id: block.id, name: block.name, label: TOOL_LABELS[block.name] || block.name });
         }
         if (block.type === "text") send("status", { state: "writing" });
-      } else if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-        send("text", { delta: event.delta.text });
+      } else if (event.type === "content_block_delta") {
+        if (event.delta.type === "text_delta") send("text", { delta: event.delta.text });
+        // Resumen del razonamiento (display "summarized"), en vivo.
+        else if (event.delta.type === "thinking_delta" && event.delta.thinking) {
+          send("thinking", { delta: event.delta.thinking });
+        }
       }
     }
     const final = await stream.finalMessage();
@@ -151,6 +155,7 @@ async function runTurn(p) {
         .filter((b) => b.type === "tool_use")
         .map((b) => {
           const { content, isError } = runTool(b.name, b.input, toolCtx);
+          send("toolDone", { id: b.id, ok: !isError });
           return {
             type: "tool_result",
             tool_use_id: b.id,
