@@ -186,6 +186,10 @@ model ModelConfiguration {
   massSource            Json?
   modalCases            Json     @default("[]")
   diaphragms            Json     @default("[]")
+  // Sistemas resistentes a cargas laterales (Analysis ▸ Assign ▸ Sistema resistente):
+  // [{ name, type: SMF|IMF|OMF, code: AISC341-22 }]. La asignación es por barra
+  // (ModelElement.lateralSystem). No entra en el análisis: lo usa el diseño de conexiones.
+  lateralSystems        Json     @default("[]")
   spectrumFunctions     Json     @default("[]")
   responseSpectrumCases Json     @default("[]")
   activeDofs            Json? // null = automático
@@ -229,6 +233,8 @@ model ModelElement {
   frameSectionId String?  @db.Uuid
   roll           Float    @default(0)
   releases       Json? // { i: {...}, j: {...} }
+  // Nombre de configuration.lateralSystems[].name; null = solo gravedad.
+  lateralSystem  String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

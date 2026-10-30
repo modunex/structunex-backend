@@ -73,6 +73,19 @@ const modalCase = z.object({
 // áreas se enganchan por `area.diaphragm === name`.
 const diaphragm = z.object({ name: z.string().min(1) });
 
+// Sistema resistente a cargas laterales (Analysis ▸ Assign ▸ Sistema resistente). Las
+// barras se enganchan por `element.lateralSystem === name`. El tipo decide qué
+// conexiones precalificadas (AISC 358) se pueden ofrecer: OMF no tiene ninguna.
+const LATERAL_SYSTEM_TYPES = ["SMF", "IMF", "OMF"];
+const SEISMIC_CODES = ["AISC341-22"];
+const lateralSystem = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    type: z.enum(LATERAL_SYSTEM_TYPES),
+    code: z.enum(SEISMIC_CODES),
+  })
+  .strict();
+
 // Función de espectro de respuesta (Define ▸ Funciones). Se guardan los
 // PARÁMETROS de la norma, no la curva: la curva se regenera en el cliente desde
 // el catálogo (GET /seismic-codes), así que almacenarla solo la dejaría
@@ -125,6 +138,12 @@ const configuration = z
     massSource: massSource.nullable().optional(),
     modalCases: z.array(modalCase).optional(),
     diaphragms: z.array(diaphragm).optional(),
+    lateralSystems: z
+      .array(lateralSystem)
+      .refine((list) => new Set(list.map((x) => x.name)).size === list.length, {
+        message: "Nombres de sistema resistente repetidos",
+      })
+      .optional(),
     spectrumFunctions: z.array(spectrumFunction).optional(),
     responseSpectrumCases: z.array(responseSpectrumCase).optional(),
   })

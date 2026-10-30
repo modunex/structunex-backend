@@ -5,6 +5,7 @@ const analysisJob = require("./analysisJob");
 const s3Service = require("./s3Service");
 const spectrumGenerators = require("../lib/spectrumGenerators");
 const { deckProperties } = require("../lib/deckSection");
+const { withoutDesignFields } = require("../lib/analysisModel");
 const { modelHash } = require("../lib/modelHash");
 const { freshness } = require("../lib/analysisFreshness");
 
@@ -57,7 +58,7 @@ async function assembleModel(projectId) {
         .findMany({ where: { projectId }, orderBy: { seq: "asc" } })
         .then((rows) => rows.map((row) => stripChild(row, name)))
     )
-  );
+  ).then(([nodes, elements, ...rest]) => [nodes, elements.map(withoutDesignFields), ...rest]);
 
   const assigned = elements.filter((e) => isUuid(e.frameSectionId));
   const sectionIds = [...new Set(assigned.map((e) => String(e.frameSectionId)))];

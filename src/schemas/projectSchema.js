@@ -42,6 +42,9 @@ const element = z.object({
     .object({ i: endReleases, j: endReleases })
     .nullable()
     .optional(),
+  // Sistema resistente al que pertenece la barra: referencia por nombre a
+  // configuration.lateralSystems[].name. null = solo gravedad.
+  lateralSystem: z.string().min(1).nullish(),
 });
 
 // Booleans/numbers below are optional (no Zod default) — the columns default them
