@@ -30,9 +30,24 @@ const modifiers = z
   })
   .default({});
 
+// Losa colaborante (kind "deck"): geometría en m y dirección de los nervios en grados.
+// El servicio deriva de aquí el espesor del shell y los modificadores de peso y masa
+// (ver lib/deckSection), así que esos campos no se aceptan a mano para un deck.
+const deck = z.object({
+  tc: z.number().positive(),
+  hr: z.number().positive(),
+  wrTop: z.number().positive(),
+  wrBot: z.number().positive(),
+  sr: z.number().positive(),
+  t: z.number().positive(),
+  ribAngle: z.number().default(0),
+  deckMaterialId: z.string().min(1),
+});
+
 const createCatalogAreaSection = z.object({
   name: z.string().min(1),
-  kind: z.literal("shell").default("shell"),
+  kind: z.enum(["shell", "deck"]).default("shell"),
+  deck: deck.optional(),
   shellType: z.enum(SHELL_TYPES),
   materialId: z.string().min(1), // ObjectId validado en el servicio
   materialAngle: z.number().default(0),
@@ -44,4 +59,13 @@ const createCatalogAreaSection = z.object({
 
 const updateCatalogAreaSection = createCatalogAreaSection.partial();
 
-module.exports = { createCatalogAreaSection, updateCatalogAreaSection };
+// Para un deck el servicio calcula espesores y modificadores: no hace falta mandarlos.
+const createDeckAreaSection = createCatalogAreaSection.extend({
+  kind: z.literal("deck"),
+  deck,
+  shellType: z.enum(SHELL_TYPES).optional(),
+  thicknessMembrane: z.number().positive().optional(),
+  thicknessBending: z.number().positive().optional(),
+});
+
+module.exports = { createCatalogAreaSection, createDeckAreaSection, updateCatalogAreaSection };

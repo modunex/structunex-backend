@@ -118,6 +118,8 @@ model CatalogAreaSection {
   thicknessMembrane Float // m
   thicknessBending  Float // m
   modifiers         Json     @default("{}")
+  /// kind "deck": geometría de la losa colaborante + propiedades derivadas (lib/deckSection)
+  deck              Json?
   color             String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

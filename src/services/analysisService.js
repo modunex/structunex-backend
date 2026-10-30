@@ -4,6 +4,7 @@ const { AppError } = require("../middleware/errorHandler");
 const analysisJob = require("./analysisJob");
 const s3Service = require("./s3Service");
 const spectrumGenerators = require("../lib/spectrumGenerators");
+const { deckProperties } = require("../lib/deckSection");
 const { modelHash } = require("../lib/modelHash");
 const { freshness } = require("../lib/analysisFreshness");
 
@@ -89,9 +90,20 @@ async function assembleModel(projectId) {
         .filter(isUuid)
     ),
   ];
-  const catMaterials = materialIds.length
-    ? await prisma.catalogMaterial.findMany({ where: { id: { in: materialIds } } })
-    : [];
+  // La lámina de una losa colaborante solo aporta peso: su densidad se lee aparte.
+  const deckMaterialIds = [
+    ...new Set(
+      catAreaSections
+        .filter((s) => s.kind === "deck" && s.deck)
+        .map((s) => s.deck.deckMaterialId)
+        .filter((id) => isUuid(id) && !materialIds.includes(id))
+    ),
+  ];
+  const [catMaterials, deckMaterials] = await Promise.all([
+    materialIds.length ? prisma.catalogMaterial.findMany({ where: { id: { in: materialIds } } }) : [],
+    deckMaterialIds.length ? prisma.catalogMaterial.findMany({ where: { id: { in: deckMaterialIds } } }) : [],
+  ]);
+  const densityById = new Map([...catMaterials, ...deckMaterials].map((m) => [m.id, m.density]));
 
   // Engine materials: { id, E, G, density }. G derived from E and nu if absent;
   // density (kN/m^3) drives self weight.
@@ -119,14 +131,35 @@ async function assembleModel(projectId) {
   // Engine area sections: { id, materialId, shellType, thicknessMembrane,
   // thicknessBending, modifiers }. Thicknesses are already stored in metres; the
   // calc-service meshes each area into CQUAD4 shells against this section.
-  const areaSections = catAreaSections.map((s) => ({
-    id: s.id,
-    materialId: s.materialId,
-    shellType: s.shellType,
-    thicknessMembrane: s.thicknessMembrane,
-    thicknessBending: s.thicknessBending,
-    modifiers: s.modifiers || {},
-  }));
+  //
+  // Una losa colaborante (kind "deck") se recalcula aquí con las densidades vigentes:
+  // shell de espesor tc con el peso y la masa del total (lib/deckSection).
+  const areaSections = catAreaSections.map((s) => {
+    if (s.kind === "deck" && s.deck) {
+      let props;
+      try {
+        props = deckProperties(s.deck, densityById.get(s.materialId), densityById.get(s.deck.deckMaterialId));
+      } catch (err) {
+        throw new AppError(400, `Sección de área "${s.name}": ${err.message}`);
+      }
+      return {
+        id: s.id,
+        materialId: s.materialId,
+        shellType: "shell-thin",
+        thicknessMembrane: props.analysisThickness,
+        thicknessBending: props.analysisThickness,
+        modifiers: { ...(s.modifiers || {}), weight: props.weightFactor, mass: props.weightFactor },
+      };
+    }
+    return {
+      id: s.id,
+      materialId: s.materialId,
+      shellType: s.shellType,
+      thicknessMembrane: s.thicknessMembrane,
+      thicknessBending: s.thicknessBending,
+      modifiers: s.modifiers || {},
+    };
+  });
 
   // Bars reference their section by the catalog id (the section carries material).
   const solverElements = assigned

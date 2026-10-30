@@ -4,8 +4,13 @@ const { requireAuth } = require("../middleware/auth");
 const { validate } = require("../middleware/validate");
 const {
   createCatalogAreaSection,
+  createDeckAreaSection,
   updateCatalogAreaSection,
 } = require("../schemas/catalogAreaSectionSchema");
+
+// Un deck trae su geometría y el servicio deriva el shell; el resto, como siempre.
+const validateCreate = (req, res, next) =>
+  validate(req.body && req.body.kind === "deck" ? createDeckAreaSection : createCatalogAreaSection)(req, res, next);
 
 const router = Router();
 
@@ -13,7 +18,7 @@ const router = Router();
 router.use(requireAuth);
 
 router.get("/", c.list);
-router.post("/", validate(createCatalogAreaSection), c.create);
+router.post("/", validateCreate, c.create);
 router.get("/:id", c.getOne);
 router.patch("/:id", validate(updateCatalogAreaSection), c.update);
 router.delete("/:id", c.remove);
