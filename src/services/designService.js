@@ -1,6 +1,7 @@
 const { prisma } = require("../config/db");
 const { isUuid, toApi } = require("../lib/ids");
 const { AppError } = require("../middleware/errorHandler");
+const { checkCodes } = require("../lib/designCodes");
 const designJob = require("./designJob");
 const s3Service = require("./s3Service");
 const { getShape } = require("../lib/aiscShapes");
@@ -166,6 +167,7 @@ const DEFAULT_PREFERENCES = {
  * encuentre la última elección del usuario.
  */
 async function resolvePreferences(projectId, requested) {
+  checkCodes(requested);
   const configuration = await prisma.modelConfiguration.findUnique({
     where: { projectId },
     select: { designPreferences: true, loadCombinations: true },
