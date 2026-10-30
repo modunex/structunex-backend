@@ -27,10 +27,7 @@
     "frecuente": {
       "titulo": "Sismo Frecuente (Tabla 6)",
       "TLfactor": 0.85,
-      "grupos": {
-        "A1": { "excedencia": "50% en 50 años", "PMR": 72, "alpha": 0.45 },
-        "A2": { "excedencia": "50% en 25 años", "PMR": 36, "alpha": 0.3 }
-      }
+      "grupos": { "A1": { "excedencia": "50% en 50 años", "PMR": 72, "alpha": 0.45 }, "A2": { "excedencia": "50% en 25 años", "PMR": 36, "alpha": 0.3 } }
     }
   },
   "clasesSitio": ["A", "AB", "B", "BC", "C", "CD", "D", "DE", "E"],
@@ -38,51 +35,55 @@
     "titulo": "Tabla 8. Factor de clase de sitio para periodos cortos (entrada: alpha·A0)",
     "x": [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5],
     "valores": {
-      "A":  [0.80, 0.80, 0.80, 0.80, 0.80, 0.80, 0.80],
+      "A": [0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8],
       "AB": [0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85],
-      "B":  [0.90, 0.90, 0.90, 0.90, 0.90, 0.90, 0.90],
-      "BC": [1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00],
-      "C":  [1.30, 1.30, 1.25, 1.25, 1.20, 1.20, 1.15],
-      "CD": [1.60, 1.50, 1.45, 1.35, 1.25, 1.20, 1.15],
-      "D":  [1.90, 1.75, 1.60, 1.40, 1.25, 1.15, 1.00],
-      "DE": [2.40, 2.05, 1.75, 1.35, 1.10, 0.95, 0.80],
-      "E":  [2.70, 2.20, 1.85, 1.35, 1.00, 0.85, 0.70]
+      "B": [0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9],
+      "BC": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+      "C": [1.3, 1.3, 1.25, 1.25, 1.2, 1.2, 1.15],
+      "CD": [1.6, 1.5, 1.45, 1.35, 1.25, 1.2, 1.15],
+      "D": [1.9, 1.75, 1.6, 1.4, 1.25, 1.15, 1.0],
+      "DE": [2.4, 2.05, 1.75, 1.35, 1.1, 0.95, 0.8],
+      "E": [2.7, 2.2, 1.85, 1.35, 1.0, 0.85, 0.7]
     }
   },
   "FVC": {
     "titulo": "Tabla 9. Factor de clase de sitio para periodos intermedios (entrada: alpha·A1)",
     "x": [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5],
     "valores": {
-      "A":  [0.80, 0.80, 0.80, 0.80, 0.80, 0.80, 0.80],
+      "A": [0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8],
       "AB": [0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85],
-      "B":  [0.90, 0.90, 0.90, 0.90, 0.90, 0.90, 0.90],
-      "BC": [1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00],
-      "C":  [1.40, 1.40, 1.40, 1.40, 1.40, 1.40, 1.40],
-      "CD": [1.80, 1.75, 1.75, 1.70, 1.70, 1.65, 1.65],
-      "D":  [2.30, 2.20, 2.10, 2.00, 1.95, 1.90, 1.85],
-      "DE": [3.30, 3.00, 2.70, 2.50, 2.30, 2.15, 2.00],
-      "E":  [4.00, 3.30, 3.00, 2.70, 2.45, 2.30, 2.15]
+      "B": [0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9],
+      "BC": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+      "C": [1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4],
+      "CD": [1.8, 1.75, 1.75, 1.7, 1.7, 1.65, 1.65],
+      "D": [2.3, 2.2, 2.1, 2.0, 1.95, 1.9, 1.85],
+      "DE": [3.3, 3.0, 2.7, 2.5, 2.3, 2.15, 2.0],
+      "E": [4.0, 3.3, 3.0, 2.7, 2.45, 2.3, 2.15]
     }
   },
   "FDC": {
     "titulo": "Tabla 10. Factor de clase de sitio para periodos largos",
-    "valores": { "A": 0.85, "AB": 0.90, "B": 0.95, "BC": 1.00, "C": 1.20, "CD": 1.40, "D": 1.70, "DE": 2.25, "E": 2.65 }
+    "valores": { "A": 0.85, "AB": 0.9, "B": 0.95, "BC": 1.0, "C": 1.2, "CD": 1.4, "D": 1.7, "DE": 2.25, "E": 2.65 }
   },
   "topografia": {
     "titulo": "Tabla 11. Factores de condición topográfica",
-    "leve":     { "FAT": 1.00, "FVT": 1.00, "FDT": 1.00 },
-    "moderada": { "FAT": 1.20, "FVT": 1.10, "FDT": 1.05 },
-    "severa":   { "FAT": 1.40, "FVT": 1.20, "FDT": 1.10 }
+    "leve": { "FAT": 1.0, "FVT": 1.0, "FDT": 1.0 },
+    "moderada": { "FAT": 1.2, "FVT": 1.1, "FDT": 1.05 },
+    "severa": { "FAT": 1.4, "FVT": 1.2, "FDT": 1.1 }
   },
   "basamento": {
     "titulo": "Tabla 12. Factores de profundidad del basamento rocoso (H ≥ 1000 m usa la última fila)",
-    "H":   [0, 10, 30, 60, 100, 200, 300, 500, 750, 1000],
-    "FAH": [1.00, 1.00, 1.00, 1.00, 1.01, 1.02, 1.03, 1.05, 1.07, 1.10],
-    "FVH": [0.98, 1.00, 1.00, 1.02, 1.05, 1.08, 1.10, 1.20, 1.30, 1.40],
-    "FDH": [0.93, 0.96, 1.00, 1.05, 1.10, 1.20, 1.30, 1.60, 2.10, 2.80]
+    "H": [0, 10, 30, 60, 100, 200, 300, 500, 750, 1000],
+    "FAH": [1.0, 1.0, 1.0, 1.0, 1.01, 1.02, 1.03, 1.05, 1.07, 1.1],
+    "FVH": [0.98, 1.0, 1.0, 1.02, 1.05, 1.08, 1.1, 1.2, 1.3, 1.4],
+    "FDH": [0.93, 0.96, 1.0, 1.05, 1.1, 1.2, 1.3, 1.6, 2.1, 2.8]
   },
   "beta": 2.4,
-  "TA": { "factor": 0.20, "min": 0.02, "max": 0.05 },
+  "TA": {
+    "factor": 0.2,
+    "min": 0.02,
+    "max": 0.05
+  },
   "TB_factor": 0.25,
   "TC_divisor": 2.4,
   "q": {
@@ -91,7 +92,11 @@
   },
   "Tplus": {
     "titulo": "Tabla 18 y fórmula 7.23: T+ = 0,1(R−1) si R < 5; 0,4 si R ≥ 5; acotado a [0,25·TC, TC]",
-    "Rlimite": 5, "factor": 0.1, "constante": 0.4, "minTC": 0.25, "maxTC": 1.0
+    "Rlimite": 5,
+    "factor": 0.1,
+    "constante": 0.4,
+    "minTC": 0.25,
+    "maxTC": 1.0
   },
   "redundancia": {
     "titulo": "Tabla 13. Factor de Redundancia (no se interpola)",
@@ -100,7 +105,8 @@
       { "id": "2planos2vanos", "texto": "Al menos dos planos, cada uno con al menos dos vanos", "rho": 1.2 },
       { "id": "2planos1vano", "texto": "Al menos dos planos, con un solo vano", "rho": 1.5 },
       { "id": "1plano", "texto": "Un solo plano sismorresistente en la dirección de análisis", "rho": 2.0 }
-    ]
+    ],
+    "nota": "Tipo IV: ρ = 1 (6.3.f), su baja redundancia ya está en R"
   },
   "irregularidad": {
     "titulo": "Tabla 14. Factor de Irregularidad (producto de los presentes, máximo 1,4)",
@@ -123,15 +129,52 @@
     }
   },
   "sistemas": {
-    "titulo": "Tabla 15 (extracto). R, Ωo y Cd por tipo/subtipo, material y nivel de diseño (null = no aplica)",
+    "titulo": "Tabla 15. R, Ωo y Cd por tipo/subtipo, sistema, material y nivel de diseño (null = no aplica)",
     "filas": [
       { "id": "Ia-concreto", "subtipo": "I-a", "texto": "Pórticos de concreto armado (vigas y columnas)", "material": "concreto", "R": { "ND3": 6, "ND2": 4, "ND1": 2 }, "omega0": 3, "Cd": { "ND3": 4.25, "ND2": 3.75, "ND1": 1.75 } },
       { "id": "Ia-acero", "subtipo": "I-a", "texto": "Pórticos de acero estructural (vigas y columnas)", "material": "acero", "R": { "ND3": 6, "ND2": 3.5, "ND1": 2.5 }, "omega0": 3, "Cd": { "ND3": 4.25, "ND2": 3.25, "ND1": 2.25 } },
       { "id": "Ia-mixto", "subtipo": "I-a", "texto": "Pórticos mixtos restringidos (vigas y columnas)", "material": "mixto", "R": { "ND3": 6, "ND2": 4, "ND1": 2.25 }, "omega0": 3, "Cd": { "ND3": 4.25, "ND2": 3.75, "ND1": 2 } },
+      { "id": "Ia-mixtoPR", "subtipo": "I-a", "texto": "Pórticos mixtos parcialmente restringidos (vigas y columnas)", "material": "mixto", "R": { "ND3": null, "ND2": 4.5, "ND1": null }, "omega0": 3, "Cd": { "ND3": null, "ND2": 4.25, "ND1": null } },
+      { "id": "Ia-madera", "subtipo": "I-a", "texto": "Pórticos de madera con espigas y pernos (vigas y columnas)", "material": "madera", "R": { "ND3": 4, "ND2": 2.5, "ND1": null }, "omega0": 3, "Cd": { "ND3": 4, "ND2": 2.5, "ND1": null } },
+      { "id": "Ia-prefabricado", "subtipo": "I-a", "texto": "Pórticos prefabricados de concreto armado", "material": "concreto", "R": { "ND3": 4.5, "ND2": 3, "ND1": 1.5 }, "omega0": 3, "Cd": { "ND3": 4.5, "ND2": 3, "ND1": 1.5 } },
       { "id": "Ib-acero", "subtipo": "I-b", "texto": "Pórticos de acero con vigas de celosía conectadas a momento", "material": "acero", "R": { "ND3": 5, "ND2": null, "ND1": 2 }, "omega0": 3, "Cd": { "ND3": 4, "ND2": null, "ND1": 1.75 } },
       { "id": "Ic-acero", "subtipo": "I-c", "texto": "Pórticos de acero con columnas articuladas en la base", "material": "acero", "R": { "ND3": 4.5, "ND2": 3.5, "ND1": 2 }, "omega0": 3, "Cd": { "ND3": 3.25, "ND2": 3, "ND1": 1.75 } },
+      { "id": "Id-losasColumnas", "subtipo": "I-d", "texto": "Losas macizas o reticulares sobre columnas, sin vigas", "material": "concreto", "R": { "ND3": null, "ND2": 3, "ND1": 1.5 }, "omega0": 3, "Cd": { "ND3": null, "ND2": 3, "ND1": 1.5 } },
+      { "id": "Id-losasMuros", "subtipo": "I-d", "texto": "Losas macizas sobre muros, sin vigas ni muros en una dirección (análisis en esa dirección)", "material": "concreto", "R": { "ND3": null, "ND2": null, "ND1": 1.5 }, "omega0": 3, "Cd": { "ND3": null, "ND2": null, "ND1": 1.5 } },
+      { "id": "Id-nervadas", "subtipo": "I-d", "texto": "Losas nervadas sobre vigas y columnas, sin vigas en la dirección de los nervios (análisis en esa dirección)", "material": "concreto", "R": { "ND3": null, "ND2": null, "ND1": 1.5 }, "omega0": 3, "Cd": { "ND3": null, "ND2": null, "ND1": 1.5 } },
+      { "id": "IIa-concreto", "subtipo": "II-a", "texto": "Dual: pórticos y muros con dinteles dúctiles (combinación de I-a y III-a)", "material": "concreto", "R": { "ND3": 5.5, "ND2": 4.5, "ND1": null }, "omega0": 2.5, "Cd": { "ND3": 4.5, "ND2": 3.5, "ND1": null } },
       { "id": "IIa-acero", "subtipo": "II-a", "texto": "Dual: pórticos y arriostrados excéntricamente o de pandeo restringido", "material": "acero", "R": { "ND3": 6, "ND2": 5, "ND1": null }, "omega0": 2.5, "Cd": { "ND3": 4.25, "ND2": 3.75, "ND1": null } },
-      { "id": "IIb-acero", "subtipo": "II-b", "texto": "Dual: pórticos y arriostrados concéntricamente", "material": "acero", "R": { "ND3": 5, "ND2": 4, "ND1": 3 }, "omega0": 2.5, "Cd": { "ND3": 4, "ND2": 3.5, "ND1": 3 } }
+      { "id": "IIa-mixto", "subtipo": "II-a", "texto": "Dual mixto: pórticos y arriostrados excéntricamente o de pandeo restringido", "material": "mixto", "R": { "ND3": 6, "ND2": 5, "ND1": null }, "omega0": 2.5, "Cd": { "ND3": 4.25, "ND2": 3.5, "ND1": null } },
+      { "id": "IIb-concreto", "subtipo": "II-b", "texto": "Dual: pórticos y muros (combinación de I-a y III-b)", "material": "concreto", "R": { "ND3": 5, "ND2": 4.25, "ND1": 2.75 }, "omega0": 2.5, "Cd": { "ND3": 4, "ND2": 3.5, "ND1": 2.5 } },
+      { "id": "IIb-acero", "subtipo": "II-b", "texto": "Dual: pórticos y arriostrados concéntricamente", "material": "acero", "R": { "ND3": 5, "ND2": 4, "ND1": 3 }, "omega0": 2.5, "Cd": { "ND3": 4, "ND2": 3.5, "ND1": 3 } },
+      { "id": "IIb-mixto", "subtipo": "II-b", "texto": "Dual mixto: pórticos y arriostrados concéntricamente o paneles", "material": "mixto", "R": { "ND3": 5, "ND2": 4, "ND1": 2.25 }, "omega0": 2.5, "Cd": { "ND3": 4.25, "ND2": 3.75, "ND1": 2.25 } },
+      { "id": "IIb-prefabricado", "subtipo": "II-b", "texto": "Dual prefabricado de pórticos y muros (combinación de I-a y III-b)", "material": "concreto", "R": { "ND3": null, "ND2": 2.5, "ND1": 1.5 }, "omega0": 2.5, "Cd": { "ND3": null, "ND2": 2.5, "ND1": 1.5 } },
+      { "id": "IIIa-murosAcoplados", "subtipo": "III-a", "texto": "Muros de concreto armado acoplados con dinteles dúctiles", "material": "concreto", "R": { "ND3": 5, "ND2": null, "ND1": null }, "omega0": 2.5, "Cd": { "ND3": 4.25, "ND2": null, "ND1": null } },
+      { "id": "IIIa-EBF-acero", "subtipo": "III-a", "texto": "Pórticos de acero con arriostramientos excéntricos acoplados con eslabones dúctiles", "material": "acero", "R": { "ND3": 6, "ND2": null, "ND1": null }, "omega0": 2, "Cd": { "ND3": 4.25, "ND2": null, "ND1": null } },
+      { "id": "IIIa-BRBF-acero", "subtipo": "III-a", "texto": "Pórticos con arriostramientos de pandeo restringido", "material": "acero", "R": { "ND3": 6, "ND2": null, "ND1": null }, "omega0": 2.5, "Cd": { "ND3": 4.25, "ND2": null, "ND1": null } },
+      { "id": "IIIa-EBF-mixto", "subtipo": "III-a", "texto": "Pórticos mixtos con arriostramientos excéntricos acoplados con eslabones dúctiles de acero", "material": "mixto", "R": { "ND3": 6, "ND2": null, "ND1": null }, "omega0": 2.5, "Cd": { "ND3": 4.25, "ND2": null, "ND1": null } },
+      { "id": "IIIb-muros", "subtipo": "III-b", "texto": "Muros de concreto armado sin dinteles dúctiles", "material": "concreto", "R": { "ND3": 4.5, "ND2": null, "ND1": 3.5 }, "omega0": 2.5, "Cd": { "ND3": 3.75, "ND2": null, "ND1": 3.25 } },
+      { "id": "IIIb-paredDelgada", "subtipo": "III-b", "texto": "Muros de pared delgada sin elementos de borde (análisis en la dirección de los muros)", "material": "concreto", "R": { "ND3": 3, "ND2": null, "ND1": 2 }, "omega0": 2.5, "Cd": { "ND3": 2.5, "ND2": null, "ND1": 2 } },
+      { "id": "IIIb-CBF-acero", "subtipo": "III-b", "texto": "Pórticos de acero con arriostramientos concéntricos", "material": "acero", "R": { "ND3": 4.5, "ND2": null, "ND1": 2.5 }, "omega0": 2, "Cd": { "ND3": 3.75, "ND2": null, "ND1": 2.5 } },
+      { "id": "IIIb-CBF-mixto", "subtipo": "III-b", "texto": "Pórticos mixtos con arriostramientos concéntricos", "material": "mixto", "R": { "ND3": 4, "ND2": null, "ND1": 2 }, "omega0": 2, "Cd": { "ND3": 3.75, "ND2": null, "ND1": 2 } },
+      { "id": "IIIb-panelesMetalicos", "subtipo": "III-b", "texto": "Muros especiales a base de paneles metálicos", "material": "acero", "R": { "ND3": 5, "ND2": null, "ND1": null }, "omega0": 2, "Cd": { "ND3": 4.5, "ND2": null, "ND1": null } },
+      { "id": "IIIb-maderaClavados", "subtipo": "III-b", "texto": "Paneles y diafragmas de madera clavados, conectados con clavos y/o pernos", "material": "madera", "R": { "ND3": 4, "ND2": null, "ND1": null }, "omega0": 2.5, "Cd": { "ND3": 4, "ND2": null, "ND1": null } },
+      { "id": "IIIb-livianosMadera", "subtipo": "III-b", "texto": "Elementos livianos de acero (perfiles doblados en frío) arriostrados, con paneles de madera o láminas de acero", "material": "acero-madera", "R": { "ND3": 3, "ND2": null, "ND1": null }, "omega0": 2.5, "Cd": { "ND3": 3, "ND2": null, "ND1": null } },
+      { "id": "IIIb-murosMixtos", "subtipo": "III-b", "texto": "Muros mixtos", "material": "mixto", "R": { "ND3": 4, "ND2": null, "ND1": 3 }, "omega0": 2.5, "Cd": { "ND3": 3.5, "ND2": null, "ND1": 3 } },
+      { "id": "IIIb-murosMixtosPaneles", "subtipo": "III-b", "texto": "Muros mixtos a base de paneles metálicos", "material": "mixto", "R": { "ND3": 4.5, "ND2": null, "ND1": null }, "omega0": 2.5, "Cd": { "ND3": 4, "ND2": null, "ND1": null } },
+      { "id": "IIIc-murosPrefabricados", "subtipo": "III-c", "texto": "Muros prefabricados de concreto armado", "material": "concreto", "R": { "ND3": null, "ND2": 2, "ND1": 1.5 }, "omega0": 2.5, "Cd": { "ND3": null, "ND2": 2, "ND1": 1.5 } },
+      { "id": "IIIc-mampParcial", "subtipo": "III-c", "texto": "Mampostería con refuerzo interior y parcialmente rellena", "material": "mamposteria", "R": { "ND3": null, "ND2": 2, "ND1": null }, "omega0": 2.5, "Cd": { "ND3": null, "ND2": 2, "ND1": null } },
+      { "id": "IIIc-mampTotal", "subtipo": "III-c", "texto": "Mampostería con refuerzo interior y totalmente rellena", "material": "mamposteria", "R": { "ND3": null, "ND2": 2, "ND1": null }, "omega0": 2, "Cd": { "ND3": null, "ND2": 2, "ND1": null } },
+      { "id": "IIIc-mampMaciza", "subtipo": "III-c", "texto": "Mampostería confinada de piezas macizas", "material": "mamposteria", "R": { "ND3": null, "ND2": 2, "ND1": null }, "omega0": 2.5, "Cd": { "ND3": null, "ND2": 2, "ND1": null } },
+      { "id": "IIIc-mampHueca", "subtipo": "III-c", "texto": "Mampostería confinada de piezas huecas", "material": "mamposteria", "R": { "ND3": null, "ND2": 1.5, "ND1": null }, "omega0": 2.5, "Cd": { "ND3": null, "ND2": 1.5, "ND1": null } },
+      { "id": "IIIc-maderaEncolados", "subtipo": "III-c", "texto": "Paneles y diafragmas de madera encolados, con clavos y/o pernos", "material": "madera", "R": { "ND3": null, "ND2": 2, "ND1": null }, "omega0": 2.5, "Cd": { "ND3": null, "ND2": 2, "ND1": null } },
+      { "id": "IIIc-maderaDiafEncolados", "subtipo": "III-c", "texto": "Paneles de madera clavados, con diafragmas encolados, conectados con clavos y/o pernos", "material": "madera", "R": { "ND3": null, "ND2": 3, "ND1": null }, "omega0": 2.5, "Cd": { "ND3": null, "ND2": 3, "ND1": null } },
+      { "id": "IIIc-livianosOtro", "subtipo": "III-c", "texto": "Elementos livianos de acero (perfiles doblados en frío) arriostrados, con paneles de otro material", "material": "acero", "R": { "ND3": null, "ND2": 2, "ND1": null }, "omega0": 2.5, "Cd": { "ND3": null, "ND2": 2, "ND1": null } },
+      { "id": "IIIc-adobe", "subtipo": "III-c", "texto": "Muros de adobe con refuerzo especial", "material": "adobe", "R": { "ND3": null, "ND2": null, "ND1": 1.5 }, "omega0": 2.5, "Cd": { "ND3": null, "ND2": null, "ND1": 1.5 } },
+      { "id": "IV-concreto", "subtipo": "IV", "texto": "Estructuras sustentadas por una sola columna o con más de la mitad de los planos de una sola columna", "material": "concreto", "R": { "ND3": 2, "ND2": 1.75, "ND1": 1.5 }, "omega0": 1.5, "Cd": { "ND3": 2, "ND2": 1.75, "ND1": 1.5 } },
+      { "id": "IV-acero", "subtipo": "IV", "texto": "Estructuras sustentadas por una sola columna o con más de la mitad de los planos de una sola columna", "material": "acero", "R": { "ND3": 2, "ND2": null, "ND1": 1.5 }, "omega0": 1.5, "Cd": { "ND3": 2, "ND2": null, "ND1": 1.5 } },
+      { "id": "IV-madera", "subtipo": "IV", "texto": "Estructuras sustentadas por una sola columna o con más de la mitad de los planos de una sola columna", "material": "madera", "R": { "ND3": 2, "ND2": 1.75, "ND1": 1.5 }, "omega0": 1.5, "Cd": { "ND3": 2, "ND2": 1.75, "ND1": 1.5 } },
+      { "id": "IV-mixto", "subtipo": "IV", "texto": "Estructuras sustentadas por una sola columna o con más de la mitad de los planos de una sola columna", "material": "mixto", "R": { "ND3": 2, "ND2": null, "ND1": 1.5 }, "omega0": 1.5, "Cd": { "ND3": 2, "ND2": null, "ND1": 1.5 } }
     ]
   },
   "vertical": {
@@ -146,13 +189,18 @@
   },
   "derivas": {
     "titulo": "Tabla 25. Límites de la relación de deriva lateral total para el Sismo de Diseño (el Sismo Extremo admite el doble; el Frecuente 0,003 o 0,005)",
-    "fragiles":      { "A1": 0.008, "A2": 0.008, "B1": 0.010, "B2": 0.012, "C": 0.012 },
-    "ductiles":      { "A1": 0.012, "A2": 0.012, "B1": 0.016, "B2": 0.018, "C": 0.018 },
-    "noSusceptibles":{ "A1": 0.016, "A2": 0.016, "B1": 0.020, "B2": 0.022, "C": 0.022 },
+    "fragiles": { "A1": 0.008, "A2": 0.008, "B1": 0.01, "B2": 0.012, "C": 0.012 },
+    "ductiles": { "A1": 0.012, "A2": 0.012, "B1": 0.016, "B2": 0.018, "C": 0.018 },
+    "noSusceptibles": { "A1": 0.016, "A2": 0.016, "B1": 0.02, "B2": 0.022, "C": 0.022 },
     "factorExtremo": 2,
     "frecuente": { "fragiles": 0.003, "otros": 0.005 },
     "ec10_1": "δTi = Cd·δei",
     "ec10_3": "ΔTi = Cd·Δei",
     "ec10_4": "Δ̄i = ΔTi / Hi"
+  },
+  "amortiguamiento": {
+    "titulo": "7.34: β = 2,4·(1,4024 − 0,25·ln ξ), ξ en %",
+    "referencia": 0.05,
+    "frecuente": "8.7.2.b: ξ = 0,2/√hn ≤ 0,05 (hn en m)"
   }
 }

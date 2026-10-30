@@ -192,3 +192,51 @@ test("COVENIN 2019: table() has every 0,02 s row up to 4 s", () => {
   assert.equal(rows[200].T, 4);
   assert.equal(rows[200].Av, null);
 });
+
+test("COVENIN 2019: β for other damping ratios (7.34)", () => {
+  const code = getCode("covenin-1756-2019");
+  assert.equal(cov2019.betaForDamping(code, 0.05), 2.4);
+  assert.ok(near(cov2019.betaForDamping(code, 0.02), 2.4 * (1.4024 - 0.25 * Math.log(2))), "ξ = 2 %");
+  // ξ = 5 % por la fórmula también da 2,4 (con el redondeo de la norma).
+  assert.ok(near(2.4 * (1.4024 - 0.25 * Math.log(5)), 2.4, 1e-3));
+});
+
+test("COVENIN 2019: frequent earthquake is elastic, with ξ = 0,2/√hn (8.7.2)", () => {
+  const code = getCode("covenin-1756-2019");
+  const p = { ...CARACAS, grupo: "A2", sismo: "frecuente", hn: 36 }; // ξ = 0,2/6 = 3,33 %
+  const r = cov2019.resolve(code, p);
+  assert.equal(r.curva, "elastico");
+  assert.ok(near(r.damping, 0.2 / 6));
+  assert.ok(near(r.beta, 2.4 * (1.4024 - 0.25 * Math.log(20 / 6))));
+  assert.ok(near(r.TL, 3.6 * 0.85), "TL × 0,85 (4.5.b)");
+  const pts = generators.sample({ source: "covenin1756-2019", params: p });
+  assert.ok(near(at(pts, 0.3), cov2019.elastic(r, 0.3)), "entra el elástico, no el inelástico");
+  // Un edificio bajo no sube del 5 %.
+  assert.equal(cov2019.resolve(code, { ...p, hn: 9 }).damping, 0.05);
+});
+
+test("COVENIN 2019: design earthquake for group A1 and the extreme one carry the code's warnings", () => {
+  const code = getCode("covenin-1756-2019");
+  assert.ok(cov2019.resolve(code, { ...CARACAS, grupo: "A1" }).notes.some((n) => n.includes("4.3.c")));
+  const ext = cov2019.resolve(code, { ...CARACAS, sismo: "extremo" });
+  assert.equal(ext.curva, "elastico");
+  assert.ok(ext.notes.some((n) => n.includes("4.4.b")));
+});
+
+test("COVENIN 2019: table 15 is complete and consistent", () => {
+  const filas = getCode("covenin-1756-2019").sistemas.filas;
+  assert.equal(filas.length, 44);
+  assert.equal(new Set(filas.map((f) => f.id)).size, filas.length, "ids únicos");
+  for (const f of filas) {
+    for (const nd of ["ND3", "ND2", "ND1"]) {
+      assert.equal(f.R[nd] == null, f.Cd[nd] == null, `${f.id} ${nd}: R y Cd definidos juntos`);
+    }
+    assert.ok(f.omega0 >= 1.5 && f.omega0 <= 3, `${f.id} Ωo`);
+  }
+  // Spot checks against the printed table (pp. 69-70).
+  const by = Object.fromEntries(filas.map((f) => [f.id, f]));
+  assert.deepEqual(by["IIb-concreto"].R, { ND3: 5, ND2: 4.25, ND1: 2.75 });
+  assert.deepEqual(by["IIIb-muros"].Cd, { ND3: 3.75, ND2: null, ND1: 3.25 });
+  assert.equal(by["IIIc-mampTotal"].omega0, 2);
+  assert.deepEqual(by["IV-acero"].R, { ND3: 2, ND2: null, ND1: 1.5 });
+});

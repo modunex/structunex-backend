@@ -18,7 +18,9 @@
 //
 //   D(T) = A(T)·g·(T/2π)²    DT(T) = Cd·Ad(T)·g·(T/2π)²    Av(Tv) = A(Tv)·γ(Tv)·η(Tv)
 //
-// Lo que entra al análisis (sample) es el INELÁSTICO Ad(T), como en la edición 2001.
+// Lo que entra al análisis (sample) es el INELÁSTICO Ad(T) para el Sismo de Diseño y el
+// ELÁSTICO A(T) para el Frecuente (8.7.2) y el Extremo (solo referencia: 8.1.c).
+// β sale del amortiguamiento por 7.34 (2,4 al 5 %).
 // `table()` devuelve todas las curvas juntas, que es lo que se reporta.
 const { sampleGrid } = require("./grid");
 
@@ -69,6 +71,36 @@ function resolveSystem(code, params) {
   return { R, Cd, omega0: fila.omega0, sistema: fila.id };
 }
 
+// 7.34: β = 2,4·(1,4024 − 0,25·ln ξ), con ξ en %. Para ξ = 5 % da 2,4 (7.11).
+function betaForDamping(code, damping) {
+  if (Math.abs(damping - 0.05) < 1e-12) return code.beta;
+  return 2.4 * (1.4024 - 0.25 * Math.log(damping * 100));
+}
+
+// Amortiguamiento (fracción). El Sismo Frecuente usa 0,2/√hn ≤ 0,05 (8.7.2.b) si se da hn;
+// el resto, 5 % salvo que se indique otro (7.6.a).
+function resolveDamping(sismoId, params) {
+  let xi = params.damping;
+  if (xi == null && sismoId === "frecuente" && params.hn != null) {
+    const hn = positive("hn", params.hn);
+    xi = Math.min(0.05, 0.2 / Math.sqrt(hn));
+  }
+  if (xi == null) return 0.05;
+  if (!(Number.isFinite(xi) && xi > 0 && xi <= 0.3)) {
+    throw new Error("El amortiguamiento debe estar entre 0 y 30 %");
+  }
+  return xi;
+}
+
+// Qué curva entra al análisis espectral según el sismo:
+//   diseño     → inelástico Ad(T) (7.3; 8.1.b)
+//   frecuente  → elástico A(T) con el ξ de 8.7.2 (8.7.2.a)
+//   extremo    → elástico A(T). La norma exige análisis inelástico (8.1.c, 9.6); el
+//                espectro elástico solo sirve de referencia, y así se avisa.
+function analysisCurve(sismoId) {
+  return sismoId === "diseno" ? "inelastico" : "elastico";
+}
+
 function resolve(code, params) {
   const notes = [];
   const A0 = positive("A0", params.A0);
@@ -108,10 +140,8 @@ function resolve(code, params) {
 
   const AA = FA * aA0;
   const AV = FV * aA1;
-  const beta = code.beta;
-  if (params.damping != null && Math.abs(params.damping - 0.05) > 1e-9) {
-    throw new Error("Solo está implementado el amortiguamiento de 5% (β = 2,4); 7.6 no está programado");
-  }
+  const damping = resolveDamping(sismoId, params);
+  const beta = betaForDamping(code, damping);
   const betaStar = Math.max(beta, AV / AA);
   const TC = AV / (code.TC_divisor * AA);
   const TB = code.TB_factor * TC;
@@ -123,7 +153,17 @@ function resolve(code, params) {
   const tp = code.Tplus;
   const TplusRaw = R < tp.Rlimite ? tp.factor * (R - 1) : tp.constante;
   const Tplus = Math.min(tp.maxTC * TC, Math.max(tp.minTC * TC, TplusRaw));
-  if (Tplus !== TplusRaw) notes.push(`T⁺ = ${round(TplusRaw)} acotado a ${round(Tplus)} (7.23)`);
+  if (Tplus !== TplusRaw && sismoId === "diseno") notes.push(`T⁺ = ${round(TplusRaw)} acotado a ${round(Tplus)} (7.23)`);
+
+  if (sismoId === "diseno" && params.grupo === "A1" && params.alpha == null) {
+    notes.push("Grupo A1: α se determina con un estudio especial de amenaza o de sitio (4.3.c); α = 2,0 de la tabla 4 es la referencia de acotación (4.6.3.e)");
+  }
+  if (sismoId === "extremo") {
+    notes.push("Sismo Extremo: requiere estudio especial de amenaza o de sitio (4.4.b) y análisis inelástico (8.1.c, 9.6). El espectro elástico con αE de la tabla 5 es la referencia de acotación");
+  }
+  if (sismoId === "frecuente" && params.damping == null && params.hn == null) {
+    notes.push("Sismo Frecuente: el amortiguamiento es 0,2/√hn ≤ 5 % (8.7.2.b); indique hn para aplicarlo");
+  }
 
   const rho = params.rho != null ? positive("ρ", params.rho) : 1;
   const FI = params.FI != null ? positive("FI", params.FI) : 1;
@@ -144,7 +184,7 @@ function resolve(code, params) {
     A0, A1, TL, H, claseSitio: clase, alpha, aA0, aA1,
     FAC, FVC, FDC, FAH, FVH, FDH, FAT: topo.FAT, FVT: topo.FVT, FDT: topo.FDT,
     FA, FV, FD, AA, AV, beta, betaStar, TA, TB, TC, TD, q,
-    sistema, R, Cd, omega0, rho, FI, Tplus,
+    sistema, R, Cd, omega0, rho, FI, Tplus, damping, curva: analysisCurve(sismoId),
     vertical, notes,
   };
 }
@@ -212,15 +252,20 @@ function table(code, params, { tMax = 4, step = 0.02 } = {}) {
   return { params: r, rows };
 }
 
-// Curva que entra al análisis modal espectral: el inelástico Ad(T).
+// Curva que entra al análisis modal espectral: Ad(T) para el Sismo de Diseño y A(T) para
+// el Frecuente y el Extremo (ver analysisCurve).
+function analysisOrdinate(r, T) {
+  return r.curva === "inelastico" ? inelastic(r, T) : elastic(r, T);
+}
+
 function sample(code, params, options) {
   const r = resolve(code, params);
   const tMax = Math.max(10, r.TD * 1.25);
   const opts = { tMax, ...(options || {}) };
-  return sampleGrid((T) => inelastic(r, T), [r.TA, r.Tplus, r.TB, r.TC, r.TD], opts);
+  return sampleGrid((T) => analysisOrdinate(r, T), [r.TA, r.Tplus, r.TB, r.TC, r.TD], opts);
 }
 
 module.exports = {
-  sample, resolve, table,
+  sample, resolve, table, betaForDamping, analysisOrdinate,
   elastic, inelastic, displacement, totalDisplacement, verticalOrdinate,
 };
