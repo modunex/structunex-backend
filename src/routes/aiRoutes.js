@@ -5,6 +5,7 @@ const c = require("../controllers/aiController");
 // requireAuth y loadProject (req.project / req.projectId).
 const router = Router({ mergeParams: true });
 
+router.get("/options", c.options);
 router.get("/conversations", c.list);
 router.post("/conversations", c.create);
 router.get("/conversations/:conversationId", c.getOne);

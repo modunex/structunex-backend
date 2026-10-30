@@ -14,6 +14,7 @@ const { TOOLS, runTool } = require("./tools");
 const { createChangesetBuilder } = require("./changeset");
 const { hydrateContent } = require("./attachments");
 const { unitSystemById } = require("./units");
+const models = require("./models");
 
 const MAX_ITERATIONS = 16;
 const MAX_TOKENS = 32000;
@@ -29,13 +30,13 @@ const TOOL_LABELS = {
 };
 
 /** Mensaje de error legible a partir de un error del SDK. */
-function describeError(err) {
+function describeError(err, model) {
   const status = err && err.status;
   if (status === 401 || status === 403) {
     return "Bedrock rechazó las credenciales: revisa que el usuario de IAM tenga permiso para invocar el modelo y que el acceso al modelo esté habilitado en la región.";
   }
   if (status === 404) {
-    return `El modelo "${env.bedrockModelId}" no está disponible en Bedrock (${env.bedrockRegion}). Revisa BEDROCK_MODEL_ID y BEDROCK_REGION.`;
+    return `El modelo "${model || env.bedrockModelId}" no está disponible en Bedrock (${env.bedrockRegion}). Revisa BEDROCK_MODEL_ID / AI_MODELS y BEDROCK_REGION.`;
   }
   if (status === 429) return "Se alcanzó el límite de uso de Bedrock. Inténtalo de nuevo en unos segundos.";
   if (status === 413) return "Los adjuntos son demasiado grandes para una sola petición.";
@@ -73,6 +74,7 @@ function addUsage(total, usage) {
  */
 async function runTurn(p) {
   const { conversation, project, ownerId, send, signal } = p;
+  const run = p.run || models.resolve(p.model, p.effort);
   const sys = unitSystemById(p.unitSystemId);
 
   const [history, attachments, materials, sections] = await Promise.all([
@@ -117,13 +119,13 @@ async function runTurn(p) {
 
     const stream = bedrock().messages.stream(
       {
-        model: env.bedrockModelId,
+        model: run.model,
         max_tokens: MAX_TOKENS,
         system,
         tools: TOOLS,
         messages,
         thinking: { type: "adaptive", display: env.aiThinkingDisplay },
-        output_config: { effort: env.aiEffort },
+        output_config: { effort: run.effort },
         // Caché automática del prefijo (tools → system → historial).
         cache_control: { type: "ephemeral" },
       },
@@ -172,7 +174,7 @@ async function runTurn(p) {
             conversationId: conversation.id,
             role: "assistant",
             content: final.content,
-            usage: final.usage,
+            usage: { ...final.usage, model: run.model, effort: run.effort },
           },
         }),
         prisma.aiMessage.create({
@@ -188,7 +190,7 @@ async function runTurn(p) {
         conversationId: conversation.id,
         role: "assistant",
         content: final.content,
-        usage: final.usage,
+        usage: { ...final.usage, model: run.model, effort: run.effort },
       },
     });
     lastAssistantId = row.id;
@@ -216,7 +218,7 @@ async function runTurn(p) {
     where: { id: conversation.id },
     data: { updatedAt: new Date() },
   });
-  send("done", { messageId: lastAssistantId, usage });
+  send("done", { messageId: lastAssistantId, usage, model: run.model, effort: run.effort });
 }
 
 module.exports = { runTurn, describeError };

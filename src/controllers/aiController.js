@@ -4,6 +4,7 @@ const { asyncHandler, AppError } = require("../middleware/errorHandler");
 const svc = require("../services/aiChatService");
 const { runTurn, describeError } = require("../services/ai/agent");
 const { UNIT_SYSTEM_IDS } = require("../services/ai/units");
+const aiModels = require("../services/ai/models");
 
 // Un turno a la vez por usuario: evita dobles envíos y pone un techo al gasto.
 const activeTurns = new Set();
@@ -28,6 +29,13 @@ const messageSchema = z.object({
   checkReport: z.any().optional(),
   unitSystemId: z.enum(UNIT_SYSTEM_IDS).default("kn-m"),
   language: z.enum(["es", "en"]).default("es"),
+  // Elegidos por el usuario; el modelo tiene que estar en la allowlist del servidor.
+  model: z
+    .string()
+    .max(200)
+    .refine((m) => aiModels.isAllowedModel(m), { message: "Modelo no permitido" })
+    .optional(),
+  effort: z.enum(aiModels.EFFORTS).optional(),
 });
 
 /** parse() que responde 400 en vez de dejar escapar un ZodError (sería un 500). */
@@ -56,6 +64,11 @@ async function previousProposalNote(conversationId) {
 }
 
 module.exports = {
+  /** Modelos y esfuerzos que se pueden elegir en el chat. */
+  options: asyncHandler(async (_req, res) => {
+    res.json(aiModels.options());
+  }),
+
   list: asyncHandler(async (req, res) => {
     res.json(await svc.list(req.projectId, req.userId));
   }),
@@ -150,6 +163,8 @@ module.exports = {
 
     const controller = new AbortController();
     res.on("close", () => controller.abort());
+    const run = aiModels.resolve(body.model, body.effort);
+    send("meta", { model: run.model, label: run.label, effort: run.effort });
 
     try {
       await runTurn({
@@ -161,13 +176,14 @@ module.exports = {
         checkReport: body.checkReport,
         unitSystemId: body.unitSystemId,
         language: body.language,
+        run,
         send,
         signal: controller.signal,
       });
     } catch (err) {
       if (!controller.signal.aborted) {
         console.error("[ai] turn failed", err);
-        send("error", { message: describeError(err) });
+        send("error", { message: describeError(err, run.model) });
       }
     } finally {
       clearInterval(heartbeat);
