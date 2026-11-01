@@ -37,6 +37,17 @@ const STEEL_RANGES = {
 const bad = (message, field) => new AppError(400, message, { error: "design.preferenceInvalid", field });
 const isNum = (v) => typeof v === "number" && Number.isFinite(v);
 
+/** Cortes de la leyenda: tres, crecientes, por debajo del límite D/C. Solo visual. */
+function checkDisplay(display, ratioLimit) {
+  if (display === undefined) return;
+  const bands = display?.bands;
+  const limit = isNum(ratioLimit) ? ratioLimit : 1;
+  const ok =
+    display && typeof display === "object" && Array.isArray(bands) && bands.length === 3 &&
+    bands.every(isNum) && bands[0] > 0 && bands[0] < bands[1] && bands[1] < bands[2] && bands[2] < limit;
+  if (!ok) throw bad("Bandas de color inválidas.", "display.bands");
+}
+
 /** Lanza 400 si algo de lo pedido está fuera de lo que el motor acepta. */
 function checkPreferences(requested) {
   if (!requested) return;
@@ -50,6 +61,7 @@ function checkPreferences(requested) {
       throw bad("El límite D/C debe estar entre 0 y 1.", "ratioLimit");
     }
   }
+  checkDisplay(requested.display, requested.ratioLimit);
   const steel = requested.steel;
   if (steel === undefined) return;
   if (steel === null || typeof steel !== "object" || Array.isArray(steel)) {
@@ -86,6 +98,8 @@ function mergePreferences(stored, requested) {
  */
 function canonicalPreferences(preferences) {
   const p = { ...(preferences || {}) };
+  // Solo visual (colores de la leyenda): no cambia ningún resultado.
+  delete p.display;
   if (p.method === DEFAULT_PREFERENCES.method) delete p.method;
   if (p.ratioLimit === DEFAULT_PREFERENCES.ratioLimit) delete p.ratioLimit;
   if (p.steel && typeof p.steel === "object") {

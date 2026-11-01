@@ -17,6 +17,7 @@ test("acepta lo que el motor acepta", () => {
       method: "LRFD",
       ratioLimit: 0.95,
       steel: { torsion: "ignore", kMajor: 0.8, kMinor: null, cb: 1.14, lbRatio: 0.5 },
+      display: { bands: [0.4, 0.6, 0.8] },
     })
   );
 });
@@ -33,6 +34,9 @@ test("rechaza con 400 lo que el motor no acepta", () => {
     { steel: { lbRatio: 0 } },
     { steel: { kMajor: Number.NaN } },
     { steelCode: "AISC360-10" },
+    { display: { bands: [0.5, 0.4, 0.9] } },
+    { display: { bands: [0.5, 0.7] } },
+    { ratioLimit: 0.85, display: { bands: [0.5, 0.7, 0.9] } },
   ]) {
     assert.throws(() => checkPreferences(bad), (e) => e.statusCode === 400 || e.status === 400, JSON.stringify(bad));
   }
@@ -64,6 +68,8 @@ test("la huella de una comprobación anterior no cambia por opciones sin tocar",
   // Cambiar una opción sí cambia la huella.
   assert.notEqual(designInputsHash(combos, mergePreferences(before, { steel: { torsion: "ignore" } })), legacy);
   assert.notEqual(designInputsHash(combos, mergePreferences(before, { ratioLimit: 0.9 })), legacy);
+  // Los colores de la leyenda no son una entrada de la comprobación.
+  assert.equal(designInputsHash(combos, mergePreferences(before, { display: { bands: [0.4, 0.6, 0.8] } })), legacy);
 });
 
 test("canonical quita solo lo que está en su valor por defecto", () => {
