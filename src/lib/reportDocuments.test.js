@@ -86,3 +86,16 @@ test("los ids reservados del servidor no se aceptan en un documento", () => {
 test("el aviso de un bloque no vigente explica el motivo en texto, no con claves", () => {
   assert.match(warningText("es")("stale", ["loads.changed"]), /combinaciones de carga cambiaron/);
 });
+
+test("plantilla informe sismorresistente: 9 capítulos, solo títulos y guías, documento válido", () => {
+  const { seismicReportDocument } = require("./reportDocuments");
+  for (const lang of ["es", "en"]) {
+    const doc = seismicReportDocument("Informe", lang);
+    assert.equal(validateDocument(doc), null);
+    const chapters = doc.blocks.filter((b) => b.type === "heading" && b.id.startsWith("t-h"));
+    assert.equal(chapters.length, 9);
+    assert.match(chapters[0].content[0].text, /^1\. /);
+    // La plantilla nunca trae datos técnicos: los inserta el usuario desde el archivo.
+    assert.ok(doc.blocks.every((b) => ["heading", "paragraph"].includes(b.type)));
+  }
+});

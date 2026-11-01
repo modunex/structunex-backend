@@ -11,6 +11,7 @@ const {
   blankDocument,
   bindingKey,
   templateBlocks,
+  seismicReportDocument,
   technicalBlocks,
   validateDocument,
   verifyDocument,
@@ -48,7 +49,9 @@ async function list(project) {
 /** Nuevo documento: en blanco o desde la plantilla "memoria" (todo lo vigente). */
 async function create(project, { title, lang = "es", template = "blank" }) {
   let document = blankDocument(title);
-  if (template === "memoria") {
+  if (template === "seismicReport") {
+    document = seismicReportDocument(title, lang);
+  } else if (template === "memoria") {
     const memo = await internals.buildMemoria(project, lang);
     if (memo.empty) {
       throw new AppError(409, "No hay nada vigente para la plantilla de memoria: analiza y comprueba el proyecto primero.");

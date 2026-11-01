@@ -63,7 +63,7 @@ const reportDocument = z.object({ version: z.literal(1), blocks: z.array(z.any()
 const createReportSchema = z.object({
   title: z.string().trim().min(1).max(160),
   lang: z.enum(["es", "en"]).default("es"),
-  template: z.enum(["blank", "memoria"]).default("blank"),
+  template: z.enum(["blank", "memoria", "seismicReport"]).default("blank"),
 });
 
 const updateReportSchema = z.object({

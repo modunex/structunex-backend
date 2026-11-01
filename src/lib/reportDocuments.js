@@ -135,7 +135,47 @@ function templateBlocks(blocks) {
   return blocks.filter((b) => b.type === "heading" || TECHNICAL.has(b.type));
 }
 
+// Plantilla "Informe sismorresistente": la estructura de una memoria de edificación de
+// acero con análisis modal espectral (COVENIN 1756 / AISC 360 / AISC 358). Solo títulos
+// y una línea guía por capítulo: el contenido técnico lo inserta el usuario desde el
+// archivo (bloques vinculados), nunca la plantilla.
+const SEISMIC_REPORT = {
+  es: [
+    ["Acciones verticales", "Cargas permanentes y variables consideradas (kgf/m²) y su origen normativo."],
+    ["Espectros de respuesta", "Espectros elástico e inelástico de cada sismo, de desplazamientos y de la componente vertical."],
+    ["Derivas de entrepiso", "Relación de deriva lateral total por nivel para cada sismo y su comparación con los límites."],
+    ["Deriva global", "Deriva lateral global de la edificación para cada sismo."],
+    ["Desempeño esperado", "Comparación de la deriva global con los umbrales de desempeño de referencia."],
+    ["Diseño de miembros", "Diseño de vigas y columnas según AISC 360. Inserta aquí la tabla o las hojas de las barras."],
+    ["Comprobación manual", "Verificación manual de los valores del reporte de diseño de las barras seleccionadas."],
+    ["Diseño de la conexión", "Conexión precalificada según AISC 358. Inserta aquí la hoja de la conexión."],
+    ["Conclusiones y recomendaciones", ""],
+  ],
+  en: [
+    ["Gravity loads", "Dead and live loads considered (kgf/m²) and their code source."],
+    ["Response spectra", "Elastic and inelastic spectra of each earthquake, displacement spectrum and vertical component."],
+    ["Story drifts", "Total lateral drift ratio per story for each earthquake and comparison with the limits."],
+    ["Global drift", "Global lateral drift of the building for each earthquake."],
+    ["Expected performance", "Comparison of the global drift with the reference performance thresholds."],
+    ["Member design", "Beam and column design per AISC 360. Insert the member table or sheets here."],
+    ["Hand check", "Hand verification of the design report values of the selected members."],
+    ["Connection design", "Prequalified connection per AISC 358. Insert the connection sheet here."],
+    ["Conclusions and recommendations", ""],
+  ],
+};
+
+function seismicReportDocument(title, lang = "es") {
+  const chapters = SEISMIC_REPORT[lang] || SEISMIC_REPORT.es;
+  const blocks = [{ id: "t-title", type: "heading", level: 1, content: [{ text: title }] }];
+  chapters.forEach(([heading, guide], i) => {
+    blocks.push({ id: `t-h${i + 1}`, type: "heading", level: 1, content: [{ text: `${i + 1}. ${heading}` }] });
+    blocks.push({ id: `t-p${i + 1}`, type: "paragraph", content: guide ? [{ text: guide }] : [] });
+  });
+  return { version: 1, blocks };
+}
+
 module.exports = {
+  seismicReportDocument,
   TECHNICAL,
   validateDocument,
   bindingKey,
