@@ -81,3 +81,30 @@ test("canonical quita solo lo que está en su valor por defecto", () => {
     steel: { cb: 1.1 },
   });
 });
+
+test("sísmico: valida Ry y Ωo, mezcla campo a campo y no cambia huellas viejas", () => {
+  for (const bad of [{ seismic: { ry: 0.9 } }, { seismic: { ry: 2.5 } }, { seismic: { omega0: 1 } }, { seismic: null }]) {
+    assert.throws(() => checkPreferences(bad), (e) => e.statusCode === 400 || e.status === 400, JSON.stringify(bad));
+  }
+  assert.doesNotThrow(() => checkPreferences({ seismic: { ry: 1.1, omega0: 3 } }));
+  assert.doesNotThrow(() => checkPreferences({ seismic: { ry: null } }));
+  const merged = mergePreferences({ seismic: { ry: 1.5 } }, { seismic: { omega0: 2.5 } });
+  assert.deepEqual(merged.seismic, { ry: 1.5, omega0: 2.5 });
+  assert.equal("seismic" in canonicalPreferences(mergePreferences({}, null)), false);
+});
+
+test("la huella cambia con el sistema resistente asignado; sin sistemas, es la de antes", () => {
+  const combos = [{ name: "1.4D", factors: [{ factor: 1.4, pattern: "D" }] }];
+  const prefs = mergePreferences({}, null);
+  const none = designInputsHash(combos, prefs);
+  assert.equal(designInputsHash(combos, prefs, []), none);
+  const smf = designInputsHash(combos, prefs, [{ elementId: "E1", type: "SMF" }]);
+  const imf = designInputsHash(combos, prefs, [{ elementId: "E1", type: "IMF" }]);
+  assert.notEqual(smf, none);
+  assert.notEqual(smf, imf);
+  // El orden de las barras no importa.
+  assert.equal(
+    designInputsHash(combos, prefs, [{ elementId: "E1", type: "SMF" }, { elementId: "E2", type: "OMF" }]),
+    designInputsHash(combos, prefs, [{ elementId: "E2", type: "OMF" }, { elementId: "E1", type: "SMF" }])
+  );
+});

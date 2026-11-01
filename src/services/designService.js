@@ -6,6 +6,7 @@ const {
   checkPreferences,
   mergePreferences,
 } = require("../lib/designPreferences");
+const { memberLateralSystems } = require("../lib/lateralSystems");
 const designJob = require("./designJob");
 const s3Service = require("./s3Service");
 const { getShape } = require("../lib/aiscShapes");
@@ -196,15 +197,42 @@ async function savePreferences(projectId, requested) {
   return preferences;
 }
 
-/** Huella de las entradas vigentes (combinaciones + preferencias guardadas). */
+/**
+ * Lo que AISC 341 necesita del modelo y no está en la huella del análisis: el sistema
+ * resistente de cada barra y qué patrones son de sismo (los que Ωo multiplica).
+ */
+async function seismicInputs(projectId) {
+  const [elements, configuration] = await Promise.all([
+    prisma.modelElement.findMany({
+      where: { projectId, lateralSystem: { not: null } },
+      select: { id: true, lateralSystem: true },
+    }),
+    prisma.modelConfiguration.findUnique({
+      where: { projectId },
+      select: { lateralSystems: true, loadPatterns: true },
+    }),
+  ]);
+  return {
+    memberSystems: memberLateralSystems(elements, configuration?.lateralSystems || []),
+    seismicPatterns: (configuration?.loadPatterns || [])
+      .filter((p) => p && p.type === "quake" && p.name)
+      .map((p) => p.name),
+  };
+}
+
+/** Huella de las entradas vigentes (combinaciones + preferencias + sistemas). */
 async function currentInputsHash(projectId) {
-  const configuration = await prisma.modelConfiguration.findUnique({
-    where: { projectId },
-    select: { designPreferences: true, loadCombinations: true },
-  });
+  const [configuration, seismic] = await Promise.all([
+    prisma.modelConfiguration.findUnique({
+      where: { projectId },
+      select: { designPreferences: true, loadCombinations: true },
+    }),
+    seismicInputs(projectId),
+  ]);
   return designInputsHash(
     configuration?.loadCombinations || [],
-    mergePreferences(configuration?.designPreferences || {}, null)
+    mergePreferences(configuration?.designPreferences || {}, null),
+    seismic.memberSystems
   );
 }
 
@@ -248,7 +276,10 @@ async function run(project, options) {
     );
   }
 
-  const model = await assembleDesignModel(projectId);
+  const [model, seismic] = await Promise.all([
+    assembleDesignModel(projectId),
+    seismicInputs(projectId),
+  ]);
   if (model.elements.length === 0) {
     throw new AppError(
       409,
@@ -258,9 +289,14 @@ async function run(project, options) {
 
   await designJob.start(projectId, {
     analysisRunId: analysisRun.id,
-    inputsHash: designInputsHash(combinations, preferences),
+    inputsHash: designInputsHash(combinations, preferences, seismic.memberSystems),
     cases: analysisRun.cases.map((c) => ({ name: c.name, key: c.key, kind: c.kind })),
-    model,
+    model: {
+      ...model,
+      // AISC 341 por barra (calc-service DesignRequest.lateralSystems / seismicPatterns).
+      lateralSystems: seismic.memberSystems,
+      seismicPatterns: seismic.seismicPatterns,
+    },
     combinations: combinations.map((c) => ({
       name: c.name,
       factors: (c.factors || []).map((f) => ({
@@ -388,5 +424,6 @@ module.exports = {
   assembleDesignModel,
   resolvePreferences,
   savePreferences,
+  seismicInputs,
   DEFAULT_PREFERENCES,
 };

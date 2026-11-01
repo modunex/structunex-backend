@@ -15,12 +15,15 @@ const DEFAULT_STEEL = Object.freeze({
   lbRatio: null,
 });
 
+const DEFAULT_SEISMIC = Object.freeze({ ry: null, omega0: 3 });
+
 const DEFAULT_PREFERENCES = Object.freeze({
   code: "ACI318-19",
   steelCode: "AISC360-16",
   method: "LRFD",
   ratioLimit: 1,
   steel: DEFAULT_STEEL,
+  seismic: DEFAULT_SEISMIC,
   comboNames: [],
   overrides: [],
 });
@@ -48,6 +51,21 @@ function checkDisplay(display, ratioLimit) {
   if (!ok) throw bad("Bandas de color inválidas.", "display.bands");
 }
 
+/** Sísmico (AISC 341): Ry de la Tabla A3.2 (1–2) y Ωo de la norma sísmica (1–5]. */
+function checkSeismic(seismic) {
+  if (seismic === undefined) return;
+  if (seismic === null || typeof seismic !== "object" || Array.isArray(seismic)) {
+    throw bad("Preferencias sísmicas inválidas.", "seismic");
+  }
+  const { ry, omega0 } = seismic;
+  if (ry !== undefined && ry !== null && (!isNum(ry) || ry < 1 || ry > 2)) {
+    throw bad("Ry debe estar entre 1 y 2 (AISC 341 Tabla A3.2).", "seismic.ry");
+  }
+  if (omega0 !== undefined && (!isNum(omega0) || omega0 <= 1 || omega0 > 5)) {
+    throw bad("Ωo debe ser mayor que 1 y no mayor que 5.", "seismic.omega0");
+  }
+}
+
 /** Lanza 400 si algo de lo pedido está fuera de lo que el motor acepta. */
 function checkPreferences(requested) {
   if (!requested) return;
@@ -62,6 +80,7 @@ function checkPreferences(requested) {
     }
   }
   checkDisplay(requested.display, requested.ratioLimit);
+  checkSeismic(requested.seismic);
   const steel = requested.steel;
   if (steel === undefined) return;
   if (steel === null || typeof steel !== "object" || Array.isArray(steel)) {
@@ -88,7 +107,12 @@ function mergePreferences(stored, requested) {
     const pick = [r.steel?.[key], s.steel?.[key]].find((v) => v !== undefined);
     steel[key] = pick === undefined ? DEFAULT_STEEL[key] : pick;
   }
-  return { ...DEFAULT_PREFERENCES, ...s, ...r, steel };
+  const seismic = {};
+  for (const key of Object.keys(DEFAULT_SEISMIC)) {
+    const pick = [r.seismic?.[key], s.seismic?.[key]].find((v) => v !== undefined);
+    seismic[key] = pick === undefined ? DEFAULT_SEISMIC[key] : pick;
+  }
+  return { ...DEFAULT_PREFERENCES, ...s, ...r, steel, seismic };
 }
 
 /**
@@ -109,12 +133,20 @@ function canonicalPreferences(preferences) {
     if (Object.keys(steel).length === 0) delete p.steel;
     else p.steel = steel;
   }
+  if (p.seismic && typeof p.seismic === "object") {
+    const seismic = Object.fromEntries(
+      Object.entries(p.seismic).filter(([k, v]) => v !== undefined && v !== DEFAULT_SEISMIC[k])
+    );
+    if (Object.keys(seismic).length === 0) delete p.seismic;
+    else p.seismic = seismic;
+  }
   return p;
 }
 
 module.exports = {
   DEFAULT_PREFERENCES,
   DEFAULT_STEEL,
+  DEFAULT_SEISMIC,
   checkPreferences,
   mergePreferences,
   canonicalPreferences,

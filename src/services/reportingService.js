@@ -108,9 +108,11 @@ async function currentLoadInputs(projectId) {
   const combinations = configuration?.loadCombinations || [];
   const prefs = configuration?.designPreferences || {};
   const { mergePreferences } = require("../lib/designPreferences");
+  const { seismicInputs } = require("./designService");
+  const { memberSystems } = await seismicInputs(projectId);
   return {
     connectionsHash: connectionLoadsHash(combinations, prefs.comboNames || []),
-    designHash: designInputsHash(combinations, mergePreferences(prefs, null)),
+    designHash: designInputsHash(combinations, mergePreferences(prefs, null), memberSystems),
   };
 }
 

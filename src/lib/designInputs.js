@@ -14,9 +14,17 @@ const normalizeCombinations = (combinations) =>
 
 const hash = (value) => crypto.createHash("sha256").update(stableStringify(value)).digest("hex");
 
-/** Comprobación de barras: combinaciones + preferencias resueltas. */
-const designInputsHash = (combinations, preferences) =>
-  hash({ combinations: normalizeCombinations(combinations), preferences: canonicalPreferences(preferences) });
+/**
+ * Comprobación de barras: combinaciones + preferencias resueltas + sistema resistente
+ * de cada barra (no está en la huella del modelo y activa AISC 341). Sin sistemas
+ * asignados la huella es la de siempre, así que las comprobaciones anteriores no caducan.
+ */
+const designInputsHash = (combinations, preferences, memberSystems) => {
+  const value = { combinations: normalizeCombinations(combinations), preferences: canonicalPreferences(preferences) };
+  const lateral = (memberSystems || []).map((m) => `${m.elementId}:${m.type}`).sort();
+  if (lateral.length) value.lateral = lateral;
+  return hash(value);
+};
 
 /** Comprobación de conexión: combinaciones + las elegidas (comboNames). */
 const connectionLoadsHash = (combinations, comboNames) =>

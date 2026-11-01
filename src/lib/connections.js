@@ -1,3 +1,4 @@
+const { memberLateralSystems } = require("./lateralSystems");
 // Piezas puras de services/connectionService.js, aparte para poder probarlas sin base
 // de datos (node --test src/lib/connections.test.js). Por eso no importa lib/ids.js,
 // que arrastra @prisma/client: la comprobación de UUID es la misma, en una línea.
@@ -27,14 +28,7 @@ function buildInspectRequest({
 }) {
   // Sistema resistente de cada barra del nudo que tiene uno DEFINIDO (un nombre que ya no
   // existe en la configuración no cuenta).
-  const systemsByName = new Map((lateralSystems || []).map((s) => [s.name, s]));
-  const memberSystems = elements
-    .filter((e) => e.lateralSystem && systemsByName.has(e.lateralSystem))
-    .map((e) => ({
-      elementId: e.id,
-      name: e.lateralSystem,
-      type: systemsByName.get(e.lateralSystem).type,
-    }));
+  const memberSystems = memberLateralSystems(elements, lateralSystems);
   return {
     source: {
       projectId: String(run.projectId),
