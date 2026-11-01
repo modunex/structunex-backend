@@ -1,7 +1,11 @@
 const { prisma } = require("../config/db");
 const { isUuid, toApi } = require("../lib/ids");
 const { AppError } = require("../middleware/errorHandler");
-const { checkCodes } = require("../lib/designCodes");
+const {
+  DEFAULT_PREFERENCES,
+  checkPreferences,
+  mergePreferences,
+} = require("../lib/designPreferences");
 const designJob = require("./designJob");
 const s3Service = require("./s3Service");
 const { getShape } = require("../lib/aiscShapes");
@@ -25,7 +29,7 @@ const RUN_SELECT = Object.fromEntries(
   [
     "id", "status", "startedAt", "finishedAt", "durationMs", "error", "code",
     "steelCode", "combos", "files", "counts", "notes", "bytes", "summary",
-    "schemaVersion", "analysisRunId",
+    "schemaVersion", "analysisRunId", "settings", "inputsHash",
   ].map((field) => [field, true])
 );
 const runToApi = (row) => (row ? toApi(row, "designRun") : row);
@@ -154,30 +158,19 @@ async function assembleDesignModel(projectId) {
   };
 }
 
-const DEFAULT_PREFERENCES = {
-  code: "ACI318-19",
-  steelCode: "AISC360-16",
-  comboNames: [],
-  overrides: [],
-};
-
 /**
  * Preferencias efectivas: las que manda la petición, si no las guardadas, si no las por
  * defecto. Las de la petición se persisten, para que volver a la sección Design
  * encuentre la última elección del usuario.
  */
 async function resolvePreferences(projectId, requested) {
-  checkCodes(requested);
+  checkPreferences(requested);
   const configuration = await prisma.modelConfiguration.findUnique({
     where: { projectId },
     select: { designPreferences: true, loadCombinations: true },
   });
   const stored = configuration?.designPreferences || {};
-  const preferences = {
-    ...DEFAULT_PREFERENCES,
-    ...stored,
-    ...(requested || {}),
-  };
+  const preferences = mergePreferences(stored, requested);
   if (requested) {
     await prisma.modelConfiguration.upsert({
       where: { projectId },
@@ -189,6 +182,30 @@ async function resolvePreferences(projectId, requested) {
     preferences,
     combinations: configuration?.loadCombinations || [],
   };
+}
+
+/**
+ * Design ▸ Preferences ▸ Guardar: persiste sin lanzar la comprobación. La última
+ * comprobación queda como estaba; `get` dirá que sus entradas cambiaron.
+ */
+async function savePreferences(projectId, requested) {
+  if (!requested || typeof requested !== "object" || Array.isArray(requested)) {
+    throw new AppError(400, "Faltan las preferencias.", { error: "design.preferenceInvalid" });
+  }
+  const { preferences } = await resolvePreferences(projectId, requested);
+  return preferences;
+}
+
+/** Huella de las entradas vigentes (combinaciones + preferencias guardadas). */
+async function currentInputsHash(projectId) {
+  const configuration = await prisma.modelConfiguration.findUnique({
+    where: { projectId },
+    select: { designPreferences: true, loadCombinations: true },
+  });
+  return designInputsHash(
+    configuration?.loadCombinations || [],
+    mergePreferences(configuration?.designPreferences || {}, null)
+  );
 }
 
 /** Lanza la comprobación y responde 202; el progreso se consulta con GET. */
@@ -309,6 +326,10 @@ async function get(projectId) {
   // estructura. La interfaz la marca y pide volver a analizar.
   if (run && !(running || inFlight)) {
     run.staleReason = await runStaleReason(projectId, run.analysisRunId);
+    // Combinaciones o preferencias cambiadas desde que se comprobó: los ratios siguen
+    // siendo de este análisis (se enseñan), pero no de las entradas actuales.
+    const current = await currentInputsHash(projectId);
+    run.inputsChanged = !!run.inputsHash && run.inputsHash !== current;
   }
 
   return {
@@ -366,5 +387,6 @@ module.exports = {
   signRun,
   assembleDesignModel,
   resolvePreferences,
+  savePreferences,
   DEFAULT_PREFERENCES,
 };

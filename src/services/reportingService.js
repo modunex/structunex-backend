@@ -107,10 +107,10 @@ async function currentLoadInputs(projectId) {
   });
   const combinations = configuration?.loadCombinations || [];
   const prefs = configuration?.designPreferences || {};
-  const { DEFAULT_PREFERENCES } = require("./designService");
+  const { mergePreferences } = require("../lib/designPreferences");
   return {
     connectionsHash: connectionLoadsHash(combinations, prefs.comboNames || []),
-    designHash: designInputsHash(combinations, { ...DEFAULT_PREFERENCES, ...prefs }),
+    designHash: designInputsHash(combinations, mergePreferences(prefs, null)),
   };
 }
 

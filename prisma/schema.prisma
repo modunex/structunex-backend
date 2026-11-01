@@ -423,6 +423,9 @@ model DesignRun {
   notes         String[]
   bytes         BigInt    @default(0)
   summary       Json      @default("{}")
+  // Design ▸ Preferences con que se comprobó ({method, ratioLimit, steel}); {} en las
+  // comprobaciones anteriores a que existieran (= los valores por defecto).
+  settings      Json      @default("{}")
   // Huella de combinaciones + preferencias con que se comprobó (lib/designInputs.js):
   // si cambian, la comprobación deja de ser vigente aunque el análisis lo sea.
   inputsHash    String?

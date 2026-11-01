@@ -3,6 +3,7 @@
 // conexión) hecha con otras combinaciones ya no es vigente aunque el análisis lo sea.
 const crypto = require("node:crypto");
 const { stableStringify } = require("./modelHash");
+const { canonicalPreferences } = require("./designPreferences");
 
 /** Las combinaciones tal como las recibe el motor (nombre + términos). */
 const normalizeCombinations = (combinations) =>
@@ -15,7 +16,7 @@ const hash = (value) => crypto.createHash("sha256").update(stableStringify(value
 
 /** Comprobación de barras: combinaciones + preferencias resueltas. */
 const designInputsHash = (combinations, preferences) =>
-  hash({ combinations: normalizeCombinations(combinations), preferences: preferences || {} });
+  hash({ combinations: normalizeCombinations(combinations), preferences: canonicalPreferences(preferences) });
 
 /** Comprobación de conexión: combinaciones + las elegidas (comboNames). */
 const connectionLoadsHash = (combinations, comboNames) =>

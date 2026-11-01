@@ -79,6 +79,7 @@ async function saveManifest(run, manifest) {
       notes: manifest.notes ?? [],
       bytes: manifest.bytes?.total ?? 0,
       summary: manifest.summary ?? {},
+      settings: manifest.settings ?? {},
     },
   });
 }

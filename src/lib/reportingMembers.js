@@ -10,7 +10,8 @@ const { sha256, snapshotFingerprint } = require("./reporting");
 const MEMBER_SNAPSHOT_VERSION = 1;
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
-const CRITERION_STATUS = new Set(["ok", "fail", "notVerified"]);
+// notConsidered: el ingeniero eligió no evaluarlo (Design ▸ Preferences, p. ej. torsión).
+const CRITERION_STATUS = new Set(["ok", "fail", "notVerified", "notConsidered"]);
 
 /** Estado de las ejecuciones de diseño (más reciente primero en el resultado).
  *  `latestStaleReason`: por qué la última ya no es del modelo (null = lo es). */
@@ -60,6 +61,9 @@ function memberListRow(m) {
   };
 }
 
+const nonEmpty = (o) => (o && typeof o === "object" && Object.keys(o).length > 0 ? o : null);
+const runSettings = (run, designRun) => nonEmpty(run.settings) || nonEmpty(designRun.settings);
+
 /** Una barra se puede documentar si el motor llegó a comprobar algo en ella. */
 const hasSheet = (m) => m && m.role !== "unchecked" && !!m.inputs;
 
@@ -103,6 +107,9 @@ function memberSnapshot(sheets, elementId, designRun) {
       engineVersion: run.engineVersion || null,
       schemaVersion: run.schemaVersion ?? null,
       analysisRunId: designRun.analysisRunId ?? null,
+      // Design ▸ Preferences de la comprobación (la memoria las declara). Solo si se
+      // guardaron: una comprobación anterior conserva su instantánea (y su huella).
+      ...(runSettings(run, designRun) ? { settings: runSettings(run, designRun) } : {}),
     },
     status: m.status,
     verification: m.verification || "",

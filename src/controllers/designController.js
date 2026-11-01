@@ -12,6 +12,11 @@ const run = asyncHandler(async (req, res) => {
   res.status(202).json(started);
 });
 
+// Design ▸ Preferences ▸ Guardar: persiste (y valida) sin lanzar la comprobación.
+const savePreferences = asyncHandler(async (req, res) => {
+  res.json({ preferences: await designService.savePreferences(req.projectId, req.body?.preferences) });
+});
+
 const get = asyncHandler(async (req, res) => {
   res.json(await designService.get(req.projectId));
 });
@@ -30,4 +35,4 @@ const runUrls = asyncHandler(async (req, res) => {
   res.json(await designService.signRun(req.projectId, req.params.runId));
 });
 
-module.exports = { run, get, cancel, listRuns, runUrls };
+module.exports = { run, get, cancel, listRuns, runUrls, savePreferences };

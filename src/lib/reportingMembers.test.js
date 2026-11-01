@@ -108,3 +108,21 @@ test("archivo de diseño: combinaciones o preferencias cambiadas", () => {
   // Sin huella guardada (ejecución anterior) no se puede afirmar que coincidan.
   assert.equal(archiveDesignRuns([{ ...runs[0], inputsHash: null }], { latestSolvedRunId: "a1", currentInputsHash: "x" })[0].state, "stale");
 });
+
+test("preferencias: torsión no considerada y settings en la instantánea", () => {
+  const sheets = JSON.parse(JSON.stringify(fixtures.w));
+  // Sin settings guardados (comprobación anterior): la instantánea no cambia.
+  assert.equal("settings" in memberSnapshot(sheets, "c1", designRun).run, false);
+  assert.equal("settings" in memberSnapshot(sheets, "c1", { ...designRun, settings: {} }).run, false);
+  const settings = { method: "LRFD", ratioLimit: 1, steel: { torsion: "ignore" } };
+  sheets.run = { ...(sheets.run || {}), settings };
+  sheets.criteria.c1.push({
+    name: "T", demand: 2.5, capacity: 0, ratio: 0, status: "notConsidered",
+    reason: "steel.torsionIgnored", assumptions: ["steel.torsionIgnored"], unit: "kN·m",
+  });
+  const s = memberSnapshot(sheets, "c1", designRun);
+  assert.deepEqual(s.run.settings, settings);
+  const t = s.criteria.find((c) => c.name === "T");
+  assert.equal(t.status, "notConsidered");
+  assert.equal(t.reason, "steel.torsionIgnored");
+});
