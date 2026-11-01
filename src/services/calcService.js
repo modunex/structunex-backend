@@ -67,10 +67,21 @@ async function analyzeModel(request) {
 //      anything without a response for a while (load balancers commonly cut at 30-60 s).
 // `signal` is an AbortSignal: aborting it drops the connection, and the calc-service
 // notices the disconnect and kills MYSTRAN.
-async function analyzeModelStream(request, { onProgress, signal } = {}) {
+async function analyzeModelStream(request, options = {}) {
+  return postStream("/analyze/stream", request, options);
+}
+
+// Comprobación por normativa con avance (NDJSON, mismo protocolo que el análisis). Sin
+// stream, un edificio grande dejaba al usuario minutos con "comprobando" y rozaba el
+// timeout de la llamada simple.
+async function designModelStream(request, options = {}) {
+  return postStream("/design/stream", request, options);
+}
+
+async function postStream(path, request, { onProgress, signal } = {}) {
   let response;
   try {
-    response = await axios.post(`${env.calcServiceUrl}/analyze/stream`, request, {
+    response = await axios.post(`${env.calcServiceUrl}${path}`, request, {
       responseType: "stream",
       signal,
       // No overall timeout: the stream can legitimately run for minutes. Liveness is
@@ -155,4 +166,10 @@ async function designModel(request, { signal } = {}) {
   }
 }
 
-module.exports = { analyzeModel, analyzeModelStream, designModel, fromCalcError };
+module.exports = {
+  analyzeModel,
+  analyzeModelStream,
+  designModel,
+  designModelStream,
+  fromCalcError,
+};

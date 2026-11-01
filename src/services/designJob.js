@@ -5,13 +5,14 @@
 //   1. NO toca `project.status` ni bloquea el modelo. Comprobar no re-resuelve nada, así
 //      que dejar el proyecto en "solving" mientras se comprueba impediría editar por una
 //      razón que no existe.
-//   2. Es una llamada sencilla, no un stream. Comprobar tarda segundos, no minutos: el
-//      progreso que se persiste es el de las fases del propio job, y no hay ningún
-//      proceso externo largo al que haya que mantener vivo con latidos.
+//   2. Usa el stream del calc-service (/design/stream): un edificio grande tarda
+//      minutos, y el usuario tiene que ver por qué barra va. El avance se persiste como
+//      mucho una vez por segundo (y siempre que cambia de fase).
 
 const { Prisma } = require("@prisma/client");
 const { prisma } = require("../config/db");
-const { designModel } = require("./calcService");
+const { designModelStream } = require("./calcService");
+const { progressThrottle } = require("../lib/progressThrottle");
 const s3Service = require("./s3Service");
 const { env } = require("../config/env");
 const { AppError } = require("../middleware/errorHandler");
@@ -35,11 +36,13 @@ async function setProgress(projectId, progress) {
         step: progress.step ?? null,
         current: progress.current ?? null,
         total: progress.total ?? null,
+        elementId: progress.elementId ?? null,
         updatedAt: new Date().toISOString(),
       },
     },
   });
 }
+
 
 /** Cierra una comprobación fallida sin tocar lo que ya hubiera comprobado antes. */
 async function settleFailure(projectId, runId, message) {
@@ -134,7 +137,8 @@ async function start(projectId, payload) {
       // compartido (local, staging y producción llaman al mismo), y solo nosotros
       // sabemos de qué bucket leer y en cuál escribir, porque somos quienes firmamos
       // las descargas después.
-      const { manifest } = await designModel(
+      const shouldWrite = progressThrottle();
+      const { manifest } = await designModelStream(
         {
           source: {
             projectId: key,
@@ -153,7 +157,13 @@ async function start(projectId, payload) {
             prefix: env.s3Prefix,
           },
         },
-        { signal: controller.signal }
+        {
+          signal: controller.signal,
+          onProgress: (e) => {
+            // Sin await: perder una escritura de avance no debe tumbar la comprobación.
+            if (shouldWrite(e)) setProgress(projectId, e).catch(() => {});
+          },
+        }
       );
 
       if (!manifest) {
