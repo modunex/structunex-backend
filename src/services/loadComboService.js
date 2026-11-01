@@ -1,4 +1,9 @@
 const { getCatalog } = require("../lib/loadCombinationsCatalog");
+const { buildCoveninCombos } = require("../lib/coveninCombos");
+
+// Conjunto de combinaciones sísmicas de COVENIN 1756-1:2019 (8.3.2.1). Solo aporta las
+// combinaciones CON sismo; las gravitatorias las da otro conjunto marcado a la vez.
+const COVENIN_SET = "COVENIN1756";
 
 // Generación de los "Default Design Combos" (estilo SAP/ETABS), del lado del servidor.
 //
@@ -47,11 +52,17 @@ function pickCatalogCombos(catalog, sets) {
 function generateDefaultCombos({
   loadPatterns = [],
   responseSpectrumCases = [],
+  spectrumFunctions = [],
   sets = [],
+  covenin = null,
   reservedNames = [],
 } = {}) {
   const catalog = getCatalog();
   const catalogCombos = pickCatalogCombos(catalog, sets);
+  // Con COVENIN 1756 marcado, el sismo lo pone la 1756: las combinaciones sísmicas del
+  // catálogo ASCE 7 no se generan (serían una segunda norma sísmica sobre el mismo caso).
+  const withCovenin = sets.includes(COVENIN_SET);
+  let skippedSeismicCatalog = 0;
 
   const patternsByLetter = new Map();
   for (const p of loadPatterns) {
@@ -86,6 +97,10 @@ function generateDefaultCombos({
       }
     }
 
+    if (seismicFactor != null && withCovenin) {
+      skippedSeismicCatalog++;
+      continue;
+    }
     if (seismicFactor != null) {
       // Un combo sísmico sin casos RS no tiene sentido: se omite.
       if (!hasSeismic) {
@@ -111,7 +126,20 @@ function generateDefaultCombos({
     combos.push({ name: uniqueName(c.nombre), factors: staticFactors });
   }
 
-  return { combos, skipped };
+  let coveninMeta = null;
+  if (withCovenin) {
+    const out = buildCoveninCombos({
+      loadPatterns,
+      responseSpectrumCases,
+      spectrumFunctions,
+      options: covenin || {},
+      uniqueName,
+    });
+    combos.push(...out.combos);
+    coveninMeta = out.meta;
+  }
+
+  return { combos, skipped, skippedSeismicCatalog, covenin: coveninMeta };
 }
 
-module.exports = { generateDefaultCombos, LETTER_BY_TYPE, SEISMIC_LETTER };
+module.exports = { generateDefaultCombos, LETTER_BY_TYPE, SEISMIC_LETTER, COVENIN_SET };

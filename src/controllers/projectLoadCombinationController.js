@@ -1,4 +1,5 @@
-const { asyncHandler } = require("../middleware/errorHandler");
+const { asyncHandler, AppError } = require("../middleware/errorHandler");
+const { CoveninComboError } = require("../lib/coveninCombos");
 const { prisma } = require("../config/db");
 const { generateDefaultCombos } = require("../services/loadComboService");
 
@@ -12,16 +13,33 @@ module.exports = {
 
     const config = await prisma.modelConfiguration.findUnique({
       where: { projectId },
-      select: { loadPatterns: true, responseSpectrumCases: true, loadCombinations: true },
+      select: {
+        loadPatterns: true,
+        responseSpectrumCases: true,
+        spectrumFunctions: true,
+        loadCombinations: true,
+      },
     });
 
-    const result = generateDefaultCombos({
+    let result;
+    try {
+      result = generateDefaultCombos({
       loadPatterns: (config && config.loadPatterns) || [],
       responseSpectrumCases: (config && config.responseSpectrumCases) || [],
+      spectrumFunctions: (config && config.spectrumFunctions) || [],
       sets,
+      covenin: (req.body && req.body.covenin) || null,
       // No colisionar con los combos que el proyecto ya tiene.
       reservedNames: ((config && config.loadCombinations) || []).map((c) => c.name),
-    });
+      });
+    } catch (err) {
+      // Datos que faltan o no encajan con la 1756 (casos, función, γ): error del usuario,
+      // con la clave que el front traduce. Nada se genera a medias.
+      if (err instanceof CoveninComboError) {
+        throw new AppError(400, err.code, { detail: err.message });
+      }
+      throw err;
+    }
 
     res.json(result);
   }),
