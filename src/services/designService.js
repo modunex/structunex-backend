@@ -7,6 +7,7 @@ const {
   mergePreferences,
 } = require("../lib/designPreferences");
 const { memberLateralSystems } = require("../lib/lateralSystems");
+const { smfJoints } = require("../lib/smfJoints");
 const designJob = require("./designJob");
 const s3Service = require("./s3Service");
 const { getShape } = require("../lib/aiscShapes");
@@ -236,6 +237,30 @@ async function currentInputsHash(projectId) {
   );
 }
 
+/**
+ * Design ▸ Tablas ▸ Nudos SMF: columna fuerte / viga débil y zona de panel por nudo, a
+ * partir de las conexiones comprobadas (lib/smfJoints.js).
+ */
+async function joints(project) {
+  const connectionService = require("./connectionService");
+  const projectId = project.id;
+  const [nodes, elements, configuration, connections] = await Promise.all([
+    prisma.modelNode.findMany({ where: { projectId }, select: { id: true, x: true, y: true, z: true } }),
+    prisma.modelElement.findMany({
+      where: { projectId },
+      select: { id: true, nodeA: true, nodeB: true, lateralSystem: true },
+    }),
+    prisma.modelConfiguration.findUnique({ where: { projectId }, select: { lateralSystems: true } }),
+    connectionService.list(project),
+  ]);
+  return smfJoints({
+    nodes,
+    elements,
+    memberSystems: memberLateralSystems(elements, configuration?.lateralSystems || []),
+    connections,
+  });
+}
+
 /** Lanza la comprobación y responde 202; el progreso se consulta con GET. */
 async function run(project, options) {
   const projectId = project.id;
@@ -425,5 +450,6 @@ module.exports = {
   resolvePreferences,
   savePreferences,
   seismicInputs,
+  joints,
   DEFAULT_PREFERENCES,
 };

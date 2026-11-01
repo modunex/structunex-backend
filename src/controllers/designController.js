@@ -17,6 +17,11 @@ const savePreferences = asyncHandler(async (req, res) => {
   res.json({ preferences: await designService.savePreferences(req.projectId, req.body?.preferences) });
 });
 
+// Design ▸ Tablas ▸ Nudos SMF (AISC 341 E3.4a / E3.6e por nudo).
+const joints = asyncHandler(async (req, res) => {
+  res.json(await designService.joints(req.project));
+});
+
 const get = asyncHandler(async (req, res) => {
   res.json(await designService.get(req.projectId));
 });
@@ -35,4 +40,4 @@ const runUrls = asyncHandler(async (req, res) => {
   res.json(await designService.signRun(req.projectId, req.params.runId));
 });
 
-module.exports = { run, get, cancel, listRuns, runUrls, savePreferences };
+module.exports = { run, get, cancel, listRuns, runUrls, savePreferences, joints };

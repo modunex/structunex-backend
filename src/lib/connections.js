@@ -175,6 +175,8 @@ function runInputs(request, result) {
 
 /** Resumen de la última comprobación para listas y badges. `latestSolvedRunId` dice si
  *  se hizo con el análisis vigente; una conexión editada después vuelve a "draft". */
+const SYSTEM_CHECK_IDS = ["preq.columnBeamMomentRatio", "preq.panelZone", "preq.panelZoneThickness"];
+
 function runSummary(run, { latestSolvedRunId, connectionStatus, currentLoadsHash = null } = {}) {
   if (!run) return null;
   const results = run.results || {};
@@ -196,6 +198,11 @@ function runSummary(run, { latestSolvedRunId, connectionStatus, currentLoadsHash
       (!currentLoadsHash ||
         connectionLoadsHash(run.inputs?.combinations, run.inputs?.comboNames) === currentLoadsHash),
     error: run.error ?? null,
+    // Los requisitos del SISTEMA que la conexión verifica en su nudo (AISC 341 E3.4a,
+    // E3.6e): los reúne la tabla de nudos SMF de Design sin bajar el resultado entero.
+    systemChecks: (results.limitStates || [])
+      .filter((ls) => SYSTEM_CHECK_IDS.includes(ls.id))
+      .map((ls) => ({ id: ls.id, status: ls.status, ratio: ls.ratio ?? null, ref: ls.ref ?? "" })),
   };
 }
 
