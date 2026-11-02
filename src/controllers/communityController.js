@@ -70,6 +70,10 @@ const c = {
     redirectTo(res, await attachments.publicUrl(uuidParam(req.params.id)));
   }),
   // El GET no da de baja: algunos filtros de correo abren los enlaces por su cuenta.
+  download: asyncHandler(async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.json({ url: await attachments.publicUrl(uuidParam(req.params.id), undefined, { signedIn: true }) });
+  }),
   unsubscribePage: (req, res) => {
     const token = String(req.query.token ?? "").replace(/[^A-Za-z0-9._-]/g, "");
     res.type("html").send(

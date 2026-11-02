@@ -387,15 +387,32 @@ test("Comunidad", options, async (t) => {
 
     const number = await newThread(a.clerkId, { attachmentIds: [up.id] });
     assert.equal((await call("GET", `/threads/${number}`)).json.posts[0].attachments[0].available, false);
-    await assert.rejects(attachments.publicUrl(up.id, storage), /NotAvailable/); // escaneo pendiente
+    const signedIn = { signedIn: true };
+    await assert.rejects(attachments.publicUrl(up.id, storage, signedIn), /NotAvailable/); // escaneo pendiente
 
     const clean = fakeStorage({ getObjectTags: async () => ({ [attachments.SCAN_TAG]: "NO_THREATS_FOUND" }) });
-    assert.match(await attachments.publicUrl(up.id, clean), /s3\.test/);
+    await assert.rejects(attachments.publicUrl(up.id, clean), /SignInRequired/); // sin sesión
+    assert.equal((await call("GET", `/attachments/${up.id}`)).status, 401);
+    assert.equal((await call("GET", `/attachments/${up.id}/download`)).status, 401);
+    assert.match(await attachments.publicUrl(up.id, clean, signedIn), /s3\.test/);
     assert.equal(clean.calls.signed[0].inline, true);
     assert.equal(clean.calls.signed[0].contentType, "application/pdf");
 
     await call("POST", `/moderation/attachments/${up.id}/hide`, { user: mod.clerkId, body: {} });
-    await assert.rejects(attachments.publicUrl(up.id, clean), /NotFound/);
+    await assert.rejects(attachments.publicUrl(up.id, clean, signedIn), /NotFound/);
+  });
+
+  await t.test("adjuntos: las imágenes publicadas se ven sin sesión", async () => {
+    const a = await person();
+    const clean = fakeStorage({
+      getObjectHead: async () => Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      getObjectTags: async () => ({ [attachments.SCAN_TAG]: "NO_THREATS_FOUND" }),
+    });
+    const normalize = async () => ({ data: Buffer.from("x"), width: 8, height: 6, size: 1 });
+    const up = await attachments.presign(a.profile, { name: "x.png", size: 10 }, clean);
+    await attachments.complete(a.profile, up.id, clean, normalize);
+    await newThread(a.clerkId, { attachmentIds: [up.id] });
+    assert.match(await attachments.publicUrl(up.id, clean), /s3\.test/);
   });
 
   await t.test("un autor no puede borrar un archivo ocultado por moderación", async () => {
@@ -430,7 +447,7 @@ test("Comunidad", options, async (t) => {
     await attachments.complete(a.profile, up.id, storage);
     const number = await newThread(a.clerkId, { attachmentIds: [up.id] });
     const infected = fakeStorage({ getObjectTags: async () => ({ [attachments.SCAN_TAG]: "THREATS_FOUND" }) });
-    await assert.rejects(attachments.publicUrl(up.id, infected), /NotAvailable/);
+    await assert.rejects(attachments.publicUrl(up.id, infected, { signedIn: true }), /NotAvailable/);
     assert.equal((await call("GET", `/threads/${number}`)).json.posts[0].attachments.length, 0);
   });
 

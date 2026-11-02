@@ -17,6 +17,7 @@ function createCommunityRouter({ auth = requireAuth, rateLimits = true } = {}) {
   const read = rateLimits ? byIp({ windowMs: MINUTE, limit: 300 }) : pass;
   const write = rateLimits ? byUser({ windowMs: MINUTE, limit: 20 }) : pass;
   const moderate = rateLimits ? byUser({ windowMs: MINUTE, limit: 120 }) : pass;
+  const download = rateLimits ? byUser({ windowMs: MINUTE, limit: 60 }) : pass;
   const signed = [auth, c.loadProfile];
   const writer = [...signed, write, c.requireWriter];
   const member = [...signed, write, c.requireProfile];
@@ -46,6 +47,7 @@ function createCommunityRouter({ auth = requireAuth, rateLimits = true } = {}) {
 
   router.post("/attachments", ...writer, validate(s.attachmentCreate), c.presign);
   router.post("/attachments/:id/complete", ...writer, c.complete);
+  router.get("/attachments/:id/download", auth, download, c.download);
   router.get("/attachments/:id/status", ...signed, c.requireProfile, c.attachmentStatus);
   router.get("/attachments/:id/preview", ...signed, c.requireProfile, c.preview);
 
