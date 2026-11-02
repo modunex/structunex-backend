@@ -145,11 +145,8 @@ async function signDownload(attachment, storage) {
   });
 }
 
-/**
- * URL de descarga: solo un adjunto limpio de una publicación visible. Las imágenes son
- * públicas porque forman parte de la lectura; el resto de archivos exige una sesión.
- */
-async function publicUrl(id, storage = s3, { signedIn = false } = {}) {
+/** URL de un adjunto limpio de una publicación visible. La ruta exige sesión. */
+async function downloadUrl(id, storage = s3) {
   const attachment = await prisma.forumAttachment.findFirst({
     where: {
       id,
@@ -159,7 +156,6 @@ async function publicUrl(id, storage = s3, { signedIn = false } = {}) {
     },
   });
   if (!attachment) throw new AppError(404, "NotFound");
-  if (attachment.kind !== "image" && !signedIn) throw new AppError(401, "SignInRequired");
   const status = await refreshScan(attachment, storage);
   if (status !== "clean") throw new AppError(409, "NotAvailable");
   return signDownload(attachment, storage);
@@ -219,7 +215,7 @@ module.exports = {
   complete,
   scanResult,
   refreshScan,
-  publicUrl,
+  downloadUrl,
   previewUrl,
   attachmentStatus,
   refreshPending,
