@@ -5,7 +5,7 @@ const { env } = require("../config/env");
 const { AppError } = require("../middleware/errorHandler");
 const s3 = require("./s3Service");
 const {
-  MAX_FILE_BYTES,
+  maxBytes,
   SNIFF_BYTES,
   resolveType,
   cleanFileName,
@@ -19,6 +19,8 @@ const MAX_IMAGE_SIDE = 2000;
 const MAX_IMAGE_PIXELS = 50_000_000;
 const SCAN_TAG = "GuardDutyMalwareScanStatus";
 
+const tooLarge = (kind) => `El archivo supera el límite de ${maxBytes(kind) / (1024 * 1024)} MB`;
+
 const isModerator = (profile) => profile.role === "moderator" || profile.role === "admin";
 
 // Dos prefijos a propósito. La URL prefirmada solo alcanza `uploads/` y sigue valiendo un
@@ -31,7 +33,7 @@ const finalKey = (extension) => `${env.communityS3Prefix}/files/${crypto.randomU
 async function presign(profile, { name, size }, storage = s3) {
   const type = resolveType(name);
   if (!type) throw new AppError(400, "Este tipo de archivo no está permitido");
-  if (size > MAX_FILE_BYTES) throw new AppError(400, "El archivo supera el límite de 20 MB");
+  if (size > maxBytes(type.kind)) throw new AppError(400, tooLarge(type.kind));
   if (!isModerator(profile)) {
     const used = await prisma.forumAttachment.count({
       where: { uploaderId: profile.id, createdAt: { gte: new Date(Date.now() - DAY_MS) } },
@@ -88,7 +90,7 @@ async function complete(profile, id, storage = s3, normalize = normalizeImage) {
 
   const size = await storage.objectSize(key).catch(() => 0);
   if (size === 0) return reject(attachment, storage, "El archivo no se subió");
-  if (size > MAX_FILE_BYTES) return reject(attachment, storage, "El archivo supera el límite de 20 MB");
+  if (size > maxBytes(attachment.kind)) return reject(attachment, storage, tooLarge(attachment.kind));
 
   const head = await storage.getObjectHead(key, SNIFF_BYTES);
   if (!contentMatches(attachment.extension, head)) {

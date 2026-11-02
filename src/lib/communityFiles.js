@@ -2,7 +2,9 @@
 // los adjuntos son descargas públicas. El tipo que ve el navegador lo fija siempre este
 // servidor por la extensión validada, nunca el que declare el cliente.
 
-const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_FILE_BYTES = 100 * 1024 * 1024;
+/** Las imágenes tienen menos margen: el servidor las procesa en memoria. */
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_FILES_PER_POST = 5;
 /** Bytes del inicio del archivo que se leen para comprobar su contenido. */
 const SNIFF_BYTES = 4096;
@@ -23,6 +25,8 @@ const TYPES = {
   dwg: { mime: "application/acad", kind: "file" },
   dxf: { mime: "application/dxf", kind: "file" },
 };
+
+const maxBytes = (kind) => (kind === "image" ? MAX_IMAGE_BYTES : MAX_FILE_BYTES);
 
 function extensionOf(name) {
   const match = /\.([a-z0-9]{1,8})$/i.exec(String(name).trim());
@@ -87,7 +91,9 @@ function contentMatches(extension, buffer) {
 module.exports = {
   TYPES,
   MAX_FILE_BYTES,
+  MAX_IMAGE_BYTES,
   MAX_FILES_PER_POST,
+  maxBytes,
   SNIFF_BYTES,
   extensionOf,
   resolveType,

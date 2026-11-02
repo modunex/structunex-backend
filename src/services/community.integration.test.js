@@ -381,7 +381,9 @@ test("Comunidad", options, async (t) => {
     const storage = fakeStorage();
     await assert.rejects(attachments.presign(a.profile, { name: "virus.exe", size: 10 }, storage), /permitido/);
     await assert.rejects(attachments.presign(a.profile, { name: "pagina.html", size: 10 }, storage), /permitido/);
-    await assert.rejects(attachments.presign(a.profile, { name: "a.pdf", size: 30 * 1024 * 1024 }, storage), /20 MB/);
+    await assert.rejects(attachments.presign(a.profile, { name: "a.pdf", size: 101 * 1024 * 1024 }, storage), /100 MB/);
+    await assert.rejects(attachments.presign(a.profile, { name: "a.png", size: 21 * 1024 * 1024 }, storage), /20 MB/);
+    assert.ok((await attachments.presign(a.profile, { name: "plano.dwg", size: 99 * 1024 * 1024 }, storage)).id);
 
     const up = await attachments.presign(a.profile, { name: "a.pdf", size: 10 }, storage);
     assert.equal(up.contentType, "application/pdf");
@@ -391,8 +393,8 @@ test("Comunidad", options, async (t) => {
     assert.equal(liar.calls.deleted.length, 2); // la subida y su copia
 
     const big = await attachments.presign(a.profile, { name: "b.pdf", size: 10 }, storage);
-    const grown = fakeStorage({ objectSize: async () => 30 * 1024 * 1024 });
-    await assert.rejects(attachments.complete(a.profile, big.id, grown), /20 MB/);
+    const grown = fakeStorage({ objectSize: async () => 101 * 1024 * 1024 });
+    await assert.rejects(attachments.complete(a.profile, big.id, grown), /100 MB/);
   });
 
   await t.test("adjuntos: lo validado no se puede sustituir con la URL de subida", async () => {
