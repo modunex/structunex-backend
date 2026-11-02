@@ -107,9 +107,26 @@ function publicThreadRow(thread) {
 }
 
 function publicPost(post) {
+  // Una respuesta retirada deja su sitio en el hilo, sin autor ni contenido.
+  if (post.hiddenAt) {
+    return {
+      id: post.id,
+      isFirst: post.isFirst,
+      removed: true,
+      moderatorEdited: false,
+      likeCount: 0,
+      body: null,
+      editedAt: null,
+      createdAt: post.createdAt,
+      author: null,
+      attachments: [],
+    };
+  }
   return {
     id: post.id,
     isFirst: post.isFirst,
+    removed: false,
+    moderatorEdited: Boolean(post.moderatorEditedAt),
     likeCount: post.likeCount,
     body: post.bodyDoc,
     editedAt: post.editedAt,
@@ -178,7 +195,6 @@ async function getThread(number) {
       author: WITH_AVATAR,
       tags: { select: { tag: true } },
       posts: {
-        where: { hiddenAt: null },
         orderBy: { createdAt: "asc" },
         include: { author: WITH_AVATAR, attachments: { orderBy: { createdAt: "asc" } } },
       },
@@ -371,18 +387,22 @@ function parseBody(input) {
  * de esta misma publicación). Las imágenes del documento cuentan aunque no vengan en la
  * lista, y deben ser imágenes.
  */
-async function resolveAttachments(tx, profile, requested, imageIds, postId = null) {
+async function resolveAttachments(tx, profile, requested, imageIds, postId = null, moderating = false) {
   const ids = [...new Set([...requested, ...imageIds])];
   if (ids.length > MAX_FILES_PER_POST) throw new AppError(400, "Máximo 5 adjuntos");
   if (ids.length === 0) return [];
   const found = await tx.forumAttachment.findMany({
     where: {
       id: { in: ids },
-      uploaderId: profile.id,
       uploaded: true,
       hiddenAt: null,
       scanStatus: { not: "blocked" },
-      OR: [{ postId: null }, ...(postId ? [{ postId }] : [])],
+      OR: moderating
+        ? [{ postId }, { postId: null, uploaderId: profile.id }]
+        : [
+            { postId: null, uploaderId: profile.id },
+            ...(postId ? [{ postId, uploaderId: profile.id }] : []),
+          ],
     },
   });
   if (found.length !== ids.length) throw new AppError(400, "Hay adjuntos no válidos");
@@ -476,14 +496,18 @@ async function editPost(profile, postId, body) {
     include: { thread: true },
   });
   if (!post || post.hiddenAt || post.thread.hiddenAt) throw new AppError(404, "NotFound");
-  if (post.authorId !== profile.id) throw new AppError(403, "Forbidden");
-  if (post.thread.lockedAt) throw new AppError(403, "Locked");
-  if (Date.now() - post.createdAt.getTime() > EDIT_WINDOW_MS) {
-    throw new AppError(403, "EditWindowClosed");
+  const moderating = post.authorId !== profile.id;
+  if (moderating) {
+    assertModerator(profile);
+  } else if (!isModerator(profile)) {
+    if (post.thread.lockedAt) throw new AppError(403, "Locked");
+    if (Date.now() - post.createdAt.getTime() > EDIT_WINDOW_MS) {
+      throw new AppError(403, "EditWindowClosed");
+    }
   }
   const { doc, text, imageIds } = parseBody(body.body);
   await prisma.$transaction(async (tx) => {
-    const attachmentIds = await resolveAttachments(tx, profile, body.attachmentIds, imageIds, post.id);
+    const attachmentIds = await resolveAttachments(tx, profile, body.attachmentIds, imageIds, post.id, moderating);
     await tx.forumAttachment.updateMany({
       where: { postId: post.id, id: { notIn: attachmentIds }, hiddenAt: null },
       data: { postId: null },
@@ -496,8 +520,14 @@ async function editPost(profile, postId, body) {
     }
     await tx.forumPost.update({
       where: { id: post.id },
-      data: { bodyDoc: doc, bodyText: text, editedAt: new Date() },
+      data: {
+        bodyDoc: doc,
+        bodyText: text,
+        editedAt: new Date(),
+        ...(moderating ? { moderatorEditedAt: new Date() } : {}),
+      },
     });
+    if (moderating) await log(tx, profile, "post.edit", "post", post.id, "");
   });
   return { id: post.id };
 }
@@ -659,6 +689,30 @@ async function setPostHidden(profile, postId, hidden, reason) {
   return { ok: true };
 }
 
+/** Publicaciones retiradas, con su texto, para poder revisar y deshacer la decisión. */
+async function listRemoved(profile) {
+  assertModerator(profile);
+  const posts = await prisma.forumPost.findMany({
+    where: { hiddenAt: { not: null } },
+    orderBy: { hiddenAt: "desc" },
+    take: 100,
+    include: {
+      author: WITH_AVATAR,
+      hiddenBy: WITH_AVATAR,
+      thread: { select: { number: true, slug: true, title: true } },
+    },
+  });
+  return posts.map((post) => ({
+    id: post.id,
+    isFirst: post.isFirst,
+    text: post.bodyText,
+    removedAt: post.hiddenAt,
+    author: publicAuthor(post.author),
+    removedBy: publicAuthor(post.hiddenBy),
+    thread: post.thread,
+  }));
+}
+
 async function setAttachmentHidden(profile, attachmentId, hidden, reason) {
   assertModerator(profile);
   await prisma.$transaction(async (tx) => {
@@ -763,6 +817,7 @@ module.exports = {
   setAttachmentHidden,
   setThreadFlag,
   setLike,
+  listRemoved,
   getThreadLikes,
   retireTranslations,
   suspendProfile,

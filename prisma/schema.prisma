@@ -764,6 +764,7 @@ model ForumPost {
   hiddenById   String?   @db.Uuid
   hiddenReason String?
   likeCount    Int       @default(0)
+  moderatorEditedAt DateTime?
   createdAt    DateTime  @default(now())
 
   thread      ForumThread        @relation(fields: [threadId], references: [id], onDelete: Cascade)
