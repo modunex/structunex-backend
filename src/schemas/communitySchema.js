@@ -26,7 +26,12 @@ const attachmentIds = z.array(uuid).max(5).default([]);
 const threadCreate = z.object({
   topic: z.string().min(1).max(64),
   locale: z.enum(["en", "es"]),
-  title: z.string().trim().min(10).max(160),
+  title: z
+    .string()
+    .trim()
+    .min(10)
+    .max(160)
+    .refine((value) => !/[\r\n]/.test(value), "El título debe ir en una sola línea"),
   tags: z.array(z.string().min(1).max(64)).max(3).default([]),
   body: z.unknown(),
   attachmentIds,

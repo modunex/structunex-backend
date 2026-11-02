@@ -270,6 +270,9 @@ async function upsertProfile(clerkId, body, resolve = resolveUser) {
   const existing = await findProfile(clerkId);
   const guidelines = body.acceptGuidelines ? { guidelinesAcceptedAt: new Date() } : {};
   if (existing) {
+    if (existing.suspendedUntil && existing.suspendedUntil > new Date()) {
+      throw new AppError(403, "Suspended");
+    }
     const { acceptGuidelines: _accept, ...fields } = body;
     // El correo pudo verificarse después de crear el perfil.
     const verified =
@@ -468,7 +471,7 @@ async function editPost(profile, postId, body) {
   await prisma.$transaction(async (tx) => {
     const attachmentIds = await resolveAttachments(tx, profile, body.attachmentIds, imageIds, post.id);
     await tx.forumAttachment.updateMany({
-      where: { postId: post.id, id: { notIn: attachmentIds } },
+      where: { postId: post.id, id: { notIn: attachmentIds }, hiddenAt: null },
       data: { postId: null },
     });
     if (attachmentIds.length > 0) {
@@ -533,6 +536,9 @@ const log = (tx, actor, action, targetType, targetId, reason = "") =>
 
 function assertModerator(profile) {
   if (!isModerator(profile)) throw new AppError(403, "Forbidden");
+  if (profile.suspendedUntil && profile.suspendedUntil > new Date()) {
+    throw new AppError(403, "Suspended");
+  }
 }
 
 async function listReports(profile, status = "open") {
@@ -632,7 +638,10 @@ async function suspendProfile(profile, handle, until, reason) {
   assertModerator(profile);
   const target = await prisma.forumProfile.findUnique({ where: { handle } });
   if (!target) throw new AppError(404, "NotFound");
-  if (target.role === "admin") throw new AppError(403, "Forbidden");
+  // Entre moderadores solo decide un administrador.
+  if (target.role === "admin" || (target.role === "moderator" && profile.role !== "admin")) {
+    throw new AppError(403, "Forbidden");
+  }
   await prisma.$transaction(async (tx) => {
     await tx.forumProfile.update({ where: { id: target.id }, data: { suspendedUntil: until } });
     await log(tx, profile, until ? "profile.suspend" : "profile.restore", "profile", handle, reason);

@@ -262,6 +262,14 @@ test("Comunidad", options, async (t) => {
     assert.equal((await call("POST", `/moderation/users/${a.profile.handle}/suspend`, { user: mod.clerkId, body: { until } })).status, 200);
     assert.equal((await call("POST", "/threads", { user: a.clerkId, body: thread() })).json.error, "Suspended");
     assert.equal((await call("POST", `/moderation/users/${admin.profile.handle}/suspend`, { user: mod.clerkId, body: { until } })).status, 403);
+
+    const other = await person({ role: "moderator" });
+    assert.equal((await call("POST", `/moderation/users/${other.profile.handle}/suspend`, { user: mod.clerkId, body: { until } })).status, 403);
+    const suspended = await person({ role: "moderator", suspendedUntil: new Date(Date.now() + 86400000) });
+    assert.equal((await call("POST", `/moderation/users/${suspended.profile.handle}/suspend`, { user: suspended.clerkId, body: { until: null } })).json.error, "Suspended");
+    assert.equal((await call("GET", "/moderation/reports", { user: suspended.clerkId })).status, 403);
+    const renamed = await community.upsertProfile(a.clerkId, { displayName: "Otro nombre" }).catch((err) => err);
+    assert.equal(renamed.message, "Suspended");
   });
 
   await t.test("solo el sitemap incluye hilos con respuestas y visibles", async () => {
@@ -321,6 +329,7 @@ test("Comunidad", options, async (t) => {
       signPut: async (key) => `https://s3.test/${key}?put`,
       signGet: async (key, opts) => (calls.signed.push({ key, ...opts }), `https://s3.test/${key}?get`),
       objectSize: async () => PDF.length,
+      copyObject: async (from, to) => (calls.copied = { from, to }),
       getObjectHead: async () => PDF,
       getObjectBuffer: async () => PDF,
       getObjectTags: async () => ({}),
@@ -342,11 +351,25 @@ test("Comunidad", options, async (t) => {
     const liar = fakeStorage({ getObjectHead: async () => Buffer.from("MZ\x90") });
     await assert.rejects(attachments.complete(a.profile, up.id, liar), /no corresponde/);
     assert.equal(await prisma.forumAttachment.count({ where: { id: up.id } }), 0);
-    assert.equal(liar.calls.deleted.length, 1);
+    assert.equal(liar.calls.deleted.length, 2); // la subida y su copia
 
     const big = await attachments.presign(a.profile, { name: "b.pdf", size: 10 }, storage);
     const grown = fakeStorage({ objectSize: async () => 30 * 1024 * 1024 });
     await assert.rejects(attachments.complete(a.profile, big.id, grown), /20 MB/);
+  });
+
+  await t.test("adjuntos: lo validado no se puede sustituir con la URL de subida", async () => {
+    const a = await person();
+    const storage = fakeStorage();
+    const up = await attachments.presign(a.profile, { name: "a.pdf", size: 10 }, storage);
+    assert.match(up.url, /\/uploads\//);
+    await attachments.complete(a.profile, up.id, storage);
+    const row = await prisma.forumAttachment.findUnique({ where: { id: up.id } });
+    assert.match(row.s3Key, /\/files\//);
+    assert.equal(storage.calls.copied.to, row.s3Key);
+    assert.match(storage.calls.copied.from, /\/uploads\//);
+    assert.deepEqual(storage.calls.deleted, [storage.calls.copied.from]);
+    assert.equal(up.url.includes(row.s3Key), false);
   });
 
   await t.test("adjuntos: solo se sirve lo escaneado y limpio de una publicación visible", async () => {
@@ -373,6 +396,26 @@ test("Comunidad", options, async (t) => {
 
     await call("POST", `/moderation/attachments/${up.id}/hide`, { user: mod.clerkId, body: {} });
     await assert.rejects(attachments.publicUrl(up.id, clean), /NotFound/);
+  });
+
+  await t.test("un autor no puede borrar un archivo ocultado por moderación", async () => {
+    const a = await person();
+    const mod = await person({ role: "moderator" });
+    const storage = fakeStorage();
+    const up = await attachments.presign(a.profile, { name: "x.pdf", size: 10 }, storage);
+    await attachments.complete(a.profile, up.id, storage);
+    const number = await newThread(a.clerkId, { attachmentIds: [up.id] });
+    const postId = (await call("GET", `/threads/${number}`)).json.posts[0].id;
+    await call("POST", `/moderation/attachments/${up.id}/hide`, { user: mod.clerkId, body: {} });
+    assert.equal((await call("PATCH", `/posts/${postId}`, { user: a.clerkId, body: { body: doc("Sin adjunto") } })).status, 200);
+    assert.equal((await prisma.forumAttachment.findUnique({ where: { id: up.id } })).postId, postId);
+  });
+
+  await t.test("título en una línea y números de hilo fuera de rango", async () => {
+    const a = await person();
+    const res = await call("POST", "/threads", { user: a.clerkId, body: thread({ title: "Título con\r\nBcc: x@y.com malicioso" }) });
+    assert.equal(res.status, 400);
+    assert.equal((await call("GET", "/threads/99999999999")).status, 404);
   });
 
   await t.test("adjuntos: una amenaza o un resultado dudoso queda bloqueado", async () => {

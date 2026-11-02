@@ -21,9 +21,11 @@ const SCAN_TAG = "GuardDutyMalwareScanStatus";
 
 const isModerator = (profile) => profile.role === "moderator" || profile.role === "admin";
 
-function deriveKey(extension) {
-  return `${env.communityS3Prefix}/${crypto.randomUUID()}.${extension}`;
-}
+// Dos prefijos a propósito. La URL prefirmada solo alcanza `uploads/` y sigue valiendo un
+// rato tras subir; lo que se comprueba, se escanea y se sirve vive en `files/`, donde solo
+// escribe este servidor. Así nadie puede cambiar un archivo después de validarlo.
+const uploadKey = (extension) => `${env.communityS3Prefix}/uploads/${crypto.randomUUID()}.${extension}`;
+const finalKey = (extension) => `${env.communityS3Prefix}/files/${crypto.randomUUID()}.${extension}`;
 
 /** Registra la subida y devuelve una URL prefirmada para hacer PUT directo a S3. */
 async function presign(profile, { name, size }, storage = s3) {
@@ -39,7 +41,7 @@ async function presign(profile, { name, size }, storage = s3) {
   const attachment = await prisma.forumAttachment.create({
     data: {
       uploaderId: profile.id,
-      s3Key: deriveKey(type.extension),
+      s3Key: uploadKey(type.extension),
       name: cleanFileName(name) || `file.${type.extension}`,
       mime: type.mime,
       extension: type.extension,
@@ -73,11 +75,22 @@ async function complete(profile, id, storage = s3, normalize = normalizeImage) {
   });
   if (!attachment) throw new AppError(404, "NotFound");
 
-  const size = await storage.objectSize(attachment.s3Key).catch(() => 0);
-  if (size === 0) throw new AppError(400, "El archivo no se subió");
+  // Todas las comprobaciones van sobre la copia final, que el cliente ya no puede tocar.
+  const key = finalKey(attachment.extension);
+  try {
+    await storage.copyObject(attachment.s3Key, key, attachment.mime);
+  } catch {
+    throw new AppError(400, "El archivo no se subió");
+  }
+  await prisma.forumAttachment.update({ where: { id: attachment.id }, data: { s3Key: key } });
+  await storage.deleteObject(attachment.s3Key).catch(() => {});
+  attachment.s3Key = key;
+
+  const size = await storage.objectSize(key).catch(() => 0);
+  if (size === 0) return reject(attachment, storage, "El archivo no se subió");
   if (size > MAX_FILE_BYTES) return reject(attachment, storage, "El archivo supera el límite de 20 MB");
 
-  const head = await storage.getObjectHead(attachment.s3Key, SNIFF_BYTES);
+  const head = await storage.getObjectHead(key, SNIFF_BYTES);
   if (!contentMatches(attachment.extension, head)) {
     return reject(attachment, storage, "El contenido no corresponde al tipo de archivo");
   }
@@ -185,7 +198,7 @@ async function refreshPending(storage = s3, limit = 50) {
 /** Borra subidas que nunca llegaron a una publicación. */
 async function cleanupOrphans(storage = s3) {
   const orphans = await prisma.forumAttachment.findMany({
-    where: { postId: null, createdAt: { lt: new Date(Date.now() - ORPHAN_AGE_MS) } },
+    where: { postId: null, hiddenAt: null, createdAt: { lt: new Date(Date.now() - ORPHAN_AGE_MS) } },
     take: 100,
   });
   for (const attachment of orphans) {

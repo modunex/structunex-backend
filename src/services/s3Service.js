@@ -7,6 +7,7 @@
 
 const {
   S3Client,
+  CopyObjectCommand,
   GetObjectCommand,
   GetObjectTaggingCommand,
   PutObjectCommand,
@@ -179,6 +180,20 @@ async function objectSize(key) {
   return Number(out.ContentLength ?? 0);
 }
 
+/** Copia un objeto dentro del bucket, sin arrastrar sus etiquetas. */
+async function copyObject(from, to, contentType) {
+  await s3().send(
+    new CopyObjectCommand({
+      Bucket: env.s3Bucket,
+      Key: to,
+      CopySource: `${env.s3Bucket}/${from.split("/").map(encodeURIComponent).join("/")}`,
+      ContentType: contentType,
+      MetadataDirective: "REPLACE",
+      TaggingDirective: "REPLACE",
+    })
+  );
+}
+
 /** Borra un objeto suelto. */
 async function deleteObject(key) {
   if (!env.s3Bucket) return;
@@ -198,6 +213,7 @@ module.exports = {
   signRunPaths,
   signPut,
   putObject,
+  copyObject,
   deleteObject,
   objectSize,
   reportsPrefix,

@@ -22,6 +22,7 @@ app.use(
         !origin ||
         env.clientOrigins.includes(origin) ||
         env.communityOrigins.includes(origin) ||
+        origin === env.apiPublicUrl || // el formulario de baja de los avisos se sirve desde aquí
         localhostOrigin.test(origin)
       ) {
         return callback(null, true);

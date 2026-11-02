@@ -6,9 +6,13 @@ const attachments = require("../services/communityAttachmentService");
 const emails = require("../services/communityEmailService");
 const schemas = require("../schemas/communitySchema");
 
+const MAX_THREAD_NUMBER = 2147483647; // columna INTEGER
+
 function threadNumber(req) {
   const number = Number(req.params.number);
-  if (!Number.isInteger(number) || number < 1) throw new AppError(404, "NotFound");
+  if (!Number.isInteger(number) || number < 1 || number > MAX_THREAD_NUMBER) {
+    throw new AppError(404, "NotFound");
+  }
   return number;
 }
 
