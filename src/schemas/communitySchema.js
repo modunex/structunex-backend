@@ -5,16 +5,8 @@ const RESERVED_HANDLES = new Set([
   "structunex", "modunex", "official", "system", "community", "team", "anonymous",
 ]);
 
-const handle = z
-  .string()
-  .trim()
-  .toLowerCase()
-  .regex(/^[a-z0-9_]{3,24}$/, "Usa de 3 a 24 letras, números o guiones bajos")
-  .refine((value) => !RESERVED_HANDLES.has(value), "Este nombre está reservado");
-
+// El nombre público sale de Clerk: la API no acepta nombre ni usuario.
 const profileUpsert = z.object({
-  handle: handle.optional(),
-  displayName: z.string().trim().min(2).max(60).optional(),
   bio: z.string().trim().max(300).optional(),
   notifyReplies: z.boolean().optional(),
   acceptGuidelines: z.literal(true).optional(),
@@ -88,6 +80,7 @@ const feedQuery = z.object({
 });
 
 module.exports = {
+  RESERVED_HANDLES,
   profileUpsert,
   threadCreate,
   postCreate,

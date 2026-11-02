@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const { clerkClient } = require("@clerk/express");
 const { prisma } = require("../config/db");
 const { AppError } = require("../middleware/errorHandler");
@@ -5,6 +6,7 @@ const { sanitizeDocument, DocumentError } = require("../lib/communityDoc");
 const { slugify } = require("../lib/communitySlug");
 const { MAX_FILES_PER_POST } = require("../lib/communityFiles");
 const { TOPICS, TAGS } = require("../lib/communityCatalog");
+const { RESERVED_HANDLES } = require("../schemas/communitySchema");
 const emails = require("./communityEmailService");
 
 const PAGE_SIZE = 20;
@@ -19,7 +21,17 @@ const QUOTA = {
 
 const isModerator = (profile) => profile?.role === "moderator" || profile?.role === "admin";
 const publicAuthor = (author) =>
-  author ? { handle: author.handle, displayName: author.displayName, role: author.role } : null;
+  author
+    ? {
+        handle: author.handle,
+        displayName: author.displayName,
+        role: author.role,
+        imageUrl: author.user?.imageUrl ?? null,
+      }
+    : null;
+
+/** Foto de Clerk del autor. Solo esa columna: el correo y el nombre real no salen de aquí. */
+const WITH_AVATAR = { include: { user: { select: { imageUrl: true } } } };
 
 async function ensureCatalog() {
   await prisma.forumTopic.createMany({ data: TOPICS, skipDuplicates: true });
@@ -53,7 +65,7 @@ const THREAD_LIST_SELECT = {
   lastPostAt: true,
   createdAt: true,
   topic: true,
-  author: true,
+  author: WITH_AVATAR,
   tags: { select: { tag: true } },
   posts: { where: { isFirst: true }, select: { bodyText: true } },
 };
@@ -160,12 +172,12 @@ async function getThread(number) {
     where: { number, hiddenAt: null },
     include: {
       topic: true,
-      author: true,
+      author: WITH_AVATAR,
       tags: { select: { tag: true } },
       posts: {
         where: { hiddenAt: null },
         orderBy: { createdAt: "asc" },
-        include: { author: true, attachments: { orderBy: { createdAt: "asc" } } },
+        include: { author: WITH_AVATAR, attachments: { orderBy: { createdAt: "asc" } } },
       },
     },
   });
@@ -187,6 +199,7 @@ async function getPublicProfile(handle) {
     where: { handle },
     select: {
       id: true, handle: true, displayName: true, bio: true, role: true, createdAt: true,
+      user: { select: { imageUrl: true } },
     },
   });
   if (!profile) throw new AppError(404, "NotFound");
@@ -196,8 +209,8 @@ async function getPublicProfile(handle) {
     orderBy: { createdAt: "desc" },
     take: 20,
   });
-  const { id: _id, ...rest } = profile;
-  return { ...rest, threads: threads.map(publicThreadRow) };
+  const { id: _id, user, ...rest } = profile;
+  return { ...rest, imageUrl: user.imageUrl ?? null, threads: threads.map(publicThreadRow) };
 }
 
 async function sitemap() {
@@ -239,7 +252,22 @@ async function resolveUser(clerkId) {
     create: { clerkId, ...data },
     update: data,
   });
-  return { user, emailVerified: primary?.verification?.status === "verified" };
+  return {
+    user,
+    emailVerified: primary?.verification?.status === "verified",
+    displayName: [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") || clerkUser.username || "",
+  };
+}
+
+/** Usuario público para la URL del perfil: legible y único, derivado del nombre. */
+async function uniqueHandle(displayName) {
+  const slug = slugify(displayName).replace(/-/g, "_").slice(0, 20);
+  const base = slug.length >= 3 && slug !== "post" && !RESERVED_HANDLES.has(slug) ? slug : "user";
+  if (base !== "user" && !(await prisma.forumProfile.findUnique({ where: { handle: base } }))) return base;
+  for (;;) {
+    const candidate = `${base}_${crypto.randomInt(1000, 1000000)}`;
+    if (!(await prisma.forumProfile.findUnique({ where: { handle: candidate } }))) return candidate;
+  }
 }
 
 async function findProfile(clerkId) {
@@ -285,15 +313,13 @@ async function upsertProfile(clerkId, body, resolve = resolveUser) {
     });
     return ownProfile(updated);
   }
-  if (!body.handle || !body.displayName) {
-    throw new AppError(400, "Elige un nombre público");
-  }
-  const { user, emailVerified } = await resolve(clerkId);
+  const { user, emailVerified, displayName } = await resolve(clerkId);
+  const handle = await uniqueHandle(displayName);
   const created = await prisma.forumProfile.create({
     data: {
       userId: user.id,
-      handle: body.handle,
-      displayName: body.displayName,
+      handle,
+      displayName: displayName || handle, // nunca el correo
       bio: body.bio ?? "",
       notifyReplies: body.notifyReplies ?? true,
       emailVerifiedAt: emailVerified ? new Date() : null,
@@ -548,10 +574,10 @@ async function listReports(profile, status = "open") {
     orderBy: { createdAt: "asc" },
     take: 100,
     include: {
-      reporter: true,
+      reporter: WITH_AVATAR,
       post: {
         include: {
-          author: true,
+          author: WITH_AVATAR,
           thread: { select: { number: true, slug: true, title: true } },
           attachments: { orderBy: { createdAt: "asc" } },
         },

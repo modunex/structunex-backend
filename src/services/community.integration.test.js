@@ -67,7 +67,13 @@ test("Comunidad", options, async (t) => {
     seq += 1;
     const clerkId = `t_${seq}`;
     const user = await prisma.user.create({
-      data: { clerkId, email: `secret${seq}@example.com`, firstName: "Nombre", lastName: "Real" },
+      data: {
+        clerkId,
+        email: `secret${seq}@example.com`,
+        firstName: "Nombre",
+        lastName: "Real",
+        imageUrl: "https://img.clerk.com/foto.png",
+      },
     });
     const profile = await prisma.forumProfile.create({
       data: {
@@ -139,6 +145,37 @@ test("Comunidad", options, async (t) => {
       assert.doesNotMatch(text, /secret\d+@example\.com/);
       assert.doesNotMatch(text, /Nombre|Real|clerkId|userId|t_\d/);
     }
+    const view = (await call("GET", `/threads/${number}`)).json;
+    assert.equal(view.author.imageUrl, "https://img.clerk.com/foto.png");
+    assert.equal(view.posts[0].author.imageUrl, "https://img.clerk.com/foto.png");
+    assert.equal((await call("GET", `/users/${a.profile.handle}`)).json.imageUrl, "https://img.clerk.com/foto.png");
+  });
+
+  await t.test("el perfil toma el nombre de Clerk y nunca el correo", async () => {
+    const user = (clerkId) => prisma.user.create({ data: { clerkId, email: `${clerkId}@example.com` } });
+    const first = await user("t_clerk1");
+    const resolve = (u, displayName) => async () => ({ user: u, emailVerified: true, displayName });
+    const made = await community.upsertProfile("t_clerk1", { acceptGuidelines: true }, resolve(first, "María Rojas Núñez"));
+    assert.equal(made.profile.displayName, "María Rojas Núñez");
+    assert.equal(made.profile.handle, "maria_rojas_nunez");
+
+    const twin = await user("t_clerk2");
+    const second = await community.upsertProfile("t_clerk2", {}, resolve(twin, "María Rojas Núñez"));
+    assert.match(second.profile.handle, /^maria_rojas_nunez_\d+$/);
+
+    const noName = await user("t_clerk3");
+    const third = await community.upsertProfile("t_clerk3", {}, resolve(noName, ""));
+    assert.match(third.profile.handle, /^user_\d+$/);
+    assert.doesNotMatch(third.profile.displayName, /@/);
+
+    assert.equal((await call("PUT", "/me", { user: "t_clerk1", body: { handle: "otro", displayName: "Otro" } })).status, 200);
+    const same = await community.getMe("t_clerk1");
+    assert.equal(same.profile.handle, "maria_rojas_nunez");
+    assert.equal(same.profile.displayName, "María Rojas Núñez");
+
+    const users = require("./userService");
+    await users.upsertFromClerk({ clerkId: "t_clerk1", email: "x@example.com", firstName: "Ana", lastName: "Paz" });
+    assert.equal((await community.getMe("t_clerk1")).profile.displayName, "Ana Paz");
   });
 
   await t.test("valida contexto técnico, tags y temas del equipo", async () => {
