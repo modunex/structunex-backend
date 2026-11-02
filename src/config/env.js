@@ -40,8 +40,7 @@ const env = {
   // Svix signing secret for the Clerk webhook (Dashboard → Webhooks → endpoint).
   clerkWebhookSigningSecret: process.env.CLERK_WEBHOOK_SIGNING_SECRET,
 
-  // Comunidad. Apagada por defecto: sin COMMUNITY_ENABLED=true sus rutas responden 404.
-  communityEnabled: process.env.COMMUNITY_ENABLED === "true",
+  // Comunidad.
   // Prefijo de los adjuntos. Es el que debe vigilar GuardDuty Malware Protection for S3.
   communityS3Prefix: (process.env.COMMUNITY_S3_PREFIX || "community").replace(/^\/+|\/+$/g, ""),
   // "guardduty": un adjunto solo se sirve con la etiqueta NO_THREATS_FOUND.

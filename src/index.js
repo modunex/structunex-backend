@@ -6,7 +6,7 @@ const { startCommunity } = require("./services/communityJobs");
 async function start() {
   try {
     await connectDb();
-    if (env.communityEnabled) await startCommunity();
+    await startCommunity();
     app.listen(env.port, () => {
       console.log(`[server] Running on http://localhost:${env.port}`);
     });

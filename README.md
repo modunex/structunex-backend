@@ -50,9 +50,9 @@ Useful commands:
 
 ## Community
 
-The public forum lives under `/api/community`. It stays off (404) until `COMMUNITY_ENABLED=true`.
+The public forum lives under `/api/community`. It is always on, so merging it publishes it.
 
-Before enabling it in production:
+Before merging to production:
 
 1. Set `COMMUNITY_SSR_KEY` here and in the home, and keep `NODE_ENV=production`, which restricts Clerk tokens to our own origins.
 2. In the S3 bucket, allow `PUT` from `https://structunex.com` and `https://www.structunex.com` in the CORS configuration.
