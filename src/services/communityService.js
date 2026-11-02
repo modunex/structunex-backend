@@ -271,9 +271,14 @@ async function upsertProfile(clerkId, body, resolve = resolveUser) {
   const guidelines = body.acceptGuidelines ? { guidelinesAcceptedAt: new Date() } : {};
   if (existing) {
     const { acceptGuidelines: _accept, ...fields } = body;
+    // El correo pudo verificarse después de crear el perfil.
+    const verified =
+      !existing.emailVerifiedAt && (await resolve(clerkId)).emailVerified
+        ? { emailVerifiedAt: new Date() }
+        : {};
     const updated = await prisma.forumProfile.update({
       where: { id: existing.id },
-      data: { ...fields, ...guidelines },
+      data: { ...fields, ...guidelines, ...verified },
     });
     return ownProfile(updated);
   }
