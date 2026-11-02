@@ -4,13 +4,19 @@ const { prisma } = require("../config/db");
 // (same value as `ownerId` on projects/catalogs), so writes are idempotent on
 // webhook re-delivery.
 
-function upsertFromClerk({ clerkId, email, firstName, lastName, imageUrl }) {
+async function upsertFromClerk({ clerkId, email, firstName, lastName, imageUrl }) {
   const data = { email, firstName, lastName, imageUrl };
-  return prisma.user.upsert({
+  const user = await prisma.user.upsert({
     where: { clerkId },
     create: { clerkId, ...data },
     update: data,
   });
+  // El nombre público de la Comunidad es el de la cuenta.
+  const displayName = [firstName, lastName].filter(Boolean).join(" ");
+  if (displayName) {
+    await prisma.forumProfile.updateMany({ where: { userId: user.id }, data: { displayName } });
+  }
+  return user;
 }
 
 function markMailchimpSynced(clerkId) {
