@@ -100,9 +100,6 @@ test("Comunidad", options, async (t) => {
     title: "Una pregunta técnica de prueba",
     tags: ["steel"],
     body: doc(),
-    codeEdition: "AISC 360-22",
-    assumptions: "Viga simplemente apoyada",
-    units: "kN, mm",
     ...overrides,
   });
   const newThread = async (user, overrides) => {
@@ -179,11 +176,12 @@ test("Comunidad", options, async (t) => {
     assert.equal((await community.getMe("t_clerk1")).profile.displayName, "Ana Paz");
   });
 
-  await t.test("valida contexto técnico, tags y temas del equipo", async () => {
+  await t.test("detecta el idioma y valida tags y temas del equipo", async () => {
     const a = await person();
     const post = (overrides) => call("POST", "/threads", { user: a.clerkId, body: thread(overrides) });
-    assert.equal((await post({ codeEdition: undefined })).status, 400);
-    assert.equal((await post({ topic: "software", codeEdition: undefined, assumptions: undefined, units: undefined })).status, 201);
+    assert.equal((await post({ topic: "software" })).status, 201);
+    const english = await post({ locale: "es", title: "How should I check the bolts of this connection?" });
+    assert.equal((await call("GET", `/threads/${english.json.number}`)).json.locale, "en");
     assert.equal((await post({ tags: ["no-existe"] })).status, 400);
     assert.equal((await post({ tags: ["steel", "concrete", "seismic", "reports"] })).status, 400);
     assert.equal((await post({ topic: "faq" })).status, 403);
@@ -374,6 +372,8 @@ test("Comunidad", options, async (t) => {
       },
     });
     await call("POST", `/threads/${number}/posts`, { user: b.clerkId, body: { body: doc("Una respuesta") } });
+    // Las publicaciones anteriores conservan sus hipótesis, y también se traducen.
+    await prisma.forumThread.update({ where: { number }, data: { assumptions: "Viga simplemente apoyada" } });
 
     let calls = 0;
     const model = async (_from, _to, strings) => {
