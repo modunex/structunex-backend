@@ -46,7 +46,21 @@ Useful commands:
 | `npm run db:migrate` | After editing `prisma/schema.prisma`: creates a new migration and applies it locally |
 | `npm run db:deploy`  | Applies pending migrations (what Render runs before each deploy) |
 | `npm run db:studio`  | Opens Prisma Studio to browse the tables                       |
-| `npm test`           | Unit tests (load combos, spectra)                              |
+| `npm test`           | Unit tests (load combos, spectra). Set `COMMUNITY_TEST_DATABASE_URL` to a disposable Postgres to also run the Community integration tests; they erase the forum tables |
+
+## Community
+
+The public forum lives under `/api/community`. It stays off (404) until `COMMUNITY_ENABLED=true`.
+
+Before enabling it in production:
+
+1. Set `COMMUNITY_SSR_KEY` here and in the home, and keep `NODE_ENV=production`, which restricts Clerk tokens to our own origins.
+2. In the S3 bucket, allow `PUT` from `https://structunex.com` and `https://www.structunex.com` in the CORS configuration.
+3. Enable GuardDuty Malware Protection for S3 on the `community/` prefix with tagging turned on **before** the first upload. Add a bucket policy that denies `s3:GetObject` under that prefix unless the tag `GuardDutyMalwareScanStatus` is `NO_THREATS_FOUND`. The IAM user also needs `s3:GetObjectTagging`.
+4. For reply notices, verify the sending domain in Amazon SES, request production access, allow `ses:SendEmail`, and set `COMMUNITY_EMAIL_FROM` and `COMMUNITY_EMAIL_SECRET`. Without them no notice is queued.
+5. Make the first moderator by setting `role = 'admin'` on their row in `forum_profiles`.
+
+With the default `COMMUNITY_SCAN_MODE=guardduty`, an attachment is only served after the scan reports `NO_THREATS_FOUND`. If scanning is not set up, files stay unavailable. `COMMUNITY_SCAN_MODE=off` is for local development only.
 
 ## Environment (.env)
 
