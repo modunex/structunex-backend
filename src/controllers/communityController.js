@@ -144,6 +144,9 @@ const c = {
     );
     res.json(await svc.listReports(req.profile, status));
   }),
+  removedPosts: asyncHandler(async (req, res) => {
+    res.json(await svc.listRemoved(req.profile));
+  }),
   hidePost: asyncHandler(async (req, res) => {
     res.json(await svc.setPostHidden(req.profile, uuidParam(req.params.id), true, req.body.reason));
   }),

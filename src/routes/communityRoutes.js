@@ -59,6 +59,7 @@ function createCommunityRouter({ auth = requireAuth, rateLimits = true } = {}) {
 
   router.get("/moderation/reports", ...mod, c.reports);
   router.post("/moderation/reports/:id", ...mod, validate(s.reportResolve), c.resolveReport);
+  router.get("/moderation/removed", ...mod, c.removedPosts);
   router.post("/moderation/posts/:id/hide", ...mod, validate(s.moderationReason), c.hidePost);
   router.post("/moderation/posts/:id/restore", ...mod, validate(s.moderationReason), c.restorePost);
   router.post("/moderation/posts/:id/translations/retire", ...mod, validate(s.moderationReason), c.retireTranslations);

@@ -11,7 +11,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
-    "users:backfill": "node scripts/backfill-users.js"
+    "users:backfill": "node scripts/backfill-users.js",
+    "community:role": "node scripts/community-role.js"
   },
   "engines": {
     "node": "22.x"

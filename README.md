@@ -58,7 +58,7 @@ Before merging to production:
 2. In the S3 bucket, allow `PUT` from `https://structunex.com` and `https://www.structunex.com` in the CORS configuration.
 3. Enable GuardDuty Malware Protection for S3 on the `community/files/` prefix with tagging turned on **before** the first upload. Add a bucket policy that denies `s3:GetObject` under that prefix unless the tag `GuardDutyMalwareScanStatus` is `NO_THREATS_FOUND`, excluding the backend IAM user because it reads new files to check them. That user also needs `s3:GetObjectTagging`. Add a lifecycle rule that expires `community/uploads/` after one day: presigned uploads land there and only reach `community/files/` after server checks.
 4. For reply notices, verify the sending domain in Amazon SES, request production access, allow `ses:SendEmail`, and set `COMMUNITY_EMAIL_FROM` and `COMMUNITY_EMAIL_SECRET`. Without them no notice is queued.
-5. Make the first moderator by setting `role = 'admin'` on their row in `forum_profiles`.
+5. Make the first moderator: sign in to the community, accept the guidelines, then run `npm run community:role -- you@company.com admin` with the production `DATABASE_URL`.
 
 6. For on-demand translation, allow the backend IAM user to invoke `COMMUNITY_TRANSLATION_MODEL` in Bedrock. A model with a `global.`, `us.` or `eu.` prefix uses `bedrock-runtime`; an ID without a prefix uses Mantle. Claude Haiku 5.5 is not available in Mantle outside GovCloud, so keep the prefix unless AWS changes that. Global profiles can process text in other regions.
 

@@ -275,7 +275,7 @@ test("Comunidad", options, async (t) => {
 
     assert.equal((await call("POST", `/moderation/posts/${reply}/hide`, { user: mod.clerkId, body: { reason: "Incorrecto" } })).status, 200);
     let view = (await call("GET", `/threads/${number}`)).json;
-    assert.equal(view.posts.length, 1);
+    assert.equal(view.posts.filter((post) => !post.removed).length, 1);
     assert.equal(view.replyCount, 0);
     assert.equal((await prisma.forumPost.count({ where: { id: reply } })), 1);
 
@@ -356,6 +356,44 @@ test("Comunidad", options, async (t) => {
     assert.equal((await prisma.forumProfile.findUnique({ where: { id: a.profile.id } })).notifyReplies, true);
     assert.equal((await call("POST", `/unsubscribe?token=${token}`)).status, 200);
     assert.equal((await prisma.forumProfile.findUnique({ where: { id: a.profile.id } })).notifyReplies, false);
+  });
+
+  await t.test("moderación: respuesta retirada sin datos, edición y restauración", async () => {
+    const author = await person();
+    const replier = await person();
+    const other = await person();
+    const mod = await person({ role: "moderator" });
+    const number = await newThread(author.clerkId);
+    const reply = await call("POST", `/threads/${number}/posts`, { user: replier.clerkId, body: { body: doc("Texto ofensivo privado") } });
+    const postId = reply.json.id;
+
+    assert.equal((await call("PATCH", `/posts/${postId}`, { user: other.clerkId, body: { body: doc("Otro texto") } })).status, 403);
+    assert.equal((await call("PATCH", `/posts/${postId}`, { user: mod.clerkId, body: { body: doc("Texto corregido por moderación") } })).status, 200);
+    let view = (await call("GET", `/threads/${number}`)).json;
+    assert.equal(view.posts[1].moderatorEdited, true);
+    assert.equal(view.posts[1].body.content[0].content[0].text, "Texto corregido por moderación");
+
+    await prisma.forumPost.update({ where: { id: postId }, data: { createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) } });
+    assert.equal((await call("PATCH", `/posts/${postId}`, { user: replier.clerkId, body: { body: doc("Otra vez") } })).status, 403);
+    assert.equal((await call("PATCH", `/posts/${postId}`, { user: mod.clerkId, body: { body: doc("Sigue editable") } })).status, 200);
+
+    assert.equal((await call("POST", `/moderation/posts/${postId}/hide`, { user: author.clerkId, body: {} })).status, 403);
+    assert.equal((await call("POST", `/moderation/posts/${postId}/hide`, { user: mod.clerkId, body: {} })).status, 200);
+    const raw = await call("GET", `/threads/${number}`);
+    view = raw.json;
+    const removedPost = view.posts.find((post) => post.id === postId);
+    assert.deepEqual([removedPost.removed, removedPost.body, removedPost.author], [true, null, null]);
+    assert.doesNotMatch(raw.text, /Sigue editable/);
+    assert.equal(view.replyCount, 0);
+
+    assert.equal((await call("GET", "/moderation/removed", { user: replier.clerkId })).status, 403);
+    const removed = await call("GET", "/moderation/removed", { user: mod.clerkId });
+    assert.equal(removed.json.find((item) => item.id === postId).text, "Sigue editable");
+
+    assert.equal((await call("POST", `/moderation/posts/${postId}/restore`, { user: mod.clerkId, body: {} })).status, 200);
+    view = (await call("GET", `/threads/${number}`)).json;
+    assert.equal(view.posts.find((post) => post.id === postId).removed, false);
+    assert.equal(view.replyCount, 1);
   });
 
   await t.test("me gusta: cuenta una vez por persona y no se aplica a lo propio", async () => {
