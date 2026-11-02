@@ -53,6 +53,12 @@ const env = {
   // Clave compartida con la home: sus peticiones de servidor no cuentan para el límite
   // por IP, porque todas salen de la misma dirección.
   communitySsrKey: process.env.COMMUNITY_SSR_KEY || "",
+  // Traducción bajo demanda. Un perfil (global., us., eu.…) usa bedrock-runtime; un id de
+  // modelo sin prefijo usa el endpoint Mantle, como el asistente.
+  communityTranslationModel:
+    process.env.COMMUNITY_TRANSLATION_MODEL || "global.anthropic.claude-haiku-5-5",
+  // Máximo de publicaciones traducidas al día. Al alcanzarlo, se sigue viendo el original.
+  communityTranslationDailyLimit: Number(process.env.COMMUNITY_TRANSLATION_DAILY_LIMIT || 500),
   publicSiteUrl: (process.env.PUBLIC_SITE_URL || "https://structunex.com").replace(/\/+$/, ""),
   apiPublicUrl: (process.env.API_PUBLIC_URL || "https://api.structunex.com").replace(/\/+$/, ""),
 

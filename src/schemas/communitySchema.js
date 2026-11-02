@@ -41,11 +41,13 @@ const attachmentCreate = z.object({
 });
 
 const reportCreate = z.object({
-  reason: z.enum(["spam", "abuse", "unsafe", "confidential", "other"]),
+  reason: z.enum(["spam", "abuse", "unsafe", "confidential", "translation", "other"]),
   note: z.string().trim().max(500).default(""),
 });
 
 const moderationReason = z.object({ reason: z.string().trim().max(300).default("") });
+
+const translationRequest = z.object({ locale: z.enum(["en", "es"]) });
 
 const reportResolve = z.object({ status: z.enum(["resolved", "dismissed"]) });
 
@@ -88,6 +90,7 @@ module.exports = {
   reportCreate,
   moderationReason,
   reportResolve,
+  translationRequest,
   flagUpdate,
   suspension,
   tagCreate,

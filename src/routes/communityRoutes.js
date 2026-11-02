@@ -14,6 +14,7 @@ const MINUTE = 60 * 1000;
 function createCommunityRouter({ auth = requireAuth, rateLimits = true } = {}) {
   const router = Router();
   const pass = (_req, _res, next) => next();
+  const translate = rateLimits ? byIp({ windowMs: MINUTE, limit: 20 }) : pass;
   const read = rateLimits ? byIp({ windowMs: MINUTE, limit: 300 }) : pass;
   const write = rateLimits ? byUser({ windowMs: MINUTE, limit: 20 }) : pass;
   const moderate = rateLimits ? byUser({ windowMs: MINUTE, limit: 120 }) : pass;
@@ -28,6 +29,7 @@ function createCommunityRouter({ auth = requireAuth, rateLimits = true } = {}) {
   router.get("/feed", read, c.feed);
   router.get("/pinned", read, c.pinned);
   router.get("/threads/:number", read, c.thread);
+  router.post("/threads/:number/translations", translate, validate(s.translationRequest), c.translate);
   router.get("/users/:handle", read, c.user);
   router.get("/sitemap", read, c.sitemap);
   router.get("/attachments/:id", read, c.attachment);
@@ -55,6 +57,7 @@ function createCommunityRouter({ auth = requireAuth, rateLimits = true } = {}) {
   router.post("/moderation/reports/:id", ...mod, validate(s.reportResolve), c.resolveReport);
   router.post("/moderation/posts/:id/hide", ...mod, validate(s.moderationReason), c.hidePost);
   router.post("/moderation/posts/:id/restore", ...mod, validate(s.moderationReason), c.restorePost);
+  router.post("/moderation/posts/:id/translations/retire", ...mod, validate(s.moderationReason), c.retireTranslations);
   router.post("/moderation/attachments/:id/hide", ...mod, validate(s.moderationReason), c.hideAttachment);
   router.post("/moderation/attachments/:id/restore", ...mod, validate(s.moderationReason), c.restoreAttachment);
   router.post("/moderation/threads/:number/lock", ...mod, validate(s.flagUpdate), c.lockThread);

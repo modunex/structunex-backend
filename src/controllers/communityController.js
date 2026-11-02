@@ -4,6 +4,7 @@ const { isUuid } = require("../lib/ids");
 const svc = require("../services/communityService");
 const attachments = require("../services/communityAttachmentService");
 const emails = require("../services/communityEmailService");
+const translations = require("../services/communityTranslationService");
 const schemas = require("../schemas/communitySchema");
 
 const MAX_THREAD_NUMBER = 2147483647; // columna INTEGER
@@ -65,6 +66,9 @@ const c = {
   }),
   thread: asyncHandler(async (req, res) => res.json(await svc.getThread(threadNumber(req)))),
   user: asyncHandler(async (req, res) => res.json(await svc.getPublicProfile(req.params.handle))),
+  translate: asyncHandler(async (req, res) => {
+    res.json(await translations.translateThread(threadNumber(req), req.body.locale));
+  }),
   sitemap: asyncHandler(async (_req, res) => res.json(await svc.sitemap())),
   attachment: asyncHandler(async (req, res) => {
     redirectTo(res, await attachments.publicUrl(uuidParam(req.params.id)));
@@ -136,6 +140,9 @@ const c = {
   }),
   restorePost: asyncHandler(async (req, res) => {
     res.json(await svc.setPostHidden(req.profile, uuidParam(req.params.id), false, req.body.reason));
+  }),
+  retireTranslations: asyncHandler(async (req, res) => {
+    res.json(await svc.retireTranslations(req.profile, uuidParam(req.params.id), req.body.reason));
   }),
   hideAttachment: asyncHandler(async (req, res) => {
     res.json(await svc.setAttachmentHidden(req.profile, uuidParam(req.params.id), true, req.body.reason));

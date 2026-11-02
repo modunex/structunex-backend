@@ -3,7 +3,7 @@
 // Mismas credenciales que s3Service: si hay claves estáticas en el entorno se usan;
 // si no, el SDK recorre su cadena habitual (perfil, rol de IAM…).
 
-const { AnthropicBedrockMantle } = require("@anthropic-ai/bedrock-sdk");
+const { AnthropicBedrock, AnthropicBedrockMantle } = require("@anthropic-ai/bedrock-sdk");
 const { env } = require("../config/env");
 const { AppError } = require("../middleware/errorHandler");
 
@@ -31,4 +31,24 @@ function bedrock() {
   return client;
 }
 
-module.exports = { bedrock };
+let runtimeClient = null;
+
+/** Cliente de bedrock-runtime, para perfiles de inferencia que Mantle no ofrece. */
+function bedrockRuntime() {
+  if (!runtimeClient) {
+    runtimeClient = new AnthropicBedrock({
+      awsRegion: env.bedrockRegion,
+      ...(env.awsAccessKeyId && env.awsSecretAccessKey
+        ? {
+            awsAccessKey: env.awsAccessKeyId,
+            awsSecretKey: env.awsSecretAccessKey,
+          }
+        : {}),
+      timeout: 2 * 60 * 1000,
+      maxRetries: 2,
+    });
+  }
+  return runtimeClient;
+}
+
+module.exports = { bedrock, bedrockRuntime };

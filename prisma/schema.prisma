@@ -770,6 +770,7 @@ model ForumPost {
   attachments ForumAttachment[]
   reports     ForumReport[]
   emails      ForumEmailOutbox[]
+  translations ForumTranslation[]
 
   @@index([threadId, createdAt])
   @@map("forum_posts")
@@ -863,4 +864,31 @@ model ForumModerationLog {
 
   @@index([targetType, targetId])
   @@map("forum_moderation_log")
+}
+
+// Traducción automática bajo demanda: se crea la primera vez que alguien pulsa Traducir y
+// se reutiliza después. `sourceHash` identifica el original y el glosario de los que sale;
+// si cambian, la fila deja de valer. El original es siempre la versión válida.
+model ForumTranslation {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  postId          String   @db.Uuid
+  locale          String // en | es
+  title           String?
+  assumptions     String?
+  bodyDoc         Json?
+  sourceHash      String
+  status          String   @default("pending") // pending | ready | failed | retired
+  model           String
+  glossaryVersion Int
+  attempts        Int      @default(0)
+  inputTokens     Int      @default(0)
+  outputTokens    Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  post ForumPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, locale])
+  @@index([createdAt])
+  @@map("forum_translations")
 }
