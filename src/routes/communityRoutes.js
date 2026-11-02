@@ -30,6 +30,7 @@ function createCommunityRouter({ auth = requireAuth, rateLimits = true } = {}) {
   router.get("/threads/:number", read, c.thread);
   router.get("/users/:handle", read, c.user);
   router.get("/sitemap", read, c.sitemap);
+  router.get("/attachments/:id", read, c.attachment);
   router.get("/unsubscribe", read, c.unsubscribePage);
   router.post("/unsubscribe", read, c.unsubscribe);
 

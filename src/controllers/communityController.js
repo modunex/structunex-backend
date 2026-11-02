@@ -48,6 +48,11 @@ const requireWriter = (req, _res, next) => {
   }
 };
 
+const redirectTo = (res, url) => {
+  res.set("Cache-Control", "no-store");
+  res.redirect(302, url);
+};
+
 const c = {
   topics: asyncHandler(async (_req, res) => res.json(await svc.listTopics())),
   tags: asyncHandler(async (_req, res) => res.json(await svc.listTags())),
@@ -61,10 +66,13 @@ const c = {
   thread: asyncHandler(async (req, res) => res.json(await svc.getThread(threadNumber(req)))),
   user: asyncHandler(async (req, res) => res.json(await svc.getPublicProfile(req.params.handle))),
   sitemap: asyncHandler(async (_req, res) => res.json(await svc.sitemap())),
+  attachment: asyncHandler(async (req, res) => {
+    redirectTo(res, await attachments.publicUrl(uuidParam(req.params.id)));
+  }),
   // El GET no da de baja: algunos filtros de correo abren los enlaces por su cuenta.
   download: asyncHandler(async (req, res) => {
     res.set("Cache-Control", "no-store");
-    res.json({ url: await attachments.downloadUrl(uuidParam(req.params.id)) });
+    res.json({ url: await attachments.publicUrl(uuidParam(req.params.id), undefined, { signedIn: true }) });
   }),
   unsubscribePage: (req, res) => {
     const token = String(req.query.token ?? "").replace(/[^A-Za-z0-9._-]/g, "");
