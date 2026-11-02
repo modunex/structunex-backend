@@ -35,6 +35,8 @@ model User {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
+  forumProfile ForumProfile?
+
   @@index([email])
   @@map("users")
 }
@@ -636,4 +638,229 @@ model ReportRevision {
 
   @@unique([reportId, number])
   @@map("report_revisions")
+}
+
+// ─── Comunidad (/community) ───
+//
+// Separada del modelo estructural: ninguna tabla de aquí referencia proyectos, y la
+// migración solo añade tablas. Lo oculto por moderación nunca se borra (`hiddenAt`), y al
+// borrar una cuenta sus publicaciones quedan como «usuario eliminado» (authorId null).
+// El cuerpo es JSON de TipTap ya saneado (src/lib/communityDoc.js), nunca HTML.
+
+model ForumTopic {
+  id                       String   @id @default(uuid(7)) @db.Uuid
+  slug                     String   @unique
+  nameEn                   String
+  nameEs                   String
+  descriptionEn            String
+  descriptionEs            String
+  position                 Int      @default(0)
+  postingRole              String   @default("member") // member | moderator
+  requiresTechnicalContext Boolean  @default(false)
+  createdAt                DateTime @default(now())
+
+  threads ForumThread[]
+
+  @@map("forum_topics")
+}
+
+model ForumTag {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  slug      String   @unique
+  nameEn    String
+  nameEs    String
+  group     String // code | subject | product
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  threads ForumThreadTag[]
+
+  @@map("forum_tags")
+}
+
+model ForumProfile {
+  id                   String    @id @default(uuid(7)) @db.Uuid
+  userId               String    @unique @db.Uuid
+  handle               String    @unique
+  displayName          String
+  bio                  String    @default("")
+  role                 String    @default("member") // member | moderator | admin
+  suspendedUntil       DateTime?
+  guidelinesAcceptedAt DateTime?
+  emailVerifiedAt      DateTime?
+  notifyReplies        Boolean   @default(true)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  threads       ForumThread[]
+  posts         ForumPost[]          @relation("PostAuthor")
+  hiddenPosts   ForumPost[]          @relation("PostHiddenBy")
+  attachments   ForumAttachment[]
+  reports       ForumReport[]        @relation("ReportReporter")
+  resolved      ForumReport[]        @relation("ReportResolver")
+  subscriptions ForumSubscription[]
+  emails        ForumEmailOutbox[]
+  moderation    ForumModerationLog[]
+
+  @@map("forum_profiles")
+}
+
+model ForumThread {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  number       Int       @unique @default(autoincrement())
+  topicId      String    @db.Uuid
+  authorId     String?   @db.Uuid
+  locale       String // en | es
+  title        String
+  slug         String
+  codeEdition  String?
+  designMethod String?
+  assumptions  String?
+  units        String?
+  pinned       Boolean   @default(false)
+  lockedAt     DateTime?
+  hiddenAt     DateTime?
+  replyCount   Int       @default(0)
+  lastPostAt   DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  topic         ForumTopic          @relation(fields: [topicId], references: [id])
+  author        ForumProfile?       @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  tags          ForumThreadTag[]
+  posts         ForumPost[]
+  subscriptions ForumSubscription[]
+
+  @@index([hiddenAt, lastPostAt])
+  @@index([topicId, lastPostAt])
+  @@index([locale, lastPostAt])
+  @@map("forum_threads")
+}
+
+model ForumThreadTag {
+  threadId String @db.Uuid
+  tagId    String @db.Uuid
+
+  thread ForumThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  tag    ForumTag    @relation(fields: [tagId], references: [id])
+
+  @@id([threadId, tagId])
+  @@index([tagId])
+  @@map("forum_thread_tags")
+}
+
+model ForumPost {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  threadId     String    @db.Uuid
+  authorId     String?   @db.Uuid
+  isFirst      Boolean   @default(false)
+  bodyDoc      Json
+  bodyText     String
+  bodyVersion  Int       @default(1)
+  editedAt     DateTime?
+  hiddenAt     DateTime?
+  hiddenById   String?   @db.Uuid
+  hiddenReason String?
+  createdAt    DateTime  @default(now())
+
+  thread      ForumThread        @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  author      ForumProfile?      @relation("PostAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  hiddenBy    ForumProfile?      @relation("PostHiddenBy", fields: [hiddenById], references: [id], onDelete: SetNull)
+  attachments ForumAttachment[]
+  reports     ForumReport[]
+  emails      ForumEmailOutbox[]
+
+  @@index([threadId, createdAt])
+  @@map("forum_posts")
+}
+
+model ForumAttachment {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  postId     String?   @db.Uuid
+  uploaderId String?   @db.Uuid
+  s3Key      String    @unique
+  name       String
+  mime       String
+  extension  String
+  size       Int
+  kind       String // image | file
+  width      Int?
+  height     Int?
+  uploaded   Boolean   @default(false)
+  scanStatus String    @default("pending") // pending | clean | blocked
+  hiddenAt   DateTime?
+  createdAt  DateTime  @default(now())
+
+  post     ForumPost?    @relation(fields: [postId], references: [id], onDelete: SetNull)
+  uploader ForumProfile? @relation(fields: [uploaderId], references: [id], onDelete: SetNull)
+
+  @@index([postId])
+  @@index([uploaderId, createdAt])
+  @@map("forum_attachments")
+}
+
+model ForumReport {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  postId       String    @db.Uuid
+  reporterId   String    @db.Uuid
+  reason       String // spam | abuse | unsafe | confidential | other
+  note         String    @default("")
+  status       String    @default("open") // open | resolved | dismissed
+  resolvedById String?   @db.Uuid
+  resolvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  post       ForumPost     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reporter   ForumProfile  @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  resolvedBy ForumProfile? @relation("ReportResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@unique([postId, reporterId])
+  @@index([status, createdAt])
+  @@map("forum_reports")
+}
+
+model ForumSubscription {
+  threadId  String   @db.Uuid
+  profileId String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  thread  ForumThread  @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  profile ForumProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@id([threadId, profileId])
+  @@index([profileId])
+  @@map("forum_subscriptions")
+}
+
+model ForumEmailOutbox {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  postId    String    @db.Uuid
+  profileId String    @db.Uuid
+  status    String    @default("pending") // pending | sending | sent | failed | skipped
+  attempts  Int       @default(0)
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  post    ForumPost    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  profile ForumProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, profileId])
+  @@index([status, createdAt])
+  @@map("forum_email_outbox")
+}
+
+model ForumModerationLog {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  actorId    String?  @db.Uuid
+  action     String
+  targetType String // post | thread | attachment | profile | tag | report
+  targetId   String
+  reason     String   @default("")
+  createdAt  DateTime @default(now())
+
+  actor ForumProfile? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([targetType, targetId])
+  @@map("forum_moderation_log")
 }

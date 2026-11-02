@@ -26,10 +26,36 @@ const env = {
     .split(",")
     .map((o) => o.trim())
     .filter(Boolean),
+  // Orígenes de la web pública (structunex.com): leen la API de la Comunidad y, con sesión,
+  // escriben en ella. Se suman a los anteriores en CORS y en authorizedParties.
+  communityOrigins: (
+    process.env.COMMUNITY_ORIGIN ||
+    "https://structunex.com,https://www.structunex.com"
+  )
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean),
   clerkPublishableKey: process.env.CLERK_PUBLISHABLE_KEY,
   clerkSecretKey: process.env.CLERK_SECRET_KEY,
   // Svix signing secret for the Clerk webhook (Dashboard → Webhooks → endpoint).
   clerkWebhookSigningSecret: process.env.CLERK_WEBHOOK_SIGNING_SECRET,
+
+  // Comunidad. Apagada por defecto: sin COMMUNITY_ENABLED=true sus rutas responden 404.
+  communityEnabled: process.env.COMMUNITY_ENABLED === "true",
+  // Prefijo de los adjuntos. Es el que debe vigilar GuardDuty Malware Protection for S3.
+  communityS3Prefix: (process.env.COMMUNITY_S3_PREFIX || "community").replace(/^\/+|\/+$/g, ""),
+  // "guardduty": un adjunto solo se sirve con la etiqueta NO_THREATS_FOUND.
+  // "off": solo para desarrollo local; da por limpios los adjuntos.
+  communityScanMode: process.env.COMMUNITY_SCAN_MODE === "off" ? "off" : "guardduty",
+  // Remitente de los avisos por correo (Amazon SES). Sin él no se encola ningún aviso.
+  communityEmailFrom: process.env.COMMUNITY_EMAIL_FROM || "",
+  // Clave para firmar los enlaces de baja de los avisos.
+  communityEmailSecret: process.env.COMMUNITY_EMAIL_SECRET || "",
+  // Clave compartida con la home: sus peticiones de servidor no cuentan para el límite
+  // por IP, porque todas salen de la misma dirección.
+  communitySsrKey: process.env.COMMUNITY_SSR_KEY || "",
+  publicSiteUrl: (process.env.PUBLIC_SITE_URL || "https://structunex.com").replace(/\/+$/, ""),
+  apiPublicUrl: (process.env.API_PUBLIC_URL || "https://api.structunex.com").replace(/\/+$/, ""),
 
   // Mailchimp: registered users are pushed into the audience by the Clerk webhook.
   mailchimpApiKey: process.env.MAILCHIMP_API_KEY,

@@ -8,6 +8,9 @@ const { errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
 
+// Render pone un proxy delante: sin esto, req.ip sería siempre la IP del proxy.
+app.set("trust proxy", 1);
+
 // CORS: permite el origen configurado y, en desarrollo, cualquier puerto de
 // localhost (Vite suele cambiar de puerto). Peticiones sin origin (curl, health)
 // también se permiten.
@@ -15,7 +18,12 @@ const localhostOrigin = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || env.clientOrigins.includes(origin) || localhostOrigin.test(origin)) {
+      if (
+        !origin ||
+        env.clientOrigins.includes(origin) ||
+        env.communityOrigins.includes(origin) ||
+        localhostOrigin.test(origin)
+      ) {
         return callback(null, true);
       }
       return callback(new Error("Not allowed by CORS"));
@@ -40,7 +48,12 @@ app.use((req, res, next) =>
 );
 
 // Attaches Clerk session state to every request (does not block on its own).
-app.use(clerkMiddleware());
+// Las sesiones se comparten entre subdominios, así que en producción solo se aceptan
+// tokens emitidos para nuestros propios orígenes. En desarrollo el puerto de Vite cambia.
+const authorizedParties = [...env.clientOrigins, ...env.communityOrigins];
+app.use(
+  clerkMiddleware(process.env.NODE_ENV === "production" ? { authorizedParties } : {})
+);
 
 app.use("/api", routes);
 

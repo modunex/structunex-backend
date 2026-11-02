@@ -8,6 +8,7 @@
 const {
   S3Client,
   GetObjectCommand,
+  GetObjectTaggingCommand,
   PutObjectCommand,
   DeleteObjectsCommand,
   DeleteObjectCommand,
@@ -158,6 +159,20 @@ async function getObjectBuffer(key) {
   return Buffer.from(await out.Body.transformToByteArray());
 }
 
+/** Lee los primeros `bytes` de un objeto (comprobar su tipo real sin descargarlo). */
+async function getObjectHead(key, bytes) {
+  const out = await s3().send(
+    new GetObjectCommand({ Bucket: env.s3Bucket, Key: key, Range: `bytes=0-${bytes - 1}` })
+  );
+  return Buffer.from(await out.Body.transformToByteArray());
+}
+
+/** Etiquetas de un objeto como { clave: valor }. */
+async function getObjectTags(key) {
+  const out = await s3().send(new GetObjectTaggingCommand({ Bucket: env.s3Bucket, Key: key }));
+  return Object.fromEntries((out.TagSet ?? []).map((t) => [t.Key, t.Value]));
+}
+
 /** Tamaño en bytes de un objeto (HeadObject: no descarga nada). */
 async function objectSize(key) {
   const out = await s3().send(new HeadObjectCommand({ Bucket: env.s3Bucket, Key: key }));
@@ -187,6 +202,8 @@ module.exports = {
   objectSize,
   reportsPrefix,
   getObjectBuffer,
+  getObjectHead,
+  getObjectTags,
   deletePrefix,
   deleteRun,
   deleteProjectResults,
