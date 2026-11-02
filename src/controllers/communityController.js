@@ -106,6 +106,15 @@ const c = {
   report: asyncHandler(async (req, res) => {
     res.status(201).json(await svc.report(req.profile, uuidParam(req.params.id), req.body));
   }),
+  like: asyncHandler(async (req, res) => {
+    res.json(await svc.setLike(req.profile, uuidParam(req.params.id), true));
+  }),
+  unlike: asyncHandler(async (req, res) => {
+    res.json(await svc.setLike(req.profile, uuidParam(req.params.id), false));
+  }),
+  threadLikes: asyncHandler(async (req, res) => {
+    res.json(await svc.getThreadLikes(req.profile, threadNumber(req)));
+  }),
   subscription: asyncHandler(async (req, res) => {
     res.json(await svc.getSubscription(req.profile, threadNumber(req)));
   }),

@@ -51,6 +51,7 @@ test("Comunidad", options, async (t) => {
   };
 
   const clean = async () => {
+    await prisma.forumLike.deleteMany();
     await prisma.forumTranslation.deleteMany();
     await prisma.forumEmailOutbox.deleteMany();
     await prisma.forumModerationLog.deleteMany();
@@ -355,6 +356,34 @@ test("Comunidad", options, async (t) => {
     assert.equal((await prisma.forumProfile.findUnique({ where: { id: a.profile.id } })).notifyReplies, true);
     assert.equal((await call("POST", `/unsubscribe?token=${token}`)).status, 200);
     assert.equal((await prisma.forumProfile.findUnique({ where: { id: a.profile.id } })).notifyReplies, false);
+  });
+
+  await t.test("me gusta: cuenta una vez por persona y no se aplica a lo propio", async () => {
+    const a = await person();
+    const b = await person();
+    const c = await person();
+    const number = await newThread(a.clerkId);
+    const postId = (await call("GET", `/threads/${number}`)).json.posts[0].id;
+    const like = (user, method = "PUT") => call(method, `/posts/${postId}/like`, { user });
+
+    assert.equal((await call("PUT", `/posts/${postId}/like`)).status, 401);
+    assert.equal((await like(a.clerkId)).status, 403);
+    assert.equal((await like(b.clerkId)).json.likeCount, 1);
+    assert.equal((await like(b.clerkId)).json.likeCount, 1);
+    assert.equal((await like(c.clerkId)).json.likeCount, 2);
+
+    assert.equal((await call("GET", `/threads/${number}`)).json.posts[0].likeCount, 2);
+    const row = (await call("GET", "/feed")).json.threads.find((item) => item.number === number);
+    assert.equal(row.likeCount, 2);
+    assert.deepEqual((await call("GET", `/threads/${number}/likes`, { user: b.clerkId })).json.postIds, [postId]);
+    const own = (await call("GET", `/threads/${number}/likes`, { user: a.clerkId })).json;
+    assert.deepEqual(own, { postIds: [], counts: { [postId]: 2 } });
+
+    assert.equal((await like(b.clerkId, "DELETE")).json.likeCount, 1);
+    assert.equal((await like(b.clerkId, "DELETE")).json.likeCount, 1);
+
+    await prisma.forumPost.update({ where: { id: postId }, data: { hiddenAt: new Date() } });
+    assert.equal((await like(b.clerkId)).status, 404);
   });
 
   await t.test("traducción: bajo demanda, reutilizada y sin tocar el original", async () => {

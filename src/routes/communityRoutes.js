@@ -23,6 +23,7 @@ function createCommunityRouter({ auth = requireAuth, rateLimits = true } = {}) {
   const writer = [...signed, write, c.requireWriter];
   const member = [...signed, write, c.requireProfile];
   const mod = [...signed, moderate, c.requireProfile];
+  const likes = [...signed, moderate, c.requireProfile];
 
   router.get("/topics", read, c.topics);
   router.get("/tags", read, c.tags);
@@ -43,6 +44,9 @@ function createCommunityRouter({ auth = requireAuth, rateLimits = true } = {}) {
   router.post("/threads/:number/posts", ...writer, validate(s.postCreate), c.createPost);
   router.patch("/posts/:id", ...writer, validate(s.postCreate), c.editPost);
   router.post("/posts/:id/report", ...member, validate(s.reportCreate), c.report);
+  router.put("/posts/:id/like", ...likes, c.like);
+  router.delete("/posts/:id/like", ...likes, c.unlike);
+  router.get("/threads/:number/likes", ...signed, c.threadLikes);
   router.get("/threads/:number/subscription", ...signed, c.subscription);
   router.put("/threads/:number/subscription", ...member, c.subscribe);
   router.delete("/threads/:number/subscription", ...member, c.unsubscribeThread);
