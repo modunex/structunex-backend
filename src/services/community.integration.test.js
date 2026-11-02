@@ -51,6 +51,7 @@ test("Comunidad", options, async (t) => {
   };
 
   const clean = async () => {
+    await prisma.forumTranslation.deleteMany();
     await prisma.forumEmailOutbox.deleteMany();
     await prisma.forumModerationLog.deleteMany();
     await prisma.forumReport.deleteMany();
@@ -356,6 +357,103 @@ test("Comunidad", options, async (t) => {
     assert.equal((await prisma.forumProfile.findUnique({ where: { id: a.profile.id } })).notifyReplies, true);
     assert.equal((await call("POST", `/unsubscribe?token=${token}`)).status, 200);
     assert.equal((await prisma.forumProfile.findUnique({ where: { id: a.profile.id } })).notifyReplies, false);
+  });
+
+  await t.test("traducción: bajo demanda, reutilizada y sin tocar el original", async () => {
+    const { translateThread } = require("./communityTranslationService");
+    const a = await person();
+    const b = await person();
+    const number = await newThread(a.clerkId, {
+      title: "Carga de 200 kN en una viga",
+      body: {
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "Hola " }, { type: "text", text: "mundo", marks: [{ type: "bold" }] }] },
+          { type: "blockMath", attrs: { latex: "\\phi R_n" } },
+        ],
+      },
+    });
+    await call("POST", `/threads/${number}/posts`, { user: b.clerkId, body: { body: doc("Una respuesta") } });
+
+    let calls = 0;
+    const model = async (_from, _to, strings) => {
+      calls += 1;
+      return { translated: strings.map((value) => value.replace("Hola", "Hello").replace("Carga de", "Load of").replace("Una respuesta", "A reply").replace("Viga simplemente apoyada", "Simply supported beam").replace("una viga", "a beam")), inputTokens: 10, outputTokens: 5 };
+    };
+
+    const same = await translateThread(number, "es", model);
+    assert.deepEqual([same.translations.length, calls], [0, 0]); // ya está en ese idioma
+
+    const first = await translateThread(number, "en", model);
+    assert.equal(calls, 2);
+    assert.equal(first.done, true);
+    assert.equal(first.translations[0].title, "Load of 200 kN en a beam");
+    assert.equal(first.translations[0].assumptions, "Simply supported beam");
+    assert.equal(first.translations[0].body.content[0].content[0].text, "Hello ");
+    assert.equal(first.translations[0].body.content[1].attrs.latex, "\\phi R_n");
+
+    await translateThread(number, "en", model);
+    assert.equal(calls, 2); // la segunda vez no se paga
+
+    const view = (await call("GET", `/threads/${number}`)).json;
+    assert.equal(view.title, "Carga de 200 kN en una viga");
+    assert.equal(view.posts[0].body.content[0].content[0].text, "Hola ");
+    assert.doesNotMatch(JSON.stringify(view), /Hello|A reply/);
+
+    const postId = view.posts[0].id;
+    await call("PATCH", `/posts/${postId}`, { user: a.clerkId, body: { body: doc("Hola otra vez") } });
+    await translateThread(number, "en", model);
+    assert.equal(calls, 3); // editar invalida solo esa traducción
+  });
+
+  await t.test("traducción: un dato cambiado o un fallo deja el original", async () => {
+    const { translateThread } = require("./communityTranslationService");
+    const a = await person();
+    const number = await newThread(a.clerkId, { title: "Carga de 200 kN en una viga" });
+    const wrong = async (_from, _to, strings) => ({ translated: strings.map((value) => value.replace("200", "2000")), inputTokens: 1, outputTokens: 1 });
+    const out = await translateThread(number, "en", wrong);
+    assert.deepEqual([out.translations.length, out.failed], [0, 1]);
+    const row = await prisma.forumTranslation.findFirst({ where: { post: { thread: { number } } } });
+    assert.equal(row.status, "failed");
+
+    let calls = 0;
+    const down = async () => {
+      calls += 1;
+      throw new Error("Bedrock caído");
+    };
+    await translateThread(number, "en", down);
+    await translateThread(number, "en", down);
+    assert.equal(calls, 2);
+    await translateThread(number, "en", down); // agotó los intentos
+    assert.equal(calls, 2);
+  });
+
+  await t.test("traducción: moderación, límite diario y ruta pública", async () => {
+    const service = require("./communityTranslationService");
+    const a = await person();
+    const b = await person();
+    const mod = await person({ role: "moderator" });
+    const number = await newThread(a.clerkId, { title: "Pregunta para traducir bien" });
+    const echo = async (_from, _to, strings) => ({ translated: strings, inputTokens: 1, outputTokens: 1 });
+    await service.translateThread(number, "en", echo);
+    const postId = (await call("GET", `/threads/${number}`)).json.posts[0].id;
+
+    assert.equal((await call("POST", `/posts/${postId}/report`, { user: b.clerkId, body: { reason: "translation" } })).status, 201);
+    assert.equal((await call("POST", `/moderation/posts/${postId}/translations/retire`, { user: a.clerkId, body: {} })).status, 403);
+    assert.equal((await call("POST", `/moderation/posts/${postId}/translations/retire`, { user: mod.clerkId, body: {} })).status, 200);
+    assert.equal((await service.translateThread(number, "en", echo)).translations.length, 0);
+
+    assert.equal((await call("POST", `/threads/${number}/translations`, { body: { locale: "fr" } })).status, 400);
+    assert.equal((await call("POST", "/threads/99999999999/translations", { body: { locale: "en" } })).status, 404);
+
+    const { env } = require("../config/env");
+    const limit = env.communityTranslationDailyLimit;
+    env.communityTranslationDailyLimit = 0;
+    let calls = 0;
+    const other = await newThread(a.clerkId, { title: "Otra pregunta para traducir" });
+    const out = await service.translateThread(other, "en", async (...args) => (calls += 1, echo(...args)));
+    env.communityTranslationDailyLimit = limit;
+    assert.deepEqual([out.limited, out.done, calls], [true, true, 0]);
   });
 
   const PDF = Buffer.from("%PDF-1.7\n");

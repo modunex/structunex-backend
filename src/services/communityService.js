@@ -687,6 +687,16 @@ async function resolveReport(profile, reportId, status) {
   return { ok: true };
 }
 
+/** Retira las traducciones de una publicación. El original no cambia. */
+async function retireTranslations(profile, postId, reason) {
+  assertModerator(profile);
+  await prisma.$transaction(async (tx) => {
+    await tx.forumTranslation.updateMany({ where: { postId }, data: { status: "retired" } });
+    await log(tx, profile, "translation.retire", "post", postId, reason);
+  });
+  return { ok: true };
+}
+
 async function createTag(profile, data) {
   assertModerator(profile);
   return prisma.$transaction(async (tx) => {
@@ -729,6 +739,7 @@ module.exports = {
   setPostHidden,
   setAttachmentHidden,
   setThreadFlag,
+  retireTranslations,
   suspendProfile,
   resolveReport,
   createTag,
