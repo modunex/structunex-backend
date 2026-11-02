@@ -27,10 +27,6 @@ const threadCreate = z.object({
   tags: z.array(z.string().min(1).max(64)).max(3).default([]),
   body: z.unknown(),
   attachmentIds,
-  codeEdition: z.string().trim().max(120).optional(),
-  designMethod: z.string().trim().max(40).optional(),
-  assumptions: z.string().trim().max(500).optional(),
-  units: z.string().trim().max(60).optional(),
 });
 
 const postCreate = z.object({ body: z.unknown(), attachmentIds });

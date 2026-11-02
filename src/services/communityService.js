@@ -3,6 +3,7 @@ const { clerkClient } = require("@clerk/express");
 const { prisma } = require("../config/db");
 const { AppError } = require("../middleware/errorHandler");
 const { sanitizeDocument, DocumentError } = require("../lib/communityDoc");
+const { detectLocale } = require("../lib/communityLanguage");
 const { slugify } = require("../lib/communitySlug");
 const { MAX_FILES_PER_POST } = require("../lib/communityFiles");
 const { TOPICS, TAGS } = require("../lib/communityCatalog");
@@ -390,19 +391,6 @@ async function resolveAttachments(tx, profile, requested, imageIds, postId = nul
   return ids;
 }
 
-function technicalContext(topic, body) {
-  if (!topic.requiresTechnicalContext) return {};
-  if (!body.codeEdition || !body.assumptions || !body.units) {
-    throw new AppError(400, "Indica norma y edición, hipótesis y unidades");
-  }
-  return {
-    codeEdition: body.codeEdition,
-    designMethod: body.designMethod || null,
-    assumptions: body.assumptions,
-    units: body.units,
-  };
-}
-
 async function createThread(profile, body) {
   assertCanWrite(profile);
   await assertQuota(profile, "threads");
@@ -415,7 +403,6 @@ async function createThread(profile, body) {
     where: { slug: { in: body.tags }, isActive: true },
   });
   if (tags.length !== new Set(body.tags).size) throw new AppError(400, "Hay tags no válidos");
-  const context = technicalContext(topic, body);
   const { doc, text, imageIds } = parseBody(body.body);
 
   const thread = await prisma.$transaction(async (tx) => {
@@ -424,10 +411,9 @@ async function createThread(profile, body) {
       data: {
         topicId: topic.id,
         authorId: profile.id,
-        locale: body.locale,
+        locale: detectLocale(`${body.title} ${text}`, body.locale),
         title: body.title,
         slug: slugify(body.title),
-        ...context,
         tags: { create: tags.map((tag) => ({ tagId: tag.id })) },
         posts: {
           create: { authorId: profile.id, isFirst: true, bodyDoc: doc, bodyText: text },
