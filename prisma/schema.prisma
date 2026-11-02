@@ -702,6 +702,7 @@ model ForumProfile {
   subscriptions ForumSubscription[]
   emails        ForumEmailOutbox[]
   moderation    ForumModerationLog[]
+  likes ForumLike[]
 
   @@map("forum_profiles")
 }
@@ -762,6 +763,7 @@ model ForumPost {
   hiddenAt     DateTime?
   hiddenById   String?   @db.Uuid
   hiddenReason String?
+  likeCount    Int       @default(0)
   createdAt    DateTime  @default(now())
 
   thread      ForumThread        @relation(fields: [threadId], references: [id], onDelete: Cascade)
@@ -771,9 +773,23 @@ model ForumPost {
   reports     ForumReport[]
   emails      ForumEmailOutbox[]
   translations ForumTranslation[]
+  likes       ForumLike[]
 
   @@index([threadId, createdAt])
   @@map("forum_posts")
+}
+
+model ForumLike {
+  postId    String   @db.Uuid
+  profileId String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  post    ForumPost    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  profile ForumProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@id([postId, profileId])
+  @@index([profileId])
+  @@map("forum_likes")
 }
 
 model ForumAttachment {

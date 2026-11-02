@@ -68,7 +68,7 @@ const THREAD_LIST_SELECT = {
   topic: true,
   author: WITH_AVATAR,
   tags: { select: { tag: true } },
-  posts: { where: { isFirst: true }, select: { bodyText: true } },
+  posts: { where: { isFirst: true }, select: { bodyText: true, likeCount: true } },
 };
 
 function publicTag(tag) {
@@ -96,6 +96,7 @@ function publicThreadRow(thread) {
     pinned: thread.pinned,
     locked: Boolean(thread.lockedAt),
     replyCount: thread.replyCount,
+    likeCount: thread.posts?.[0]?.likeCount ?? 0,
     lastPostAt: thread.lastPostAt,
     createdAt: thread.createdAt,
     excerpt: (thread.posts?.[0]?.bodyText ?? "").slice(0, 220),
@@ -109,6 +110,7 @@ function publicPost(post) {
   return {
     id: post.id,
     isFirst: post.isFirst,
+    likeCount: post.likeCount,
     body: post.bodyDoc,
     editedAt: post.editedAt,
     createdAt: post.createdAt,
@@ -514,6 +516,41 @@ async function report(profile, postId, body) {
   return { ok: true };
 }
 
+/** Marca o quita un me gusta. Repetir la misma acción no cambia el contador. */
+async function setLike(profile, postId, liked) {
+  const post = await prisma.forumPost.findFirst({
+    where: { id: postId, hiddenAt: null, thread: { hiddenAt: null } },
+  });
+  if (!post) throw new AppError(404, "NotFound");
+  if (post.authorId === profile.id) throw new AppError(403, "OwnPost");
+  return prisma.$transaction(async (tx) => {
+    const where = { postId, profileId: profile.id };
+    const { count } = liked
+      ? await tx.forumLike.createMany({ data: [where], skipDuplicates: true })
+      : await tx.forumLike.deleteMany({ where });
+    const updated = count
+      ? await tx.forumPost.update({ where: { id: postId }, data: { likeCount: { increment: liked ? 1 : -1 } } })
+      : post;
+    return { liked, likeCount: updated.likeCount };
+  });
+}
+
+/** Me gusta del usuario en un hilo, con recuentos al día: la página pública va en caché. */
+async function getThreadLikes(profile, number) {
+  const posts = await prisma.forumPost.findMany({
+    where: { hiddenAt: null, thread: { number, hiddenAt: null } },
+    select: {
+      id: true,
+      likeCount: true,
+      likes: { where: { profileId: profile?.id ?? "00000000-0000-0000-0000-000000000000" }, select: { postId: true } },
+    },
+  });
+  return {
+    postIds: posts.filter((post) => post.likes.length > 0).map((post) => post.id),
+    counts: Object.fromEntries(posts.map((post) => [post.id, post.likeCount])),
+  };
+}
+
 async function getSubscription(profile, number) {
   if (!profile) return { subscribed: false };
   const row = await prisma.forumSubscription.findFirst({
@@ -725,6 +762,8 @@ module.exports = {
   setPostHidden,
   setAttachmentHidden,
   setThreadFlag,
+  setLike,
+  getThreadLikes,
   retireTranslations,
   suspendProfile,
   resolveReport,
