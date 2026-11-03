@@ -164,6 +164,53 @@ test("Biblioteca de imágenes", options, async (t) => {
     assert.equal((await images.documentVersions(other, report.document)).size, 0);
   });
 
+  await t.test("exporta con la imagen incrustada sin guardarla en el registro", async () => {
+    const http = require("node:http");
+    const s3 = require("./s3Service");
+    const reports = require("./reportDocumentService");
+    const image = await add("Exportada");
+    const report = await reportWith(image, image.current._id);
+    let received;
+    const renderer = http.createServer((req, res) => {
+      const chunks = [];
+      req.on("data", (chunk) => chunks.push(chunk));
+      req.on("end", () => {
+        received = JSON.parse(Buffer.concat(chunks));
+        res.writeHead(200, { "x-pages": "3" });
+        res.end("%PDF-1.7");
+      });
+    });
+    await new Promise((resolve) => renderer.listen(0, resolve));
+    const saved = { url: env.rendererUrl, token: env.rendererToken, get: s3.getObjectBuffer, put: s3.putObject };
+    env.rendererUrl = `http://127.0.0.1:${renderer.address().port}`;
+    env.rendererToken = "token";
+    s3.getObjectBuffer = storage.getObjectBuffer;
+    s3.putObject = storage.putObject;
+    try {
+      const row = await reports.exportDocument(project, report.id, {});
+      const [block] = received.document.blocks;
+      assert.match(block.src, /^data:image\/png;base64,/);
+      assert.equal(block.origin.name, "Exportada");
+      const stored = await prisma.reportExport.findUnique({ where: { id: row._id } });
+      assert.equal(stored.document.blocks[0].src, undefined);
+      assert.equal(stored.document.blocks[0].origin.sha256, block.origin.sha256);
+
+      const foreign = await prisma.report.create({
+        data: { projectId: other.id, title: "Ajeno", document: report.document },
+      });
+      await assert.rejects(reports.exportDocument(other, foreign.id, {}), (err) => {
+        assert.equal(err.status, 409);
+        assert.deepEqual(err.details.problems, [{ blockId: "f1", type: "figure", reason: "missing" }]);
+        return true;
+      });
+    } finally {
+      Object.assign(env, { rendererUrl: saved.url, rendererToken: saved.token });
+      s3.getObjectBuffer = saved.get;
+      s3.putObject = saved.put;
+      renderer.close();
+    }
+  });
+
   await t.test("no genera un PDF al que le falte una imagen o que supere el límite", async () => {
     const image = await add("Perdida");
     const report = await reportWith(image, image.current._id);
