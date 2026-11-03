@@ -17,6 +17,8 @@ const {
   verifyDocument,
   warningText,
 } = require("../lib/reportDocuments");
+const { figureProblems, withFigureOrigin } = require("../lib/projectImages");
+const images = require("./projectImageService");
 const reporting = require("./reportingService");
 
 const { internals } = reporting;
@@ -177,6 +179,7 @@ async function verify(project, reportId) {
   const report = await findReport(project, reportId);
   const server = await serverSnapshots(project, report.document);
   const { problems } = verifyDocument(report.document, server, { warningText: warningText(report.lang) });
+  problems.push(...figureProblems(report.document, await images.documentVersions(project, report.document)));
   const states = technicalBlocks(report.document).map((b) => {
     const got = server.get(bindingKey(b));
     return { blockId: b.id, state: got?.error ? got.error : got?.state ?? "missing", staleReasons: got?.staleReasons || [] };
@@ -194,13 +197,16 @@ async function exportDocument(project, reportId, { unitSystemId, revisionId } = 
     title = `${report.title} — ${rev.name}`;
   }
   const server = await serverSnapshots(project, source);
-  const { document, problems } = verifyDocument(source, server, { warningText: warningText(report.lang) });
+  const { document: verified, problems } = verifyDocument(source, server, { warningText: warningText(report.lang) });
+  const versions = await images.documentVersions(project, source);
+  problems.push(...figureProblems(source, versions));
   if (problems.length) {
     throw new AppError(409, "Hay bloques técnicos que no coinciden con los datos guardados: actualízalos antes de exportar.", {
       error: "report.blocksOutOfDate",
       problems,
     });
   }
+  const document = withFigureOrigin(verified, versions);
   return internals.renderAndStore(project, {
     kind: "document",
     title,
@@ -209,6 +215,7 @@ async function exportDocument(project, reportId, { unitSystemId, revisionId } = 
     // Mismo criterio que el resto de exportaciones: ids de ejecución sin prefijo.
     runIds: [...new Set(technicalBlocks(document).map((b) => b.binding.runId || b.binding.designRunId || b.binding.analysisRunId))],
     document,
+    renderDocument: await images.withFigureData(document, versions),
     reportId,
   });
 }

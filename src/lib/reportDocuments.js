@@ -35,6 +35,17 @@ function optionsError(options) {
 
 const SIMPLE = new Set(["heading", "paragraph", "bulletList", "numberedList", "callout", "divider", "pageBreak", "equation", "table"]);
 const MAX_BLOCKS = 5000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Una figura solo cita una versión de la biblioteca. La imagen la pone el servidor. */
+function figureError(b) {
+  if (!UUID.test(b.imageId ?? "") || !UUID.test(b.imageVersionId ?? "")) return "invalid image";
+  if (b.src !== undefined || b.origin !== undefined) return "reserved field";
+  if (b.width !== "full" && b.width !== "half") return "invalid width";
+  if (typeof b.alt !== "string" || b.alt.length > 500) return "invalid alt";
+  if (!Array.isArray(b.caption) || JSON.stringify(b.caption).length > 4000) return "invalid caption";
+  return null;
+}
 
 /** Validación estructural mínima del formato v1 (el detalle lo cuida el editor). */
 function validateDocument(doc) {
@@ -48,7 +59,11 @@ function validateDocument(doc) {
     if (b.id.startsWith("__")) return `block ${b.id}: ids starting with __ are reserved`;
     if (ids.has(b.id)) return `duplicate block id ${b.id}`;
     ids.add(b.id);
-    if (!SIMPLE.has(b.type) && !TECHNICAL.has(b.type)) return `unknown block type ${b.type}`;
+    if (!SIMPLE.has(b.type) && !TECHNICAL.has(b.type) && b.type !== "figure") return `unknown block type ${b.type}`;
+    if (b.type === "figure") {
+      const invalid = figureError(b);
+      if (invalid) return `block ${b.id}: ${invalid}`;
+    }
     if (TECHNICAL.has(b.type)) {
       const k = bindingKey(b);
       if (!k) return `block ${b.id}: invalid binding`;

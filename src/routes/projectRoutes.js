@@ -19,6 +19,7 @@ const designRoutes = require("./designRoutes");
 const connectionRoutes = require("./connectionRoutes");
 const reportingRoutes = require("./reportingRoutes");
 const reportDocumentRoutes = require("./reportDocumentRoutes");
+const projectImageRoutes = require("./projectImageRoutes");
 const projectLoadCombinationRoutes = require("./projectLoadCombinationRoutes");
 const aiRoutes = require("./aiRoutes");
 
@@ -51,6 +52,7 @@ router.use("/:projectId/design", designRoutes);
 router.use("/:projectId/connections", connectionRoutes);
 router.use("/:projectId/reporting", reportingRoutes);
 router.use("/:projectId/reports", reportDocumentRoutes);
+router.use("/:projectId/images", projectImageRoutes);
 router.use("/:projectId/load-combinations", projectLoadCombinationRoutes);
 router.use("/:projectId/ai", aiRoutes);
 
