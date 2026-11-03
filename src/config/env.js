@@ -104,6 +104,9 @@ const env = {
     (process.env.RENDERER_HOSTPORT ? `http://${process.env.RENDERER_HOSTPORT}` : "http://localhost:8090"),
   rendererToken: process.env.RENDERER_TOKEN || "",
   logoMaxBytes: Number(process.env.LOGO_MAX_BYTES || 1024 * 1024),
+  // Biblioteca de imágenes: tope por archivo y por proyecto.
+  imageMaxBytes: Number(process.env.IMAGE_MAX_BYTES || 20 * 1024 * 1024),
+  imageProjectMaxBytes: Number(process.env.IMAGE_PROJECT_MAX_BYTES || 2 * 1024 * 1024 * 1024),
 };
 
 if (!env.databaseUrl) {

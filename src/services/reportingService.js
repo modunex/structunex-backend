@@ -284,8 +284,9 @@ async function exportPdf(project, body) {
 }
 
 /** Pagina el documento, guarda el PDF en S3 y registra la exportación (también la
- *  fallida, con su error). */
-async function renderAndStore(project, { kind, title, lang, unitSystemId, runIds, document, reportId = null }) {
+ *  fallida, con su error). `renderDocument` es lo que se pagina cuando difiere de lo que
+ *  se registra: las figuras llevan su imagen incrustada solo camino del renderizador. */
+async function renderAndStore(project, { kind, title, lang, unitSystemId, runIds, document, renderDocument = document, reportId = null }) {
   const units = unitSystemId ?? project.units ?? null;
   const meta = reportMeta(project, { title, lang, logoDataUri: await logoDataUri(project) });
   const base = {
@@ -302,7 +303,7 @@ async function renderAndStore(project, { kind, title, lang, unitSystemId, runIds
 
   let rendered;
   try {
-    rendered = await render(document, meta, { lang, unitSystemId: units });
+    rendered = await render(renderDocument, meta, { lang, unitSystemId: units });
   } catch (err) {
     await prisma.reportExport.create({ data: { ...base, status: "error", error: err.message } });
     throw err;

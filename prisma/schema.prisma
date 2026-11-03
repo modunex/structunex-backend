@@ -173,6 +173,7 @@ model Project {
   aiConversations AiConversation[]
   connections     Connection[]
   reportExports   ReportExport[]
+  images          ProjectImage[]
   reports         Report[]
 
   @@index([ownerId, createdAt(sort: Desc)])
@@ -638,6 +639,59 @@ model ReportRevision {
 
   @@unique([reportId, number])
   @@map("report_revisions")
+}
+
+// Biblioteca de imágenes del proyecto. La imagen es la ficha; cada versión es inmutable y
+// un bloque de reporte fija una versión concreta, así que una captura nueva nunca cambia
+// un reporte ni una revisión sin que el autor lo decida. Sin FK hacia las ejecuciones:
+// se podan, y la figura debe seguir diciendo de cuál salió.
+model ProjectImage {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  projectId        String    @db.Uuid
+  name             String
+  source           String // viewer | upload
+  kind             String // model | analysis | design | connection | file
+  currentVersionId String?   @db.Uuid
+  createdById      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  project  Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versions ProjectImageVersion[]
+
+  @@index([projectId, deletedAt, createdAt(sort: Desc)])
+  @@map("project_images")
+}
+
+model ProjectImageVersion {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  imageId         String   @db.Uuid
+  number          Int
+  s3Key           String
+  sha256          String
+  contentType     String
+  bytes           Int
+  width           Int
+  height          Int
+  // Variante para el PDF y miniatura de la biblioteca. Las genera el servidor.
+  printKey        String
+  printType       String
+  printBytes      Int
+  thumbKey        String
+  thumbBytes      Int
+  // Cámara, modo, caso, componente y escala de la vista capturada.
+  view            Json?
+  modelHash       String?
+  analysisRunId   String?  @db.Uuid
+  designRunId     String?  @db.Uuid
+  connectionRunId String?  @db.Uuid
+  createdAt       DateTime @default(now())
+
+  image ProjectImage @relation(fields: [imageId], references: [id], onDelete: Cascade)
+
+  @@unique([imageId, number])
+  @@map("project_image_versions")
 }
 
 // ─── Comunidad (/community) ───
