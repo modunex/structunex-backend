@@ -9,6 +9,30 @@
 const { sha256, snapshotFingerprint } = require("./reporting");
 
 const TECHNICAL = new Set(["connectionCheck", "memberCheck", "analysisSummary"]);
+const UNIT_SYSTEMS = new Set([
+  "lb-in", "lb-ft", "kip-in", "kip-ft", "kn-mm", "kn-m", "kgf-mm", "kgf-m",
+  "n-mm", "n-m", "tonf-mm", "tonf-m", "kn-cm", "kgf-cm", "n-cm", "tonf-cm",
+]);
+const MAX_OPTION_ITEMS = 200;
+const isShortList = (value) =>
+  Array.isArray(value) && value.length <= MAX_OPTION_ITEMS
+  && value.every((item) => typeof item === "string" && item.length <= 200);
+
+/** Opciones de presentación de un bloque técnico. No forman parte de su huella. */
+function optionsError(options) {
+  if (options === undefined || options === null) return null;
+  if (typeof options !== "object" || Array.isArray(options)) return "invalid options";
+  const known = new Set(["title", "sections", "cases", "hiddenColumns", "unitSystem", "significantDigits"]);
+  if (Object.keys(options).some((key) => !known.has(key))) return "unknown option";
+  if (options.title !== undefined && (typeof options.title !== "string" || options.title.length > 200)) return "invalid title";
+  for (const key of ["sections", "cases", "hiddenColumns"]) {
+    if (options[key] !== undefined && !isShortList(options[key])) return `invalid ${key}`;
+  }
+  if (options.unitSystem !== undefined && !UNIT_SYSTEMS.has(options.unitSystem)) return "invalid unitSystem";
+  if (options.significantDigits !== undefined && ![3, 4, 5].includes(options.significantDigits)) return "invalid significantDigits";
+  return null;
+}
+
 const SIMPLE = new Set(["heading", "paragraph", "bulletList", "numberedList", "callout", "divider", "pageBreak", "equation", "table"]);
 const MAX_BLOCKS = 5000;
 
@@ -29,6 +53,8 @@ function validateDocument(doc) {
       const k = bindingKey(b);
       if (!k) return `block ${b.id}: invalid binding`;
       if (typeof b.snapshotHash !== "string") return `block ${b.id}: snapshotHash required`;
+      const invalid = optionsError(b.options);
+      if (invalid) return `block ${b.id}: ${invalid}`;
     }
   }
   return null;

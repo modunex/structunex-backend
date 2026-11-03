@@ -16,6 +16,31 @@ const doc = {
   ],
 };
 
+test("opciones de presentación de los bloques técnicos", () => {
+  const withOptions = (options) => ({
+    version: 1,
+    blocks: [{ id: "a", type: "memberCheck", binding: doc.blocks[2].binding, snapshot: snapM, snapshotHash: sha256(snapM), options }],
+  });
+  assert.equal(validateDocument(withOptions({ unitSystem: "kip-ft", significantDigits: 3, sections: ["summary"], title: "Viga" })), null);
+  assert.equal(validateDocument(withOptions(null)), null);
+  assert.match(validateDocument(withOptions({ unitSystem: "parsecs" })), /invalid unitSystem/);
+  assert.match(validateDocument(withOptions({ significantDigits: 9 })), /invalid significantDigits/);
+  assert.match(validateDocument(withOptions({ sections: "modal" })), /invalid sections/);
+  assert.match(validateDocument(withOptions({ formula: "x" })), /unknown option/);
+});
+
+test("las opciones no cambian la verificación y llegan al documento final", () => {
+  const options = { unitSystem: "kip-ft", sections: ["summary"] };
+  const blocks = doc.blocks.map((b) => (b.type === "memberCheck" ? { ...b, options } : b));
+  const server = new Map([
+    [bindingKey(doc.blocks[1]), { snapshot: snapC, state: "current" }],
+    [bindingKey(doc.blocks[2]), { snapshot: snapM, state: "current" }],
+  ]);
+  const out = verifyDocument({ version: 1, blocks }, server, { warningText: () => "" });
+  assert.deepEqual(out.problems, []);
+  assert.deepEqual(out.document.blocks.find((b) => b.type === "memberCheck").options, options);
+});
+
 test("validación del formato", () => {
   assert.equal(validateDocument(doc), null);
   assert.match(validateDocument({ version: 2, blocks: [] }), /version 1/);
