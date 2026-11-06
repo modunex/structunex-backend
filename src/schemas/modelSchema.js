@@ -59,6 +59,9 @@ const massSource = z.object({
   elementSelfMass: z.boolean(),
   specifiedLoadPatterns: z.boolean(),
   multipliers: z.array(massMultiplier),
+  // ETABS "Include Lateral Mass Only": la masa modal solo en X e Y. Opcional para no
+  // romper configuraciones guardadas.
+  lateralMassOnly: z.boolean().optional(),
 });
 
 // Load Case tipo Modal (Define → Load Cases): parámetros del análisis modal.
