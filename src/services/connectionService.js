@@ -68,21 +68,18 @@ async function jointRequest(project, nodeId, { f1 } = {}) {
     throw new AppError(409, STALE_MESSAGES[state.reason], { error: state.reason });
   }
 
-  // Solo lo del nudo y sus vecinos inmediatos viaja: el calc-service no necesita el
-  // edificio entero para describir un nudo.
+  // Viajan TODAS las barras (ids, nudos, sección): el motor describe el nudo con las que
+  // llegan a él, pero para la luz física de una viga partida en tramos (apoyos de
+  // correas) tiene que seguir la cadena colineal hasta la columna siguiente, que no es
+  // vecina del nudo. Las fuerzas solo se leen para las barras del nudo.
   const elements = await prisma.modelElement.findMany({
-    where: { projectId, OR: [{ nodeA: nodeId }, { nodeB: nodeId }] },
+    where: { projectId },
     orderBy: { seq: "asc" },
     select: {
       id: true, nodeA: true, nodeB: true, frameSectionId: true, roll: true, releases: true,
       lateralSystem: true,
     },
   });
-  const neighbourIds = new Set([nodeId]);
-  for (const e of elements) {
-    neighbourIds.add(e.nodeA);
-    neighbourIds.add(e.nodeB);
-  }
 
   const [design, supports, areas, loads, configuration] = await Promise.all([
     assembleDesignModel(projectId),
@@ -103,10 +100,9 @@ async function jointRequest(project, nodeId, { f1 } = {}) {
     }),
   ]);
 
-  // Las áreas necesitan las coordenadas de sus esquinas (¿el nudo cae en una losa?).
-  const areaNodeIds = new Set(areas.flatMap((a) => a.nodeIds || []));
-  const usedNodeIds = new Set([...neighbourIds, ...areaNodeIds]);
-  const nodes = design.nodes.filter((n) => usedNodeIds.has(n.id));
+  // Con todas las barras van todos los nudos (la cadena de la luz y las esquinas de las
+  // losas los necesitan).
+  const nodes = design.nodes;
 
   const request = buildInspectRequest({
     nodeId,
