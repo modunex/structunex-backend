@@ -25,13 +25,22 @@ const TABLE_MAXIMA = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4];
 function optionsError(options) {
   if (options === undefined || options === null) return null;
   if (typeof options !== "object" || Array.isArray(options)) return "invalid options";
-  const known = new Set(["title", "sections", "cases", "hiddenColumns", "unitSystem", "significantDigits", "tableStep", "tableMax", "rows", "charts"]);
+  const known = new Set(["title", "sections", "cases", "hiddenColumns", "unitSystem", "significantDigits", "tableStep", "tableMax", "rows", "charts", "layout", "factors"]);
   if (Object.keys(options).some((key) => !known.has(key))) return "unknown option";
   if (options.title !== undefined && (typeof options.title !== "string" || options.title.length > 200)) return "invalid title";
   for (const key of ["sections", "cases", "hiddenColumns", "rows"]) {
     if (options[key] !== undefined && !isShortList(options[key])) return `invalid ${key}`;
   }
   if (options.charts !== undefined && typeof options.charts !== "boolean") return "invalid charts";
+  if (options.layout !== undefined && !["perCase", "consolidated"].includes(options.layout)) return "invalid layout";
+  // Factores de amplificación de deriva por caso: {nombre: número}.
+  if (options.factors !== undefined) {
+    const f = options.factors;
+    if (!f || typeof f !== "object" || Array.isArray(f) || Object.keys(f).length > 40) return "invalid factors";
+    for (const [key, value] of Object.entries(f)) {
+      if (typeof key !== "string" || key.length > 80 || typeof value !== "number" || !Number.isFinite(value) || value <= 0 || value > 100) return "invalid factors";
+    }
+  }
   if (options.unitSystem !== undefined && !UNIT_SYSTEMS.has(options.unitSystem)) return "invalid unitSystem";
   if (options.significantDigits !== undefined && ![3, 4, 5].includes(options.significantDigits)) return "invalid significantDigits";
   // Tabla de un espectro: recortan lo que se imprime de una hoja de 0 a 4 s cada 0,02 s.
@@ -233,8 +242,9 @@ function analysisSectionBlocks(block) {
     ["seismicWeight", s.stories.some((row) => row.weight !== null)],
     ["rigidity", s.stories.some((row) => row.crX !== null || row.kx !== null)],
     ["storyForces", s.storyForces.length > 0],
-    ["seismicSummary", s.storyForces.length > 0],
     ["lateralDisplacements", (s.storyDisplacements || []).length > 0],
+    ["storyDrift", (s.storyDrifts || []).length > 0],
+    ["globalDrift", (s.storyDisplacements || []).length > 0],
     ["reactions", s.cases.some((c) => c.reactions?.rows?.length)],
   ].filter(([, hasData]) => hasData);
   return sections.map(([id], index) => ({

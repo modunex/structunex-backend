@@ -127,6 +127,12 @@ function analysisSnapshot({ run, sheets, model }) {
     storyDisplacements: (summary.storyDisplacements || []).map((d) => ({
       case: d.case, level: d.level, z: num(d.z), ux: num(d.ux), uy: num(d.uy), uxAvg: num(d.uxAvg), uyAvg: num(d.uyAvg),
     })),
+    // Deriva de entrepiso elástica, combinada modo a modo en el motor (máximo por línea de
+    // nudos y promedio del diafragma). Sin amplificación: esa la pone el bloque del informe.
+    storyDrifts: (summary.storyDrifts || []).map((d) => ({
+      case: d.case, level: d.level, zTop: num(d.zTop), zBottom: num(d.zBottom), height: num(d.height),
+      driftX: num(d.driftX), driftY: num(d.driftY), driftXAvg: num(d.driftXAvg), driftYAvg: num(d.driftYAvg),
+    })),
     // Deriva INDICATIVA (máximos de nivel, no en el mismo nudo): no es una comprobación.
     driftIndicative: (summary.drift || []).map((d) => ({
       case: d.case, level: d.level, z: num(d.z), height: num(d.height), driftX: num(d.driftX), driftY: num(d.driftY),
