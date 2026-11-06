@@ -144,9 +144,11 @@ function orphanReasons(connection, model) {
  * fuerzas que ve el usuario en el panel), más la conexión guardada, el material de la
  * placa y las combinaciones elegidas en Diseño (vacío = todas, como el diseño).
  */
-function buildCheckRequest({ inspectRequest, connection, plateMaterial, comboNames }) {
+function buildCheckRequest({ inspectRequest, connection, plateMaterial, comboNames, omega0 }) {
   return {
     ...inspectRequest,
+    // Ωo para el Pr automático de la columna (AISC 341 D1.4a). 3 si no está en Preferencias.
+    omega0: Number.isFinite(Number(omega0)) && Number(omega0) > 1 ? Number(omega0) : 3,
     connection: {
       id: connection.id,
       typology: connection.typology,
