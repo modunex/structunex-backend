@@ -124,3 +124,38 @@ test("plantilla informe sismorresistente: 9 capítulos, solo títulos y guías, 
     assert.ok(doc.blocks.every((b) => ["heading", "paragraph"].includes(b.type)));
   }
 });
+
+test("configuración de página del documento", () => {
+  const page = {
+    size: "a4",
+    orientation: "landscape",
+    margins: { top: 24, right: 20, bottom: 22.5, left: 20 },
+    cover: false,
+    toc: true,
+    runningHeaders: true,
+    chapterBreaks: false,
+  };
+  const withPage = (value) => ({ ...doc, page: value });
+  assert.equal(validateDocument(doc), null);
+  assert.equal(validateDocument(withPage(page)), null);
+  assert.match(validateDocument(withPage({ ...page, size: "x; } body { display: none" })), /invalid page size/);
+  assert.match(validateDocument(withPage({ ...page, margins: { ...page.margins, top: 2 } })), /invalid page margins/);
+  assert.match(validateDocument(withPage({ ...page, margins: { top: 20 } })), /invalid page margins/);
+  assert.match(validateDocument(withPage({ ...page, cover: "no" })), /invalid page cover/);
+  assert.match(validateDocument(withPage({ ...page, css: "x" })), /unknown page setting/);
+  assert.match(validateDocument(withPage("a4")), /invalid page/);
+});
+
+test("verificar conserva la página y no cambia las huellas", () => {
+  const page = { size: "a4", cover: false };
+  const server = new Map([
+    ["c:r1", { snapshot: snapC, state: "current" }],
+    ["m:d1:B1", { snapshot: snapM, state: "current" }],
+  ]);
+  const without = verifyDocument(doc, server, { warningText: warningText("es") });
+  const withSetup = verifyDocument({ ...doc, page }, server, { warningText: warningText("es") });
+  assert.deepEqual(withSetup.problems, []);
+  assert.deepEqual(withSetup.document.page, page);
+  assert.equal("page" in without.document, false);
+  assert.deepEqual(withSetup.document.blocks, without.document.blocks);
+});

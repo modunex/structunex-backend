@@ -33,6 +33,29 @@ function optionsError(options) {
   return null;
 }
 
+const PAGE_KEYS = new Set(["size", "orientation", "margins", "cover", "toc", "runningHeaders", "chapterBreaks"]);
+const MARGIN_SIDES = ["top", "right", "bottom", "left"];
+const isMargin = (value) => typeof value === "number" && value >= 10 && value <= 50;
+
+/** Configuración de impresión del documento. No cambia ningún dato ni ninguna huella. */
+function pageError(page) {
+  if (page === undefined || page === null) return null;
+  if (typeof page !== "object" || Array.isArray(page)) return "invalid page";
+  if (Object.keys(page).some((key) => !PAGE_KEYS.has(key))) return "unknown page setting";
+  if (page.size !== undefined && !["letter", "a4", "legal"].includes(page.size)) return "invalid page size";
+  if (page.orientation !== undefined && !["portrait", "landscape"].includes(page.orientation)) return "invalid page orientation";
+  for (const key of ["cover", "toc", "runningHeaders", "chapterBreaks"]) {
+    if (page[key] !== undefined && typeof page[key] !== "boolean") return `invalid page ${key}`;
+  }
+  const { margins } = page;
+  if (margins !== undefined) {
+    if (!margins || typeof margins !== "object" || Array.isArray(margins)) return "invalid page margins";
+    if (Object.keys(margins).some((key) => !MARGIN_SIDES.includes(key))) return "invalid page margins";
+    if (!MARGIN_SIDES.every((side) => isMargin(margins[side]))) return "invalid page margins";
+  }
+  return null;
+}
+
 const SIMPLE = new Set(["heading", "paragraph", "bulletList", "numberedList", "callout", "divider", "pageBreak", "equation", "table"]);
 const MAX_BLOCKS = 5000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -53,6 +76,8 @@ function validateDocument(doc) {
     return "document must be a Report Studio document, version 1";
   }
   if (doc.blocks.length > MAX_BLOCKS) return `at most ${MAX_BLOCKS} blocks`;
+  const invalidPage = pageError(doc.page);
+  if (invalidPage) return invalidPage;
   const ids = new Set();
   for (const b of doc.blocks) {
     if (!b || typeof b.id !== "string" || !b.id) return "every block needs an id";
@@ -123,7 +148,7 @@ function verifyDocument(doc, server, { warningText }) {
     }
     blocks.push({ ...b, snapshot: got.snapshot, snapshotHash: hash });
   }
-  return { document: { version: 1, blocks }, problems };
+  return { document: { version: 1, blocks, ...(doc.page ? { page: doc.page } : {}) }, problems };
 }
 
 /** Documento en blanco con su título. */
