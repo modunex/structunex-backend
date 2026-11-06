@@ -111,6 +111,10 @@ const TOOLS = [
       "- add_load_patterns: patterns [{name, patternType (dead|superDead|live|roofLive|wind|snow|rain|quake|other), selfWeightMultiplier?}].\n" +
       "- add_nodal_loads: loads [{node, loadPattern, fx?, fy?, fz?, mx?, my?, mz?}] (ejes globales).\n" +
       "- add_frame_loads: elements [ids], loadPattern, kind (distributed|point), dir (gravity|gx|gy|gz|local1|local2|local3), value, dist? (obligatorio en point). Distribuida: value al inicio y value2? al final (trapezoidal; sin value2 = uniforme) entre dist? y dist2? (sin ellas = barra completa). Distancias relativas 0..1, o en longitud de inputUnits con distAbsolute true. gravity = hacia −Z con value positivo; local1/2/3 = ejes locales (SAP2000: 2 hacia arriba en una viga horizontal).\n" +
+      "- update_load_patterns: patterns [{name, patternType?, selfWeightMultiplier?}]. Cambia el tipo o el multiplicador de peso propio de patrones existentes (0 = sin peso propio).\n" +
+      "- delete_loads: borra cargas ya asignadas. Filtros (se combinan con Y): loadPattern? (nombre), elements? (barras), nodes? (ids de nudo), areas? (ids de área), loadTypes? [nodal|frame|area]. " +
+      "Sin elements/nodes/areas afecta a todo el modelo; sin loadTypes afecta a los tipos con filtro de ubicación o, si no hay, a los tres. Para borrar TODAS las cargas sin filtrar, all: true. " +
+      "No borra el patrón ni su peso propio (eso es update_load_patterns con selfWeightMultiplier 0).\n" +
       "- assign_section: elements [ids], section (id, tempId o nombre).\n" +
       "- delete_elements: elements [ids], deleteOrphanNodes?.\n" +
       "- set_grid: x?, y?, z? = [{id, at}] (z = niveles de planta). Cada eje indicado sustituye al actual; los omitidos se conservan. " +
@@ -147,6 +151,8 @@ const TOOLS = [
                   "add_load_patterns",
                   "add_nodal_loads",
                   "add_frame_loads",
+                  "update_load_patterns",
+                  "delete_loads",
                   "assign_section",
                   "delete_elements",
                   "set_grid",
@@ -174,6 +180,9 @@ const TOOLS = [
               patterns: { type: "array", items: { type: "object" } },
               loads: { type: "array", items: { type: "object" } },
               elements: { type: "array", items: { type: "string" } },
+              areas: { type: "array", items: { type: "string" } },
+              loadTypes: { type: "array", items: { type: "string", enum: ["nodal", "frame", "area"] } },
+              all: { type: "boolean" },
               section: { type: "string" },
               loadPattern: { type: "string" },
               kind: { type: "string", enum: ["distributed", "point"] },
@@ -230,6 +239,22 @@ function elementOut(e, names) {
   };
 }
 
+// Cuántas cargas de cada tipo tiene cada patrón.
+function loadsByPattern(snapshot) {
+  const out = {};
+  const add = (list, kind) => {
+    for (const l of list || []) {
+      const k = l.loadPattern || "(sin patrón)";
+      out[k] = out[k] || { nodal: 0, frame: 0, area: 0 };
+      out[k][kind]++;
+    }
+  };
+  add(snapshot.loads, "nodal");
+  add(snapshot.frameLoads, "frame");
+  add(snapshot.areaLoads, "area");
+  return out;
+}
+
 function getModelSummary(ctx) {
   const { snapshot, sys, catalog } = ctx;
   const nodes = snapshot.nodes || [];
@@ -273,7 +298,9 @@ function getModelSummary(ctx) {
       supports: (snapshot.supports || []).length,
       nodalLoads: (snapshot.loads || []).length,
       frameLoads: (snapshot.frameLoads || []).length,
+      areaLoads: (snapshot.areaLoads || []).length,
     },
+    loadsByPattern: loadsByPattern(snapshot),
     extent,
     grid,
     loadPatterns: cfg.loadPatterns || [],

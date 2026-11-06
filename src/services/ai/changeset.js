@@ -73,6 +73,9 @@ const DIM_KEYS = ["b", "h", "d", "t", "tw", "tf", "bf", "bfTop", "tfTop", "bfBot
 const GRID_AXES = ["x", "y", "z"];
 const gridAxis = z.array(z.object({ id: z.string().min(1), at: num })).optional();
 
+const PATTERN_TYPES = ["dead", "superDead", "live", "roofLive", "wind", "snow", "rain", "quake", "other"];
+const LOAD_KINDS = ["nodal", "frame", "area"];
+
 const operation = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("create_material"),
@@ -120,9 +123,7 @@ const operation = z.discriminatedUnion("type", [
       .array(
         z.object({
           name: z.string().min(1),
-          patternType: z
-            .enum(["dead", "superDead", "live", "roofLive", "wind", "snow", "rain", "quake", "other"])
-            .optional(),
+          patternType: z.enum(PATTERN_TYPES).optional(),
           selfWeightMultiplier: z.number().optional(),
         })
       )
@@ -156,6 +157,27 @@ const operation = z.discriminatedUnion("type", [
     dist: z.number().min(0).optional(),
     dist2: z.number().min(0).optional(),
     distAbsolute: z.boolean().optional(),
+  }),
+  z.object({
+    type: z.literal("update_load_patterns"),
+    patterns: z
+      .array(
+        z.object({
+          name: z.string().min(1),
+          patternType: z.enum(PATTERN_TYPES).optional(),
+          selfWeightMultiplier: z.number().optional(),
+        })
+      )
+      .min(1),
+  }),
+  z.object({
+    type: z.literal("delete_loads"),
+    loadPattern: z.string().min(1).optional(),
+    loadTypes: z.array(z.enum(LOAD_KINDS)).min(1).optional(),
+    elements: z.array(z.string().min(1)).min(1).optional(),
+    nodes: z.array(z.string().min(1)).min(1).optional(),
+    areas: z.array(z.string().min(1)).min(1).optional(),
+    all: z.boolean().optional(),
   }),
   z.object({
     type: z.literal("assign_section"),
@@ -220,6 +242,11 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
     elements: clone(snapshot.elements || []),
     supports: clone(snapshot.supports || []),
     loadPatterns: (snapshot.configuration?.loadPatterns || []).map((p) => p.name),
+    // Cargas (base kN·m). Se siguen para que delete_loads cuente y filtre igual que
+    // el frontend al aplicar, incluidas las añadidas antes en este mismo turno.
+    loads: clone(snapshot.loads || []),
+    frameLoads: clone(snapshot.frameLoads || []),
+    areaLoads: clone(snapshot.areaLoads || []),
     activeDofs: snapshot.activeDofs?.length ? [...snapshot.activeDofs] : null,
     // Catálogo: filas reales + temporales creadas en este turno.
     materials: (catalog.materials || []).map((m) => ({ ref: m.id, name: m.name, type: m.type })),
@@ -247,6 +274,17 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
       state.sections.find((s) => s.ref === ref || s.ref === `tmp:${ref}`) ||
       state.sections.find((s) => s.name.toLowerCase() === lower)
     );
+  }
+
+  // Combinaciones que usan cada patrón (solo para avisos).
+  const combosByPattern = new Map();
+  for (const c of snapshot.configuration?.loadCombinations || []) {
+    for (const f of c.factors || []) {
+      const key = f.pattern ?? f.loadPattern ?? f.name;
+      if (!key) continue;
+      if (!combosByPattern.has(key)) combosByPattern.set(key, []);
+      combosByPattern.get(key).push(c.name);
+    }
   }
 
   /** Aplica una llamada a propose_changes. Devuelve { ok, result | errors }. */
@@ -317,6 +355,22 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
         return false;
       }
       return true;
+    }
+
+    // Nombre real de un patrón: exacto o, si es único, sin distinguir mayúsculas.
+    // Incluye patrones huérfanos que solo aparecen en las cargas.
+    function resolvePatternName(name, where) {
+      const known = new Set([
+        ...state.loadPatterns,
+        ...[...state.loads, ...state.frameLoads, ...state.areaLoads].map((l) => l.loadPattern).filter(Boolean),
+      ]);
+      if (known.has(name)) return name;
+      const ci = [...known].filter((n) => n.toLowerCase() === name.toLowerCase());
+      if (ci.length === 1) return ci[0];
+      errors.push(
+        `${where}: el patrón de carga "${name}" no existe. Existentes: ${[...known].join(", ") || "(ninguno)"}`
+      );
+      return null;
     }
 
     input.operations.forEach((op, idx) => {
@@ -502,6 +556,7 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
             const load = { nodeId: id, loadPattern: l.loadPattern };
             for (const c of ["fx", "fy", "fz"]) if (l[c] != null) load[c] = Q(l[c], "force");
             for (const c of ["mx", "my", "mz"]) if (l[c] != null) load[c] = Q(l[c], "moment");
+            state.loads.push(load);
             state.ops.push({ op: "addNodalLoad", load });
           });
           break;
@@ -548,8 +603,78 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
             if (dist != null) frameLoad.dist = dist;
             if (dist2 != null) frameLoad.dist2 = dist2;
             if (op.distAbsolute) frameLoad.distAbsolute = true;
+            state.frameLoads.push(frameLoad);
             state.ops.push({ op: "addFrameLoad", frameLoad });
           }
+          break;
+        }
+
+        case "update_load_patterns":
+          op.patterns.forEach((p, k) => {
+            const w = `${where}.patterns[${k}]`;
+            if (!state.loadPatterns.includes(p.name)) {
+              const ci = state.loadPatterns.filter((n) => n.toLowerCase() === p.name.toLowerCase());
+              if (ci.length !== 1) {
+                errors.push(
+                  `${w}: el patrón "${p.name}" no existe. Existentes: ${state.loadPatterns.join(", ") || "(ninguno)"}`
+                );
+                return;
+              }
+              p = { ...p, name: ci[0] };
+            }
+            const patch = {};
+            if (p.patternType) patch.type = p.patternType;
+            if (p.selfWeightMultiplier != null) patch.selfWeightMultiplier = p.selfWeightMultiplier;
+            if (!Object.keys(patch).length) {
+              errors.push(`${w}: indica patternType o selfWeightMultiplier`);
+              return;
+            }
+            const combos = combosByPattern.get(p.name);
+            if (combos?.length && patch.selfWeightMultiplier === 0) {
+              warnings.push(
+                `${w}: "${p.name}" queda sin peso propio y lo usan las combinaciones ${combos.join(", ")}`
+              );
+            }
+            state.ops.push({ op: "updateLoadPattern", name: p.name, patch });
+          });
+          break;
+
+        case "delete_loads": {
+          const byLocation = { nodal: op.nodes, frame: op.elements, area: op.areas };
+          const hasLocation = LOAD_KINDS.some((k) => byLocation[k]);
+          if (!op.loadPattern && !hasLocation && !op.all) {
+            errors.push(`${where}: indica loadPattern, elements/nodes/areas o all: true`);
+            break;
+          }
+          const pattern = op.loadPattern ? resolvePatternName(op.loadPattern, where) : null;
+          if (op.loadPattern && !pattern) break;
+          if (op.elements && !requireElements(op.elements, where)) break;
+          if (op.nodes) {
+            const all = nodeIds();
+            const missing = op.nodes.filter((id) => !all.has(id));
+            if (missing.length) {
+              errors.push(`${where}: nudos inexistentes: ${missing.join(", ")}`);
+              break;
+            }
+          }
+          // Tipos afectados: los indicados; si no, los que tienen filtro de ubicación;
+          // si tampoco, todos.
+          const kinds = op.loadTypes || (hasLocation ? LOAD_KINDS.filter((k) => byLocation[k]) : LOAD_KINDS);
+          const stateKey = { nodal: "loads", frame: "frameLoads", area: "areaLoads" };
+          const idKey = { nodal: "nodeId", frame: "elementId", area: "areaId" };
+          let total = 0;
+          for (const kind of kinds) {
+            const ids = byLocation[kind] || null;
+            const sel = ids ? new Set(ids) : null;
+            const hit = (l) => (!pattern || l.loadPattern === pattern) && (!sel || sel.has(l[idKey[kind]]));
+            const before = state[stateKey[kind]];
+            const removed = before.filter(hit).length;
+            if (!removed) continue;
+            state[stateKey[kind]] = before.filter((l) => !hit(l));
+            state.ops.push({ op: "deleteLoads", target: kind, loadPattern: pattern, ids, count: removed });
+            total += removed;
+          }
+          if (!total) warnings.push(`${where}: no hay cargas que coincidan; no se borra nada`);
           break;
         }
 
@@ -570,6 +695,7 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
           const gone = new Set(op.elements);
           const removed = state.elements.filter((e) => gone.has(e.id));
           state.elements = state.elements.filter((e) => !gone.has(e.id));
+          state.frameLoads = state.frameLoads.filter((l) => !gone.has(l.elementId));
           for (const elementId of op.elements) state.ops.push({ op: "deleteElement", elementId });
           if (op.deleteOrphanNodes) {
             const used = new Set(state.elements.flatMap((e) => [e.nodeA, e.nodeB]));
@@ -578,6 +704,7 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
               if (used.has(nodeId)) continue;
               state.nodes = state.nodes.filter((n) => n.id !== nodeId);
               state.supports = state.supports.filter((s) => s.nodeId !== nodeId);
+              state.loads = state.loads.filter((l) => l.nodeId !== nodeId);
               state.ops.push({ op: "deleteNode", nodeId });
             }
           }
@@ -656,6 +783,8 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
           sectionAssignments: count("assignSection"),
           deletedElements: count("deleteElement"),
           deletedNodes: count("deleteNode"),
+          deletedLoads: newOps.filter((o) => o.op === "deleteLoads").reduce((a, o) => a + o.count, 0),
+          loadPatternUpdates: count("updateLoadPattern"),
           gridChanges: count("setGrid"),
           activeDofsChanges: count("setActiveDofs"),
         },
