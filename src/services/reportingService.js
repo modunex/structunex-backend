@@ -34,6 +34,7 @@ const {
   memoriaTitle,
   modelSummary,
 } = require("../lib/reportingAnalysis");
+const { canReport, spectrumSnapshot } = require("../lib/reportingSpectrum");
 const {
   archiveDesignRuns,
   buildMembersDocument,
@@ -541,6 +542,35 @@ async function analysisSheet(project) {
   return { snapshot, snapshotHash: snapshotFingerprint(snapshot) };
 }
 
+// ─── Espectros de respuesta ──────────────────────────────
+
+const spectrumFunctionsOf = async (project) => {
+  const config = await prisma.modelConfiguration.findUnique({
+    where: { projectId: project.id },
+    select: { spectrumFunctions: true },
+  });
+  return config?.spectrumFunctions ?? [];
+};
+
+/** Funciones de Define y si la norma permite su hoja completa. */
+async function spectrumFunctions(project) {
+  return (await spectrumFunctionsOf(project)).map((fn) => ({ name: fn.name, source: fn.source, reportable: canReport(fn) }));
+}
+
+/** La hoja de una función. 404 si ya no existe; 409 si su norma o sus datos no la permiten. */
+async function spectrumSheet(project, name) {
+  const fn = (await spectrumFunctionsOf(project)).find((item) => item.name === name);
+  if (!fn) throw new AppError(404, "La función de espectro no existe.");
+  if (!canReport(fn)) throw new AppError(409, "La hoja completa solo está disponible para COVENIN 1756-1:2019.");
+  let snapshot;
+  try {
+    snapshot = spectrumSnapshot(fn);
+  } catch (err) {
+    throw new AppError(409, `No se pudo calcular el espectro: ${err.message}`);
+  }
+  return { snapshot, snapshotHash: snapshotFingerprint(snapshot) };
+}
+
 async function exportAnalysis(project, { lang = "es", title, unitSystemId }) {
   const snapshot = await currentAnalysisSnapshot(project);
   return renderAndStore(project, {
@@ -735,12 +765,15 @@ module.exports = {
     connectionSheet: (project, runId) => connectionSheet(project, runId),
     memberSheet: (project, designRunId, elementId) => memberSheet(project, designRunId, elementId),
     currentAnalysisSnapshot: (project) => currentAnalysisSnapshot(project),
+    spectrumSheet: (project, name) => spectrumSheet(project, name),
     archiveStates: (project) => archiveStates(project),
     buildMemoria: (project, lang) => buildMemoria(project, lang),
     renderAndStore: (project, opts) => renderAndStore(project, opts),
   },
   archive,
   analysisSheet,
+  spectrumFunctions,
+  spectrumSheet,
   connectionSheet,
   designRunMembers,
   memberSheet,

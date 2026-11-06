@@ -159,3 +159,17 @@ test("verificar conserva la página y no cambia las huellas", () => {
   assert.equal("page" in without.document, false);
   assert.deepEqual(withSetup.document.blocks, without.document.blocks);
 });
+
+test("un bloque de espectro se verifica contra la función de Define", () => {
+  const snap = { kind: "spectrumSheet", rows: [[0, 0.3, 0.2, 0, 0, 0.1]] };
+  const block = { id: "s", type: "spectrumSheet", binding: { source: "spectrumFunction", functionName: "Sismo 1" }, snapshot: snap, snapshotHash: sha256(snap) };
+  const one = { version: 1, blocks: [block] };
+  assert.equal(validateDocument(one), null);
+  assert.equal(bindingKey(block), "s:Sismo 1");
+  assert.equal(bindingKey({ ...block, binding: { source: "spectrumFunction" } }), null);
+  const server = (snapshot) => new Map([["s:Sismo 1", { snapshot, state: "current" }]]);
+  const opts = { warningText: warningText("es") };
+  assert.deepEqual(verifyDocument(one, server(snap), opts).problems, []);
+  assert.equal(verifyDocument(one, server({ ...snap, rows: [] }), opts).problems[0].reason, "changed");
+  assert.equal(verifyDocument(one, new Map(), opts).problems[0].reason, "missing");
+});
