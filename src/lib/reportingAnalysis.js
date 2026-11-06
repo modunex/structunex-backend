@@ -15,6 +15,55 @@ const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
  * `run`: fila AnalysisRun. `sheets`: respuesta de /analysis/sheets.
  * `model`: { counts, materials, sections, loadPatterns, combinations } del modelo actual.
  */
+// La misma g del motor: los pesos salen de sus masas, sin redondear por otro camino.
+const GRAVITY = 9.80665;
+const weightOf = (mass) => (typeof mass === "number" ? mass * GRAVITY : null);
+
+/**
+ * Filas por nivel. La masa de la cota más baja cuelga de los apoyos: no es peso sísmico,
+ * y se marca para mostrarla aparte sin que entre en el total.
+ */
+function storyRows(stories) {
+  const lowest = Math.min(...stories.map((s) => s.z));
+  let level = 0;
+  return [...stories]
+    .sort((a, b) => a.z - b.z)
+    .map((s) => {
+      const patterns = Object.entries(s.patternMass || {});
+      const isBase = stories.length > 1 && s.z === lowest && patterns.length === 0;
+      if (!isBase) level += 1;
+      const kx = num(s.kx);
+      const ky = num(s.ky);
+      return {
+        level: isBase ? null : level,
+        isBase,
+        z: num(s.z), mass: num(s.mass), cmX: num(s.cmX), cmY: num(s.cmY),
+        crX: num(s.crX), crY: num(s.crY), eX: num(s.eX), eY: num(s.eY),
+        selfWeight: weightOf(num(s.selfMass)),
+        patternWeight: Object.fromEntries(patterns.map(([name, mass]) => [name, weightOf(mass)])),
+        weight: weightOf(num(s.mass)),
+        jz: num(s.jz),
+        kx,
+        ky,
+        kRatio: kx !== null && ky ? kx / ky : null,
+        kTheta: num(s.kTheta),
+      };
+    });
+}
+
+/** Totales de la tabla de pesos, sin la base. */
+function storyTotals(rows) {
+  const floors = rows.filter((row) => !row.isBase);
+  const sum = (pick) => floors.reduce((total, row) => total + (pick(row) ?? 0), 0);
+  const names = [...new Set(floors.flatMap((row) => Object.keys(row.patternWeight)))];
+  return {
+    selfWeight: sum((row) => row.selfWeight),
+    patternWeight: Object.fromEntries(names.map((name) => [name, sum((row) => row.patternWeight[name])])),
+    weight: sum((row) => row.weight),
+    baseWeight: rows.find((row) => row.isBase)?.weight ?? null,
+  };
+}
+
 function analysisSnapshot({ run, sheets, model }) {
   const reactionsByCase = new Map((sheets?.cases || []).map((c) => [c.name, c]));
   const perCase = new Map(((run.summary || {}).perCase || []).map((c) => [c.case, c]));
@@ -39,6 +88,7 @@ function analysisSnapshot({ run, sheets, model }) {
         : null,
     };
   });
+  const stories = storyRows(run.stories || []);
   let cum = { ux: 0, uy: 0, rz: 0 };
   const modes = (run.modes || []).map((m) => {
     cum = { ux: cum.ux + (m.ux || 0), uy: cum.uy + (m.uy || 0), rz: cum.rz + (m.rz || 0) };
@@ -66,10 +116,8 @@ function analysisSnapshot({ run, sheets, model }) {
     counts: run.counts || {},
     cases,
     modes,
-    stories: (run.stories || []).map((s) => ({
-      z: num(s.z), mass: num(s.mass), cmX: num(s.cmX), cmY: num(s.cmY),
-      crX: num(s.crX), crY: num(s.crY), eX: num(s.eX), eY: num(s.eY),
-    })),
+    stories,
+    storyTotals: storyTotals(stories),
     storyForces: (summary.storyForces || []).map((f) => ({
       case: f.case, z: num(f.z), vx: num(f.vx), vy: num(f.vy), mx: num(f.mx), my: num(f.my),
     })),
@@ -95,6 +143,14 @@ function modelSummary({ nodes, elements, supports, areas, sections, materials, c
     sections: sections
       .map((s) => ({ name: s.name, material: matName.get(s.materialId) || null, source: s.source, members: useCount.get(String(s.id)) || 0 }))
       .sort((a, b) => b.members - a.members || String(a.name).localeCompare(String(b.name)) || JSON.stringify(a).localeCompare(JSON.stringify(b))),
+    massSource: configuration?.massSource
+      ? {
+          elementSelfMass: configuration.massSource.elementSelfMass !== false,
+          multipliers: configuration.massSource.specifiedLoadPatterns
+            ? (configuration.massSource.multipliers || []).map((m) => ({ pattern: m.pattern, multiplier: num(m.multiplier) }))
+            : [],
+        }
+      : null,
     loadPatterns: (configuration?.loadPatterns || []).map((p) => ({
       name: p.name, type: p.type || null, selfWeight: num(p.selfWeightMultiplier) ?? 0,
     })),

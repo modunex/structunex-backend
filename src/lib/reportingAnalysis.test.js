@@ -84,3 +84,25 @@ test("el resumen del modelo no depende del orden de las filas (huella estable)",
   const y = modelSummary({ ...base, sections: s1.slice().reverse(), materials: base.materials.slice().reverse() });
   assert.equal(sha256(x), sha256(y));
 });
+
+test("pesos por nivel: la base va aparte y el total no la incluye", () => {
+  const G = 9.80665;
+  const run = {
+    id: "r",
+    stories: [
+      { z: 3, mass: 60, selfMass: 4, patternMass: { CP: 50, CV: 6 }, cmX: 5, cmY: 5, jz: 1000, kx: 200, ky: 100, kTheta: 5e4, crX: 5, crY: 4, eX: 0, eY: 1 },
+      { z: 0, mass: 0.5, selfMass: 0.5, patternMass: {} },
+      { z: 6, mass: 30, selfMass: 3, patternMass: { CP: 27 }, cmX: 5, cmY: 5, jz: 500 },
+    ],
+  };
+  const { stories, storyTotals } = analysisSnapshot({ run, sheets: null, model: null });
+  assert.deepEqual(stories.map((row) => row.level), [null, 1, 2]);
+  assert.equal(stories[0].isBase, true);
+  assert.ok(Math.abs(stories[1].patternWeight.CP - 50 * G) < 1e-9);
+  assert.ok(Math.abs(stories[1].weight - 60 * G) < 1e-9);
+  assert.equal(stories[1].kRatio, 2);
+  assert.equal(stories[2].kRatio, null);
+  assert.ok(Math.abs(storyTotals.weight - 90 * G) < 1e-9);
+  assert.ok(Math.abs(storyTotals.patternWeight.CP - 77 * G) < 1e-9);
+  assert.ok(Math.abs(storyTotals.baseWeight - 0.5 * G) < 1e-9);
+});

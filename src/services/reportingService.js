@@ -493,7 +493,7 @@ async function currentModelSummary(projectId) {
     prisma.modelElement.findMany({ where: { projectId }, select: { frameSectionId: true } }),
     prisma.modelConfiguration.findUnique({
       where: { projectId },
-      select: { loadPatterns: true, loadCombinations: true },
+      select: { loadPatterns: true, loadCombinations: true, massSource: true },
     }),
   ]);
   const sectionIds = [...new Set(elements.map((e) => e.frameSectionId).filter(isUuid))];

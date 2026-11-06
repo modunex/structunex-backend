@@ -212,7 +212,36 @@ const WARN = {
  * comprobar, así que no se guardan (los avisos se añaden de nuevo al exportar).
  */
 function templateBlocks(blocks) {
-  return blocks.filter((b) => b.type === "heading" || TECHNICAL.has(b.type));
+  return blocks
+    .filter((b) => b.type === "heading" || TECHNICAL.has(b.type))
+    .flatMap((b) => (b.type === "analysisSummary" ? analysisSectionBlocks(b) : [b]));
+}
+
+/**
+ * El análisis entra como un bloque por sección, cada uno con sus propiedades. Comparten
+ * instantánea: se guarda en el primero y el editor la repone por su huella.
+ */
+function analysisSectionBlocks(block) {
+  const s = block.snapshot;
+  const sections = [
+    ["model", true],
+    ["loads", true],
+    ["results", true],
+    ["reactionSums", s.cases.some((c) => c.reactions?.sum)],
+    ["modal", s.modes.length > 0],
+    ["seismicWeight", s.stories.some((row) => row.weight !== null)],
+    ["rigidity", s.stories.some((row) => row.crX !== null || row.kx !== null)],
+    ["storyForces", s.storyForces.length > 0],
+    ["drift", s.driftIndicative.length > 0],
+    ["reactions", s.cases.some((c) => c.reactions?.rows?.length)],
+  ].filter(([, hasData]) => hasData);
+  return sections.map(([id], index) => ({
+    ...block,
+    id: `${block.id}-${id}`,
+    display: "full",
+    snapshot: index === 0 ? s : null,
+    options: { ...block.options, sections: [id] },
+  }));
 }
 
 // Plantilla "Informe sismorresistente": la estructura de una memoria de edificación de
