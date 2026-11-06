@@ -4,6 +4,7 @@
 
 const { searchShapes } = require("../../lib/aiscShapes");
 const { UNIT_SYSTEM_IDS, disp, unitLabels } = require("./units");
+const { ribDirection } = require("./slabAxes");
 
 const DIM_KEYS = ["b", "h", "d", "t", "tw", "tf", "bf", "bfTop", "tfTop", "bfBot", "tfBot"];
 const LIST_NODES_MAX = 150;
@@ -115,6 +116,7 @@ const TOOLS = [
       "- add_nodal_loads: loads [{node, loadPattern, fx?, fy?, fz?, mx?, my?, mz?}] (ejes globales).\n" +
       "- add_frame_loads: elements [ids], loadPattern, kind (distributed|point), dir (gravity|gx|gy|gz|local1|local2|local3), value, dist? (obligatorio en point). Distribuida: value al inicio y value2? al final (trapezoidal; sin value2 = uniforme) entre dist? y dist2? (sin ellas = barra completa). Distancias relativas 0..1, o en longitud de inputUnits con distAbsolute true. gravity = hacia −Z con value positivo; local1/2/3 = ejes locales (SAP2000: 2 hacia arriba en una viga horizontal).\n" +
       "- add_area_loads: areas [ids], loadPattern, dir (gravity|gx|gy|gz), value (fuerza/superficie = unidad modulus de inputUnits). Carga uniforme de superficie sobre losas o muros; gravity = hacia −Z con value positivo. Sustituye la carga que ya tuviera esa área en ese patrón (como Assign ▸ Area Loads).\n" +
+      "- set_area_local_axes: areas [ids] y UNO de: ribDirection (x|y) = deja los nervios del deck en esa dirección global (solo losas horizontales con sección deck; el sistema calcula el ángulo con el ribAngle de la sección), o angle = ángulo local absoluto en grados alrededor del eje 3 (como Assign ▸ Area ▸ Local Axes).\n" +
       "- update_load_patterns: patterns [{name, patternType?, selfWeightMultiplier?}]. Cambia el tipo o el multiplicador de peso propio de patrones existentes (0 = sin peso propio).\n" +
       "- delete_loads: borra cargas ya asignadas. Filtros (se combinan con Y): loadPattern? (nombre), elements? (barras), nodes? (ids de nudo), areas? (ids de área), loadTypes? [nodal|frame|area]. " +
       "Sin elements/nodes/areas afecta a todo el modelo; sin loadTypes afecta a los tipos con filtro de ubicación o, si no hay, a los tres. Para borrar TODAS las cargas sin filtrar, all: true. " +
@@ -122,8 +124,8 @@ const TOOLS = [
       "- assign_section: elements [ids], section (id, tempId o nombre).\n" +
       "- delete_elements: elements [ids], deleteOrphanNodes?.\n" +
       "- set_grid: x?, y?, z? = [{id, at}] (z = niveles de planta). Cada eje indicado sustituye al actual; los omitidos se conservan. " +
-      "Úsala para nombrar ejes y plantas (A, B…, 1, 2…, PB, P1…) o fijar ejes sin elementos. No hace falta para cubrir la geometría: " +
-      "al aplicar, la rejilla se amplía sola con las coordenadas de los nudos (y en un proyecto vacío se genera entera a partir de ellos).\n" +
+      "Úsala para nombrar ejes y plantas (A, B…, 1, 2…, PB, P1…), fijar ejes sin elementos o QUITAR ejes: los ejes que indiques quedan exactamente así aunque haya nudos en otras coordenadas. " +
+      "Al aplicar, la rejilla solo crece hacia fuera (vanos o plantas nuevos) con los nudos nuevos; los nudos intermedios (correas, subdivisiones) no crean ejes. En un proyecto vacío se genera entera a partir de los nudos.\n" +
       "- set_active_dofs: dofs [UX|UY|UZ|RX|RY|RZ] o null (automático). Solo dentro de los GDL de la formulación del proyecto.",
     input_schema: {
       type: "object",
@@ -156,6 +158,7 @@ const TOOLS = [
                   "add_nodal_loads",
                   "add_frame_loads",
                   "add_area_loads",
+                  "set_area_local_axes",
                   "update_load_patterns",
                   "delete_loads",
                   "assign_section",
@@ -186,6 +189,8 @@ const TOOLS = [
               loads: { type: "array", items: { type: "object" } },
               elements: { type: "array", items: { type: "string" } },
               areas: { type: "array", items: { type: "string" } },
+              ribDirection: { type: "string", enum: ["x", "y"] },
+              angle: { type: "number" },
               loadTypes: { type: "array", items: { type: "string", enum: ["nodal", "frame", "area"] } },
               all: { type: "boolean" },
               section: { type: "string" },
@@ -290,6 +295,9 @@ function areaOut(a, ctx, nodeById) {
     z: g ? disp(g.c[2], sys, "length") : undefined,
     surface: g ? disp(g.area, sys, "area") : undefined,
     diaphragm: a.diaphragm || undefined,
+    localAxisAngle: a.localAxisAngle ?? 0,
+    // Solo en losas deck horizontales: hacia dónde van los nervios (vano del deck).
+    ribDirection: ribDirection(a, nodeById, sec) ?? undefined,
   };
 }
 
