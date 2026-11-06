@@ -216,7 +216,12 @@ function runSummary(run, { latestSolvedRunId, connectionStatus, currentLoadsHash
       !!latestSolvedRunId &&
       run.analysisRunId === latestSolvedRunId &&
       (!currentLoadsHash ||
-        connectionLoadsHash(run.inputs?.combinations, run.inputs?.comboNames) === currentLoadsHash),
+        // La combinación automática de Vgravity la arma el backend en cada petición: no
+        // es del proyecto y no cuenta para decidir si las combinaciones cambiaron.
+        connectionLoadsHash(
+          (run.inputs?.combinations || []).filter((c) => c.name !== VGRAVITY_COMBINATION),
+          run.inputs?.comboNames
+        ) === currentLoadsHash),
     error: run.error ?? null,
     // Los requisitos del SISTEMA que la conexión verifica en su nudo (AISC 341 E3.4a,
     // E3.6e): los reúne la tabla de nudos SMF de Design sin bajar el resultado entero.
@@ -227,6 +232,7 @@ function runSummary(run, { latestSolvedRunId, connectionStatus, currentLoadsHash
 }
 
 module.exports = {
+  VGRAVITY_COMBINATION,
   buildInspectRequest,
   membersFromInspection,
   orphanReasons,
