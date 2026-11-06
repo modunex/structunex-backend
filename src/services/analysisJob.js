@@ -45,6 +45,43 @@ const PROGRESS_FIELDS = [
   "modeCount",
 ];
 
+// Registro del análisis (estilo ETABS "Analysis log"): cada evento de progreso con su
+// hora de llegada, los avisos del motor y el error final. Un paso que solo avanza su
+// contador (caso 3 de 22 → 4 de 22) reemplaza su línea anterior, para que el registro
+// cuente lo que pasó sin cientos de líneas iguales.
+const LOG_MAX = 400;
+
+function makeLog() {
+  const entries = [];
+  const push = (entry) => {
+    const last = entries[entries.length - 1];
+    const sameStep =
+      last &&
+      last.level === entry.level &&
+      last.step === entry.step &&
+      (last.caseName ?? null) === (entry.caseName ?? null) &&
+      entry.current != null;
+    if (sameStep) entries[entries.length - 1] = entry;
+    else if (entries.length < LOG_MAX) entries.push(entry);
+    return entries;
+  };
+  return {
+    entries,
+    progress: (e) => {
+      const entry = { t: new Date().toISOString(), level: "info" };
+      for (const field of ["step", "message", ...PROGRESS_FIELDS]) {
+        if (e[field] != null) entry[field] = e[field];
+      }
+      push(entry);
+    },
+    warn: (message) => push({ t: new Date().toISOString(), level: "warning", step: "notes", message }),
+    error: (message, details) =>
+      push({ t: new Date().toISOString(), level: "error", step: "error", message, ...(details ? { details } : {}) }),
+    done: (durationMs) =>
+      push({ t: new Date().toISOString(), level: "info", step: "solved", message: "Analysis complete", durationMs }),
+  };
+}
+
 async function setProgress(projectId, progress) {
   const doc = { updatedAt: new Date().toISOString() };
   for (const field of PROGRESS_FIELDS) doc[field] = progress[field] ?? null;
@@ -75,7 +112,7 @@ async function settleFailure(projectId, message) {
 // Guarda el manifiesto que devuelve el calc-service en la fila de la ejecución.
 // El manifiesto ya trae todo lo que hace falta para listar y comparar runs sin tocar
 // S3; aquí no se interpreta nada, solo se coloca.
-async function saveManifest(run, manifest) {
+async function saveManifest(run, manifest, log = []) {
   const solvedAt = new Date();
   await prisma.analysisRun.update({
     where: { id: run.id },
@@ -97,6 +134,7 @@ async function saveManifest(run, manifest) {
       bytes: manifest.bytes?.total ?? 0,
       summary: manifest.summary ?? { perCase: [], drift: [] },
       stories: manifest.stories ?? [],
+      log,
     },
   });
 }
@@ -163,6 +201,9 @@ async function start(projectId, payload, { modelHash = null } = {}) {
     },
   });
 
+  const log = makeLog();
+  log.progress({ step: "preparing", message: "Preparing model" });
+
   // Deliberately not awaited: the HTTP response goes out now.
   (async () => {
     try {
@@ -184,6 +225,7 @@ async function start(projectId, payload, { modelHash = null } = {}) {
         {
           signal: controller.signal,
           onProgress: (e) => {
+            log.progress(e);
             // Fire-and-forget: a lost progress write must not break the run. The whole
             // event (incl. structured fields like caseName/meshShells) is persisted as-is.
             setProgress(projectId, e).catch(() => {});
@@ -199,7 +241,9 @@ async function start(projectId, payload, { modelHash = null } = {}) {
       }
 
       await setProgress(projectId, { step: "saving", message: "Saving results" });
-      await saveManifest(run, manifest);
+      for (const note of manifest.notes ?? []) log.warn(note);
+      log.done(Date.now() - run.startedAt.getTime());
+      await saveManifest(run, manifest, log.entries);
       await prisma.project.update({
         where: { id: projectId },
         data: { status: "solved", analysisError: null, analysisProgress: Prisma.DbNull },
@@ -215,10 +259,11 @@ async function start(projectId, payload, { modelHash = null } = {}) {
         : err instanceof AppError
           ? err.message
           : "El calc-service no pudo resolver el modelo";
+      log.error(message, err instanceof AppError ? err.details : undefined);
       await prisma.analysisRun
         .update({
           where: { id: run.id },
-          data: { status: cancelled ? "cancelled" : "error", error: message },
+          data: { status: cancelled ? "cancelled" : "error", error: message, log: log.entries },
         })
         .catch(() => {});
       // Un fallo deja basura a medio escribir en S3: se limpia para que la ejecución
