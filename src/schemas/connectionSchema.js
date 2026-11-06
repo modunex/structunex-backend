@@ -82,6 +82,9 @@ const endPlateParamsV1 = z
         Ry: z.number().min(1).max(2).nullable(),
         RyColumn: z.number().min(1).max(2).nullable(),
         gravityCombination: z.string().trim().min(1).max(120).nullable(),
+        // Factor de la carga viva en la combinación automática de Vgravity (AISC 358
+        // §2.4.3): 0,5; 1,0 en garajes y uso público con L > 100 psf. null = 0,5.
+        f1: z.number().gt(0).max(1).nullable(),
         hingeDistance: length,
         // Axial de compresión de la columna según AISC 341-22 D1.4a (incluye la carga
         // sísmica con sobrerresistencia), en kN. 0 = sin compresión.
