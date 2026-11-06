@@ -32,6 +32,10 @@ function limitState(ls) {
   };
   if (ls.reason) out.reason = ls.reason;
   if (ls.pendingSourceReview) out.pendingSourceReview = true;
+  // Viga física de la demanda por capacidad: barras encadenadas que forman la luz L.
+  if (Array.isArray(ls.details?.spanElementIds) && ls.details.spanElementIds.length > 0) {
+    out.spanElementIds = ls.details.spanElementIds.map(String);
+  }
   // La traza solo existe donde el motor la produjo (nunca en un no verificable).
   if (typeof ls.equation === "string" && Array.isArray(ls.vars)) {
     out.equation = ls.equation;
