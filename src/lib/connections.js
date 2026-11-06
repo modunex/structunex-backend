@@ -12,6 +12,22 @@ const isUuid = (v) => typeof v === "string" && UUID_RE.test(v);
 // Casos que tienen esfuerzos de barra. Un caso modal no los tiene.
 const FORCE_CASE_KINDS = new Set(["pattern", "responseSpectrum"]);
 
+// Combinación de gravedad para Vgravity de las conexiones por capacidad (AISC 358
+// §2.4.3 / ASCE 7 §2.3.6): 1.2D + f1·L + 0.2S, armada a partir de los patrones del
+// modelo por su TIPO. D = dead + superDead; L = live (f1 = 0,5 salvo garajes y uso
+// público con L > 100 psf, f1 = 1,0); S = snow. Roof live no entra. Sin patrón de carga
+// muerta no se arma (null): el motor lo dice y no inventa nada.
+const VGRAVITY_COMBINATION = "__vgravity__";
+
+function vgravityCombination(loadPatterns, f1 = 0.5) {
+  const factorByType = { dead: 1.2, superDead: 1.2, live: f1, snow: 0.2 };
+  const factors = (loadPatterns || [])
+    .filter((p) => p.type in factorByType)
+    .map((p) => ({ factor: factorByType[p.type], pattern: p.name, seismic: false }));
+  if (!factors.some((f) => f.factor === 1.2)) return null;
+  return { name: VGRAVITY_COMBINATION, factors, f1 };
+}
+
 /** La petición para el calc-service. Pura: se prueba sin base de datos. */
 function buildInspectRequest({
   nodeId,
@@ -25,7 +41,10 @@ function buildInspectRequest({
   lateralSystems,
   bucket,
   prefix,
+  loadPatterns,
+  f1,
 }) {
+  const auto = vgravityCombination(loadPatterns, f1);
   // Sistema resistente de cada barra del nudo que tiene uno DEFINIDO (un nombre que ya no
   // existe en la configuración no cuenta).
   const memberSystems = memberLateralSystems(elements, lateralSystems);
@@ -58,7 +77,7 @@ function buildInspectRequest({
     loads,
     // GDL con los que se resolvió el run: el equilibrio del nudo solo se mira en ellos.
     activeDofs: run.activeDofs || [],
-    combinations: (combinations || []).map((c) => ({
+    combinations: [...(combinations || []), ...(auto ? [auto] : [])].map((c) => ({
       name: c.name,
       factors: (c.factors || []).map((f) => ({
         factor: f.factor,
@@ -66,6 +85,7 @@ function buildInspectRequest({
         seismic: !!f.seismic,
       })),
     })),
+    ...(auto ? { vgravity: { combination: VGRAVITY_COMBINATION, f1: auto.f1 } } : {}),
     lateralSystems: memberSystems,
   };
 }
