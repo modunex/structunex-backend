@@ -120,6 +120,12 @@ function analysisSnapshot({ run, sheets, model }) {
     storyTotals: storyTotals(stories),
     storyForces: (summary.storyForces || []).map((f) => ({
       case: f.case, z: num(f.z), vx: num(f.vx), vy: num(f.vy), mx: num(f.mx), my: num(f.my),
+      // Fuerza lateral del nivel, combinada por modo en el motor (no una resta de cortantes).
+      fx: num(f.fx), fy: num(f.fy),
+    })),
+    // Desplazamiento lateral por nivel: máximo y promedio de los nudos reales de cada cota.
+    storyDisplacements: (summary.storyDisplacements || []).map((d) => ({
+      case: d.case, level: d.level, z: num(d.z), ux: num(d.ux), uy: num(d.uy), uxAvg: num(d.uxAvg), uyAvg: num(d.uyAvg),
     })),
     // Deriva INDICATIVA (máximos de nivel, no en el mismo nudo): no es una comprobación.
     driftIndicative: (summary.drift || []).map((d) => ({
