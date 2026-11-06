@@ -9,6 +9,7 @@ const DIM_KEYS = ["b", "h", "d", "t", "tw", "tf", "bf", "bfTop", "tfTop", "bfBot
 const LIST_NODES_MAX = 150;
 const LIST_ELEMENTS_MAX = 200;
 const QUERY_MAX = 400;
+const LIST_AREAS_MAX = 300;
 
 // ─── Definiciones (lo que ve el modelo) ───
 
@@ -36,20 +37,22 @@ const TOOLS = [
     name: "get_model_summary",
     description:
       "Resumen del modelo estructural actual: conteos, extensión, rejilla, patrones de carga, " +
-      "secciones usadas, apoyos y (si el modelo es pequeño) la lista de nudos y barras. " +
+      "cargas por patrón, secciones usadas, apoyos, áreas (losas/muros) agrupadas por nivel y (si el " +
+      "modelo es pequeño) la lista de nudos, barras y áreas. " +
       "Úsala antes de proponer cambios sobre un modelo existente.",
     input_schema: { type: "object", properties: {} },
   },
   {
     name: "query_model",
     description:
-      "Consulta nudos y barras concretos: por ids o dentro de una caja [min, max]. Devuelve " +
-      "coordenadas, conectividad, sección, apoyos y cargas.",
+      "Consulta nudos, barras y áreas concretos: por ids o dentro de una caja [min, max]. Devuelve " +
+      "coordenadas, conectividad, sección, apoyos y cargas (de nudo, de barra y de área).",
     input_schema: {
       type: "object",
       properties: {
         nodeIds: { type: "array", items: { type: "string" } },
         elementIds: { type: "array", items: { type: "string" } },
+        areaIds: { type: "array", items: { type: "string" } },
         box: {
           type: "object",
           description: "Caja en unidades de display del usuario.",
@@ -111,6 +114,7 @@ const TOOLS = [
       "- add_load_patterns: patterns [{name, patternType (dead|superDead|live|roofLive|wind|snow|rain|quake|other), selfWeightMultiplier?}].\n" +
       "- add_nodal_loads: loads [{node, loadPattern, fx?, fy?, fz?, mx?, my?, mz?}] (ejes globales).\n" +
       "- add_frame_loads: elements [ids], loadPattern, kind (distributed|point), dir (gravity|gx|gy|gz|local1|local2|local3), value, dist? (obligatorio en point). Distribuida: value al inicio y value2? al final (trapezoidal; sin value2 = uniforme) entre dist? y dist2? (sin ellas = barra completa). Distancias relativas 0..1, o en longitud de inputUnits con distAbsolute true. gravity = hacia −Z con value positivo; local1/2/3 = ejes locales (SAP2000: 2 hacia arriba en una viga horizontal).\n" +
+      "- add_area_loads: areas [ids], loadPattern, dir (gravity|gx|gy|gz), value (fuerza/superficie = unidad modulus de inputUnits). Carga uniforme de superficie sobre losas o muros; gravity = hacia −Z con value positivo. Sustituye la carga que ya tuviera esa área en ese patrón (como Assign ▸ Area Loads).\n" +
       "- update_load_patterns: patterns [{name, patternType?, selfWeightMultiplier?}]. Cambia el tipo o el multiplicador de peso propio de patrones existentes (0 = sin peso propio).\n" +
       "- delete_loads: borra cargas ya asignadas. Filtros (se combinan con Y): loadPattern? (nombre), elements? (barras), nodes? (ids de nudo), areas? (ids de área), loadTypes? [nodal|frame|area]. " +
       "Sin elements/nodes/areas afecta a todo el modelo; sin loadTypes afecta a los tipos con filtro de ubicación o, si no hay, a los tres. Para borrar TODAS las cargas sin filtrar, all: true. " +
@@ -151,6 +155,7 @@ const TOOLS = [
                   "add_load_patterns",
                   "add_nodal_loads",
                   "add_frame_loads",
+                  "add_area_loads",
                   "update_load_patterns",
                   "delete_loads",
                   "assign_section",
@@ -255,6 +260,64 @@ function loadsByPattern(snapshot) {
   return out;
 }
 
+// Geometría de un área: centroide, rango Z, superficie y si es horizontal (losa).
+function areaGeom(a, nodeById) {
+  const pts = (a.nodeIds || []).map((id) => nodeById.get(id)).filter(Boolean).map((n) => [n.x, n.y, n.z ?? 0]);
+  if (pts.length < 3) return null;
+  const c = [0, 1, 2].map((k) => pts.reduce((s, p) => s + p[k], 0) / pts.length);
+  const zs = pts.map((p) => p[2]);
+  let nx = 0, ny = 0, nz = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const [x1, y1, z1] = pts[i];
+    const [x2, y2, z2] = pts[(i + 1) % pts.length];
+    nx += (y1 - y2) * (z1 + z2);
+    ny += (z1 - z2) * (x1 + x2);
+    nz += (x1 - x2) * (y1 + y2);
+  }
+  const area = Math.hypot(nx, ny, nz) / 2;
+  return { c, zMin: Math.min(...zs), zMax: Math.max(...zs), area, horizontal: Math.max(...zs) - Math.min(...zs) < 1e-4 };
+}
+
+function areaOut(a, ctx, nodeById) {
+  const { sys, catalog } = ctx;
+  const g = areaGeom(a, nodeById);
+  const sec = (catalog.areaSections || []).find((s) => s.id === a.areaSectionId);
+  return {
+    id: a.id,
+    nodes: a.nodeIds,
+    section: sec ? `${sec.name} (${sec.kind}${sec.shellType ? `, ${sec.shellType}` : ""})` : a.areaSectionId ? a.areaSectionId : null,
+    kind: g ? (g.horizontal ? "slab" : "wall/inclined") : "invalid",
+    z: g ? disp(g.c[2], sys, "length") : undefined,
+    surface: g ? disp(g.area, sys, "area") : undefined,
+    diaphragm: a.diaphragm || undefined,
+  };
+}
+
+// Losas (áreas horizontales) agrupadas por cota.
+function slabsByLevel(snapshot, sys) {
+  const nodeById = new Map((snapshot.nodes || []).map((n) => [n.id, n]));
+  const levels = new Map();
+  let other = 0;
+  for (const a of snapshot.areas || []) {
+    const g = areaGeom(a, nodeById);
+    if (!g || !g.horizontal) {
+      other++;
+      continue;
+    }
+    const key = Math.round(g.zMin * 1e4) / 1e4;
+    if (!levels.has(key)) levels.set(key, { ids: [], surface: 0 });
+    const l = levels.get(key);
+    l.ids.push(a.id);
+    l.surface += g.area;
+  }
+  return {
+    levels: [...levels.entries()]
+      .sort((p, q) => p[0] - q[0])
+      .map(([z, l]) => ({ z: disp(z, sys, "length"), count: l.ids.length, surface: disp(l.surface, sys, "area"), ids: l.ids })),
+    nonHorizontalAreas: other,
+  };
+}
+
 function getModelSummary(ctx) {
   const { snapshot, sys, catalog } = ctx;
   const nodes = snapshot.nodes || [];
@@ -301,6 +364,7 @@ function getModelSummary(ctx) {
       areaLoads: (snapshot.areaLoads || []).length,
     },
     loadsByPattern: loadsByPattern(snapshot),
+    slabs: (snapshot.areas || []).length ? slabsByLevel(snapshot, sys) : undefined,
     extent,
     grid,
     loadPatterns: cfg.loadPatterns || [],
@@ -314,6 +378,12 @@ function getModelSummary(ctx) {
       elements.length <= LIST_ELEMENTS_MAX
         ? elements.map((e) => elementOut(e, names))
         : "demasiados: usa query_model",
+    areas:
+      (snapshot.areas || []).length === 0
+        ? undefined
+        : snapshot.areas.length <= LIST_AREAS_MAX
+          ? snapshot.areas.map((a) => areaOut(a, ctx, new Map(nodes.map((n) => [n.id, n]))))
+          : "demasiadas: usa query_model con areaIds o box",
   };
 }
 
@@ -326,6 +396,8 @@ function queryModel(ctx, input) {
 
   const nodeSet = new Set(input.nodeIds || []);
   const elemSet = new Set(input.elementIds || []);
+  const areas = snapshot.areas || [];
+  const areaSet = new Set(input.areaIds || []);
   if (input.box) {
     const lo = input.box.min.map((v, k) => Math.min(v, input.box.max[k]));
     const hi = input.box.min.map((v, k) => Math.max(v, input.box.max[k]));
@@ -338,6 +410,10 @@ function queryModel(ctx, input) {
       const a = nodeById.get(e.nodeA);
       const b = nodeById.get(e.nodeB);
       if (a && b && inside(a) && inside(b)) elemSet.add(e.id);
+    }
+    for (const ar of areas) {
+      const ns = (ar.nodeIds || []).map((id) => nodeById.get(id));
+      if (ns.length && ns.every((n) => n && inside(n))) areaSet.add(ar.id);
     }
   }
   for (const id of elemSet) {
@@ -380,7 +456,11 @@ function queryModel(ctx, input) {
         dist2: l.distAbsolute ? disp(l.dist2, sys, "length") : l.dist2,
         distAbsolute: l.distAbsolute || undefined,
       })),
-    truncated: nodeSet.size > QUERY_MAX || elemSet.size > QUERY_MAX,
+    areas: areas.filter((a) => areaSet.has(a.id)).slice(0, QUERY_MAX).map((a) => areaOut(a, ctx, nodeById)),
+    areaLoads: (snapshot.areaLoads || [])
+      .filter((l) => areaSet.has(l.areaId))
+      .map((l) => ({ area: l.areaId, loadPattern: l.loadPattern, dir: l.dir, value: disp(l.value, sys, "modulus") })),
+    truncated: nodeSet.size > QUERY_MAX || elemSet.size > QUERY_MAX || areaSet.size > QUERY_MAX,
   };
 }
 

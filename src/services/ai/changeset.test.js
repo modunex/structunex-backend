@@ -314,3 +314,35 @@ test("update_load_patterns quita el peso propio y avisa de las combinaciones", (
     false
   );
 });
+
+// ─── add_area_loads ───
+
+test("add_area_loads convierte kgf/m² a base y sustituye la carga del mismo patrón", () => {
+  const b = builder(
+    {
+      areas: [{ id: "A1", nodeIds: [] }, { id: "A2", nodeIds: [] }],
+      areaLoads: [{ areaId: "A1", loadPattern: "Dead", dir: "gravity", value: 1 }],
+    },
+    "kgf-cm"
+  );
+  const r = b.apply({
+    summary: "losas",
+    inputUnits: "kgf-m",
+    operations: [{ type: "add_area_loads", areas: ["A1", "A2"], loadPattern: "Dead", dir: "gravity", value: 445 }],
+  });
+  assert.equal(r.ok, true);
+  assert.equal(r.result.counts.areaLoads, 2);
+  assert.equal(r.result.counts.replacedAreaLoads, 1);
+  const ops = b.finish().ops;
+  assert.equal(ops[0].op, "setAreaLoad");
+  // 445 kgf/m² = 4.364 kN/m²
+  assert.ok(Math.abs(ops[0].areaLoad.value - 445 * 0.00980665) < 1e-9);
+});
+
+test("add_area_loads rechaza áreas o patrones inexistentes", () => {
+  const b = builder({ areas: [{ id: "A1", nodeIds: [] }] });
+  const bad = (op) => b.apply({ summary: "x", operations: [{ type: "add_area_loads", dir: "gravity", value: 1, ...op }] }).ok;
+  assert.equal(bad({ areas: ["A9"], loadPattern: "Dead" }), false);
+  assert.equal(bad({ areas: ["A1"], loadPattern: "Wind" }), false);
+  assert.equal(bad({ areas: ["A1"], loadPattern: "Dead", value: 0 }), false);
+});

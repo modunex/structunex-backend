@@ -77,7 +77,7 @@ async function runTurn(p) {
   const run = p.run || models.resolve(p.model, p.effort);
   const sys = unitSystemById(p.unitSystemId);
 
-  const [history, attachments, materials, sections] = await Promise.all([
+  const [history, attachments, materials, sections, areaSections] = await Promise.all([
     prisma.aiMessage.findMany({
       where: { conversationId: conversation.id },
       orderBy: { seq: "asc" },
@@ -85,9 +85,14 @@ async function runTurn(p) {
     prisma.aiAttachment.findMany({ where: { conversationId: conversation.id } }),
     prisma.catalogMaterial.findMany({ where: { ownerId }, orderBy: { createdAt: "asc" } }),
     prisma.catalogFrameSection.findMany({ where: { ownerId }, orderBy: { createdAt: "asc" } }),
+    prisma.catalogAreaSection.findMany({
+      where: { ownerId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, name: true, kind: true, shellType: true, thicknessMembrane: true, thicknessBending: true },
+    }),
   ]);
   const attById = new Map(attachments.map((a) => [a.id, a]));
-  const catalog = { materials, sections };
+  const catalog = { materials, sections, areaSections };
 
   await prisma.aiMessage.create({
     data: { conversationId: conversation.id, role: "user", content: p.userContent },
