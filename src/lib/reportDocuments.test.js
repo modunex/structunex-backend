@@ -27,6 +27,10 @@ test("opciones de presentación de los bloques técnicos", () => {
   assert.match(validateDocument(withOptions({ significantDigits: 9 })), /invalid significantDigits/);
   assert.match(validateDocument(withOptions({ sections: "modal" })), /invalid sections/);
   assert.match(validateDocument(withOptions({ formula: "x" })), /unknown option/);
+  assert.equal(validateDocument(withOptions({ layout: "consolidated", factors: { SISMO_1_X: 4.8 }, charts: false })), null);
+  assert.match(validateDocument(withOptions({ layout: "grid" })), /invalid layout/);
+  assert.match(validateDocument(withOptions({ factors: { SISMO_1_X: -1 } })), /invalid factors/);
+  assert.match(validateDocument(withOptions({ factors: [1] })), /invalid factors/);
 });
 
 test("las opciones no cambian la verificación y llegan al documento final", () => {
