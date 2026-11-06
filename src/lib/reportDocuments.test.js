@@ -200,3 +200,20 @@ test("tablas de materiales y perfiles", () => {
   assert.equal(bindingKey(block), "t:sections");
   assert.equal(bindingKey({ ...block, binding: { source: "projectModel", table: "otros" } }), null);
 });
+
+test("la plantilla separa el análisis en un bloque por sección", () => {
+  const { templateBlocks } = require("./reportDocuments");
+  const snapshot = {
+    cases: [],
+    modes: [{ mode: 1 }],
+    stories: [{ weight: 10, crX: null, kx: null }],
+    storyForces: [],
+    driftIndicative: [],
+  };
+  const blocks = templateBlocks([{ id: "a", type: "analysisSummary", binding: { source: "analysisRun", analysisRunId: "r" }, snapshot, snapshotHash: "h" }]);
+  assert.deepEqual(blocks.map((b) => b.options.sections[0]), ["model", "loads", "results", "modal", "seismicWeight"]);
+  assert.equal(blocks[0].snapshot, snapshot);
+  assert.equal(blocks[1].snapshot, null);
+  assert.equal(new Set(blocks.map((b) => b.id)).size, blocks.length);
+  assert.equal(validateDocument({ version: 1, blocks }), null);
+});
