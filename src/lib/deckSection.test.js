@@ -30,3 +30,25 @@ test("deck: rejects geometry that is not a deck", () => {
   assert.throws(() => deckProperties(DECK, 0, 77), /concreto/);
   assert.throws(() => deckProperties(DECK, 24, null), /acero/);
 });
+
+test("flexión ortótropa: la inercia a lo largo de los nervios supera con creces a la transversal", () => {
+  // Losa del usuario: tc 7,5 cm, hr 5 cm, sr 30,5 cm, nervio 16/12 cm, lámina 0,91 mm.
+  const deck = { tc: 0.075, hr: 0.05, wrTop: 0.16, wrBot: 0.12, sr: 0.305, t: 0.00091, ribAngle: 30 };
+  const p = deckProperties(deck, 24, 77, 200000 / 21538);
+  const plate = 0.075 ** 3 / 12;
+  assert.ok(Math.abs(p.bendingAcross - plate) < 1e-12);
+  // A mano: losa (tc·sr) + nervio trapezoidal + lámina transformada, por paso y entre sr.
+  // Sale del orden de 3 veces tc³/12 para esta geometría (losa gruesa, nervio bajo).
+  assert.ok(p.bendingRatio > 2.5 && p.bendingRatio < 4, `ratio ${p.bendingRatio}`);
+  assert.equal(p.orthotropic.e2Factor, 1);
+  assert.ok(Math.abs(p.orthotropic.e1Factor - p.bendingRatio) < 1e-12);
+  assert.ok(Math.abs(p.orthotropic.g12Factor - Math.sqrt(p.bendingRatio)) < 1e-12);
+  assert.equal(p.orthotropic.angle, 30);
+});
+
+test("un nervio alto hace la losa claramente unidireccional", () => {
+  const deck = { tc: 0.05, hr: 0.076, wrTop: 0.14, wrBot: 0.1, sr: 0.305, t: 0.00091 };
+  const p = deckProperties(deck, 24, 77, 9);
+  assert.ok(p.bendingRatio > 8, `ratio ${p.bendingRatio}`);
+  assert.equal(p.orthotropic.angle, 0);
+});

@@ -105,6 +105,7 @@ async function assembleModel(projectId) {
     deckMaterialIds.length ? prisma.catalogMaterial.findMany({ where: { id: { in: deckMaterialIds } } }) : [],
   ]);
   const densityById = new Map([...catMaterials, ...deckMaterials].map((m) => [m.id, m.density]));
+  const modulusById = new Map([...catMaterials, ...deckMaterials].map((m) => [m.id, m.E]));
 
   // Engine materials: { id, E, G, density }. G derived from E and nu if absent;
   // density (kN/m^3) drives self weight.
@@ -139,7 +140,9 @@ async function assembleModel(projectId) {
     if (s.kind === "deck" && s.deck) {
       let props;
       try {
-        props = deckProperties(s.deck, densityById.get(s.materialId), densityById.get(s.deck.deckMaterialId));
+        const ec = modulusById.get(s.materialId);
+        const es = modulusById.get(s.deck.deckMaterialId);
+        props = deckProperties(s.deck, densityById.get(s.materialId), densityById.get(s.deck.deckMaterialId), ec > 0 && es > 0 ? es / ec : undefined);
       } catch (err) {
         throw new AppError(400, `Sección de área "${s.name}": ${err.message}`);
       }
@@ -150,6 +153,8 @@ async function assembleModel(projectId) {
         thicknessMembrane: props.analysisThickness,
         thicknessBending: props.analysisThickness,
         modifiers: { ...(s.modifiers || {}), weight: props.weightFactor, mass: props.weightFactor },
+        // Flexión ortótropa: rígida a lo largo de los nervios, tc³/12 transversal.
+        orthotropic: props.orthotropic,
       };
     }
     return {
