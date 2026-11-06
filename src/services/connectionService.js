@@ -371,6 +371,7 @@ async function check(project, connectionId) {
     connection: row,
     plateMaterial,
     comboNames: designPreferences.comboNames || [],
+    omega0: designPreferences.seismic?.omega0,
   });
   const inputsHash = checkInputsHash(request);
 
