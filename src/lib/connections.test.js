@@ -72,3 +72,33 @@ test("la petición lleva el sistema resistente de las barras del nudo que tienen
   // El sistema no viaja dentro de la barra: no es geometría.
   assert.equal(req.elements[0].lateralSystem, undefined);
 });
+
+test("arma la combinación automática de Vgravity por tipo de patrón (1.2D + f1·L + 0.2S)", () => {
+  const base = {
+    nodeId: "N2",
+    run: { id: "r", projectId: "p", activeDofs: [], cases: [] },
+    design: { nodes: [], sections: [], materials: [] },
+    elements: [], supports: [], areas: [], loads: [], combinations: [{ name: "C1", factors: [] }],
+  };
+  const patterns = [
+    { name: "Dead", type: "dead" }, { name: "SuperDead", type: "superDead" },
+    { name: "Live", type: "live" }, { name: "Roof Live", type: "roofLive" },
+    { name: "Snow", type: "snow" }, { name: "Wind", type: "wind" },
+  ];
+  const req = buildInspectRequest({ ...base, loadPatterns: patterns });
+  const auto = req.combinations.find((c) => c.name === "__vgravity__");
+  assert.deepEqual(auto.factors.map((f) => [f.pattern, f.factor]), [
+    ["Dead", 1.2], ["SuperDead", 1.2], ["Live", 0.5], ["Snow", 0.2],
+  ]);
+  assert.deepEqual(req.vgravity, { combination: "__vgravity__", f1: 0.5 });
+  assert.equal(req.combinations[0].name, "C1");
+
+  // f1 = 1 (garajes, uso público con L > 100 psf).
+  const req1 = buildInspectRequest({ ...base, loadPatterns: patterns, f1: 1 });
+  assert.equal(req1.combinations.find((c) => c.name === "__vgravity__").factors[2].factor, 1);
+
+  // Sin carga muerta identificada por tipo no se arma nada.
+  const none = buildInspectRequest({ ...base, loadPatterns: [{ name: "X", type: "other" }] });
+  assert.equal(none.vgravity, undefined);
+  assert.equal(none.combinations.length, 1);
+});

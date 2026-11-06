@@ -36,7 +36,9 @@ const { connectionLoadsHash } = require("../lib/designInputs");
  * inspección (F1) y la comprobación (F3): una conexión se comprueba exactamente con las
  * fuerzas que el panel le enseña al usuario.
  */
-async function jointRequest(project, nodeId) {
+// `f1` es el factor de la carga viva en la combinación automática de Vgravity (AISC 358
+// §2.4.3): lo lleva la conexión en demand.f1; por defecto 0,5.
+async function jointRequest(project, nodeId, { f1 } = {}) {
   const projectId = project.id;
 
   const node = await prisma.modelNode.findUnique({
@@ -97,7 +99,7 @@ async function jointRequest(project, nodeId) {
     }),
     prisma.modelConfiguration.findUnique({
       where: { projectId },
-      select: { loadCombinations: true, designPreferences: true, lateralSystems: true },
+      select: { loadCombinations: true, designPreferences: true, lateralSystems: true, loadPatterns: true },
     }),
   ]);
 
@@ -118,6 +120,8 @@ async function jointRequest(project, nodeId) {
     lateralSystems: configuration?.lateralSystems || [],
     bucket: env.s3Bucket,
     prefix: env.s3Prefix,
+    loadPatterns: configuration?.loadPatterns || [],
+    f1,
   });
   return { run, state, request, designPreferences: configuration?.designPreferences || {} };
 }
@@ -351,9 +355,11 @@ async function check(project, connectionId) {
     });
   }
 
+  const f1 = Number(row.params?.demand?.f1);
   const { run, request: inspectRequest, designPreferences } = await jointRequest(
     project,
-    row.nodeId
+    row.nodeId,
+    { f1: Number.isFinite(f1) && f1 > 0 ? f1 : undefined }
   );
 
   const materialId = row.params?.plate?.materialId;
