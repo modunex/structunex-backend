@@ -215,3 +215,102 @@ test("add_frame_loads: rechaza relativas > 1 y absolutas fuera de la barra", () 
   assert.equal(builder(snap).apply(op({ dist: 7, distAbsolute: true })).ok, false);
   assert.equal(builder(snap).apply(op({ dist: 2.5, distAbsolute: true })).ok, true);
 });
+
+// ─── delete_loads / update_load_patterns ───
+
+function loadedBuilder() {
+  return builder({
+    nodes: [
+      { id: "N1", x: 0, y: 0, z: 0 },
+      { id: "N2", x: 6, y: 0, z: 0 },
+    ],
+    elements: [{ id: "E1", nodeA: "N1", nodeB: "N2" }, { id: "E2", nodeA: "N2", nodeB: "N1" }],
+    loads: [
+      { nodeId: "N2", loadPattern: "Dead", fz: -10 },
+      { nodeId: "N2", loadPattern: "Live", fz: -5 },
+    ],
+    frameLoads: [
+      { elementId: "E1", loadPattern: "Dead", kind: "distributed", dir: "gravity", value: 10 },
+      { elementId: "E2", loadPattern: "Dead", kind: "distributed", dir: "gravity", value: 5 },
+      { elementId: "E1", loadPattern: "Live", kind: "distributed", dir: "gravity", value: 3 },
+    ],
+    areaLoads: [{ areaId: "A1", loadPattern: "Dead", dir: "gravity", value: 2 }],
+    configuration: {
+      loadPatterns: [
+        { name: "Dead", type: "dead", selfWeightMultiplier: 1 },
+        { name: "Live", type: "live", selfWeightMultiplier: 0 },
+      ],
+      loadCombinations: [{ name: "1.4D", factors: [{ pattern: "Dead", factor: 1.4 }] }],
+    },
+  });
+}
+
+test("delete_loads por patrón borra los tres tipos de carga de ese patrón", () => {
+  const b = loadedBuilder();
+  const r = b.apply({ summary: "sin Dead", operations: [{ type: "delete_loads", loadPattern: "dead" }] });
+  assert.equal(r.ok, true);
+  assert.equal(r.result.counts.deletedLoads, 4);
+  assert.deepEqual(
+    b.finish().ops.map((o) => [o.target, o.loadPattern, o.ids, o.count]),
+    [
+      ["nodal", "Dead", null, 1],
+      ["frame", "Dead", null, 2],
+      ["area", "Dead", null, 1],
+    ]
+  );
+});
+
+test("delete_loads con barras solo toca cargas de barra de esas barras", () => {
+  const b = loadedBuilder();
+  const r = b.apply({
+    summary: "E1",
+    operations: [{ type: "delete_loads", loadPattern: "Dead", elements: ["E1"] }],
+  });
+  assert.equal(r.result.counts.deletedLoads, 1);
+  assert.deepEqual(b.finish().ops, [
+    { op: "deleteLoads", target: "frame", loadPattern: "Dead", ids: ["E1"], count: 1 },
+  ]);
+});
+
+test("delete_loads exige algún filtro o all: true, y rechaza patrones inexistentes", () => {
+  const b = loadedBuilder();
+  assert.equal(b.apply({ summary: "x", operations: [{ type: "delete_loads" }] }).ok, false);
+  assert.equal(b.apply({ summary: "x", operations: [{ type: "delete_loads", loadPattern: "Wind" }] }).ok, false);
+  const r = b.apply({ summary: "todo", operations: [{ type: "delete_loads", all: true }] });
+  assert.equal(r.result.counts.deletedLoads, 6);
+});
+
+test("delete_loads ve las cargas añadidas antes en el mismo turno", () => {
+  const b = loadedBuilder();
+  b.apply({
+    summary: "añade",
+    operations: [
+      { type: "add_frame_loads", elements: ["E2"], loadPattern: "Live", kind: "distributed", dir: "gravity", value: 1 },
+    ],
+  });
+  const r = b.apply({ summary: "quita", operations: [{ type: "delete_loads", loadPattern: "Live", loadTypes: ["frame"] }] });
+  assert.equal(r.result.counts.deletedLoads, 2);
+});
+
+test("delete_loads sin coincidencias avisa y no genera operación", () => {
+  const b = loadedBuilder();
+  const r = b.apply({ summary: "x", operations: [{ type: "delete_loads", loadPattern: "Live", areas: ["A1"] }] });
+  assert.equal(r.ok, true);
+  assert.equal(r.result.warnings.length, 1);
+  assert.equal(b.finish(), null);
+});
+
+test("update_load_patterns quita el peso propio y avisa de las combinaciones", () => {
+  const b = loadedBuilder();
+  const r = b.apply({
+    summary: "sin PP",
+    operations: [{ type: "update_load_patterns", patterns: [{ name: "DEAD", selfWeightMultiplier: 0 }] }],
+  });
+  assert.equal(r.ok, true);
+  assert.match(r.result.warnings[0], /1\.4D/);
+  assert.deepEqual(b.finish().ops, [{ op: "updateLoadPattern", name: "Dead", patch: { selfWeightMultiplier: 0 } }]);
+  assert.equal(
+    b.apply({ summary: "x", operations: [{ type: "update_load_patterns", patterns: [{ name: "Dead" }] }] }).ok,
+    false
+  );
+});
