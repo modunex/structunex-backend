@@ -395,6 +395,9 @@ model AnalysisRun {
   bytes         BigInt    @default(0)
   summary       Json      @default("{\"perCase\":[],\"drift\":[],\"storyForces\":[]}")
   stories       Json      @default("[]")
+  // Registro del análisis: [{t, level, step, message, ...datos}] en el orden en que
+  // llegaron del calc-service, más los avisos y el error final. Ver analysisJob.js.
+  log           Json      @default("[]")
   modelHash     String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

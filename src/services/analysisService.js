@@ -16,7 +16,7 @@ const RUN_SELECT = Object.fromEntries(
   [
     "id", "status", "startedAt", "solvedAt", "durationMs", "error", "activeDofs",
     "notes", "cases", "counts", "modes", "mesh", "modeShapes", "springs", "bytes",
-    "summary", "schemaVersion", "stories",
+    "summary", "schemaVersion", "stories", "log",
   ].map((field) => [field, true])
 );
 const runToApi = (row) => (row ? toApi(row, "analysisRun") : row);
