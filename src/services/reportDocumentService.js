@@ -165,6 +165,9 @@ async function serverSnapshots(project, document) {
         // Solo se documenta el análisis vigente del modelo actual.
         if (!analysis || analysis.run.id !== b.binding.analysisRunId) out.set(key, { error: "stale" });
         else out.set(key, { snapshot: analysis, state: "current" });
+      } else if (b.type === "modelTable") {
+        const { snapshot } = await internals.modelTable(project, b.binding.table);
+        out.set(key, { snapshot, state: "current" });
       } else if (b.type === "spectrumSheet") {
         const { snapshot } = await internals.spectrumSheet(project, b.binding.functionName);
         out.set(key, { snapshot, state: "current" });

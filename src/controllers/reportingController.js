@@ -11,6 +11,10 @@ const connectionSheet = asyncHandler(async (req, res) => {
   res.json(await reportingService.connectionSheet(req.project, req.params.runId));
 });
 
+const modelTable = asyncHandler(async (req, res) => {
+  res.json(await reportingService.modelTable(req.project, req.params.table));
+});
+
 const spectrumFunctions = asyncHandler(async (req, res) => {
   res.json(await reportingService.spectrumFunctions(req.project));
 });
@@ -57,4 +61,4 @@ const removeLogo = asyncHandler(async (req, res) => {
   res.json(await reportingService.removeLogo(req.project));
 });
 
-module.exports = { archive, analysisSheet, spectrumFunctions, spectrumSheet, connectionSheet, designRunMembers, memberSheet, exportPdf, exportDownload, logoUploadUrl, setLogo, getLogo, removeLogo };
+module.exports = { archive, analysisSheet, modelTable, spectrumFunctions, spectrumSheet, connectionSheet, designRunMembers, memberSheet, exportPdf, exportDownload, logoUploadUrl, setLogo, getLogo, removeLogo };

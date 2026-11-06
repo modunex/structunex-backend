@@ -8,7 +8,7 @@
 // ingeniería que no salieron del motor, aunque el documento sea editable.
 const { sha256, snapshotFingerprint } = require("./reporting");
 
-const TECHNICAL = new Set(["connectionCheck", "memberCheck", "analysisSummary", "spectrumSheet"]);
+const TECHNICAL = new Set(["connectionCheck", "memberCheck", "analysisSummary", "spectrumSheet", "modelTable"]);
 const UNIT_SYSTEMS = new Set([
   "lb-in", "lb-ft", "kip-in", "kip-ft", "kn-mm", "kn-m", "kgf-mm", "kgf-m",
   "n-mm", "n-m", "tonf-mm", "tonf-m", "kn-cm", "kgf-cm", "n-cm", "tonf-cm",
@@ -25,10 +25,10 @@ const TABLE_MAXIMA = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4];
 function optionsError(options) {
   if (options === undefined || options === null) return null;
   if (typeof options !== "object" || Array.isArray(options)) return "invalid options";
-  const known = new Set(["title", "sections", "cases", "hiddenColumns", "unitSystem", "significantDigits", "tableStep", "tableMax"]);
+  const known = new Set(["title", "sections", "cases", "hiddenColumns", "unitSystem", "significantDigits", "tableStep", "tableMax", "rows"]);
   if (Object.keys(options).some((key) => !known.has(key))) return "unknown option";
   if (options.title !== undefined && (typeof options.title !== "string" || options.title.length > 200)) return "invalid title";
-  for (const key of ["sections", "cases", "hiddenColumns"]) {
+  for (const key of ["sections", "cases", "hiddenColumns", "rows"]) {
     if (options[key] !== undefined && !isShortList(options[key])) return `invalid ${key}`;
   }
   if (options.unitSystem !== undefined && !UNIT_SYSTEMS.has(options.unitSystem)) return "invalid unitSystem";
@@ -62,7 +62,7 @@ function pageError(page) {
   return null;
 }
 
-const SIMPLE = new Set(["heading", "paragraph", "bulletList", "numberedList", "callout", "divider", "pageBreak", "equation", "table"]);
+const SIMPLE = new Set(["heading", "paragraph", "bulletList", "numberedList", "callout", "divider", "pageBreak", "equation", "table", "toc"]);
 const MAX_BLOCKS = 5000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -91,6 +91,10 @@ function validateDocument(doc) {
     if (ids.has(b.id)) return `duplicate block id ${b.id}`;
     ids.add(b.id);
     if (!SIMPLE.has(b.type) && !TECHNICAL.has(b.type) && b.type !== "figure") return `unknown block type ${b.type}`;
+    if (b.type === "toc") {
+      if (b.title !== undefined && (typeof b.title !== "string" || b.title.length > 200)) return `block ${b.id}: invalid title`;
+      if (b.depth !== undefined && ![1, 2, 3].includes(b.depth)) return `block ${b.id}: invalid depth`;
+    }
     if (b.type === "figure") {
       const invalid = figureError(b);
       if (invalid) return `block ${b.id}: ${invalid}`;
@@ -112,6 +116,7 @@ function bindingKey(b) {
   if (b.type === "connectionCheck" && x.source === "connectionRun" && x.runId) return `c:${x.runId}`;
   if (b.type === "memberCheck" && x.source === "designRun" && x.designRunId && x.elementId) return `m:${x.designRunId}:${x.elementId}`;
   if (b.type === "analysisSummary" && x.source === "analysisRun" && x.analysisRunId) return `a:${x.analysisRunId}`;
+  if (b.type === "modelTable" && x.source === "projectModel" && ["materials", "sections"].includes(x.table)) return `t:${x.table}`;
   if (b.type === "spectrumSheet" && x.source === "spectrumFunction" && typeof x.functionName === "string" && x.functionName) {
     return `s:${x.functionName}`;
   }
