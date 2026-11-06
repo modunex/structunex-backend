@@ -184,3 +184,19 @@ test("opciones de la tabla de un espectro", () => {
   assert.match(validateDocument(withOptions({ tableStep: 0.05 })), /invalid tableStep/);
   assert.match(validateDocument(withOptions({ tableMax: 5 })), /invalid tableMax/);
 });
+
+test("bloque de índice", () => {
+  const withToc = (extra) => ({ version: 1, blocks: [{ id: "t", type: "toc", ...extra }] });
+  assert.equal(validateDocument(withToc({})), null);
+  assert.equal(validateDocument(withToc({ title: "Contenido", depth: 3 })), null);
+  assert.match(validateDocument(withToc({ depth: 4 })), /invalid depth/);
+  assert.match(validateDocument(withToc({ title: 1 })), /invalid title/);
+});
+
+test("tablas de materiales y perfiles", () => {
+  const snap = { kind: "modelTable", table: "sections", rows: [] };
+  const block = { id: "m", type: "modelTable", binding: { source: "projectModel", table: "sections" }, snapshot: snap, snapshotHash: sha256(snap), options: { rows: ["IPE360"] } };
+  assert.equal(validateDocument({ version: 1, blocks: [block] }), null);
+  assert.equal(bindingKey(block), "t:sections");
+  assert.equal(bindingKey({ ...block, binding: { source: "projectModel", table: "otros" } }), null);
+});

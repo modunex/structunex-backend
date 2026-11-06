@@ -8,6 +8,7 @@ const router = Router({ mergeParams: true });
 // requireAuth + loadProject vienen heredados de projectRoutes.
 router.get("/", c.archive);
 router.get("/analysis", c.analysisSheet);
+router.get("/model-tables/:table", c.modelTable);
 router.get("/spectra", c.spectrumFunctions);
 router.get("/spectra/:name", c.spectrumSheet);
 router.get("/connection-runs/:runId", c.connectionSheet);

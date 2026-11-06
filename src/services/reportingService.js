@@ -35,6 +35,7 @@ const {
   modelSummary,
 } = require("../lib/reportingAnalysis");
 const { canReport, spectrumSnapshot } = require("../lib/reportingSpectrum");
+const { modelTableSnapshot } = require("../lib/reportingCatalog");
 const {
   archiveDesignRuns,
   buildMembersDocument,
@@ -289,7 +290,11 @@ async function exportPdf(project, body) {
  *  se registra: las figuras llevan su imagen incrustada solo camino del renderizador. */
 async function renderAndStore(project, { kind, title, lang, unitSystemId, runIds, document, renderDocument = document, reportId = null }) {
   const units = unitSystemId ?? project.units ?? null;
-  const meta = reportMeta(project, { title, lang, logoDataUri: await logoDataUri(project) });
+  const meta = {
+    ...reportMeta(project, { title, lang, logoDataUri: await logoDataUri(project) }),
+    // Un documento de Report Studio lleva su propia portada e índice; los PDF del archivo no.
+    frontMatter: kind !== "document",
+  };
   const base = {
     projectId: project.id,
     kind,
@@ -542,6 +547,42 @@ async function analysisSheet(project) {
   return { snapshot, snapshotHash: snapshotFingerprint(snapshot) };
 }
 
+// ─── Materiales y perfiles ───────────────────────────────
+
+/** Materiales y perfiles que usa el modelo: barras, armados y áreas. */
+async function modelCatalog(projectId) {
+  const [elements, areas] = await Promise.all([
+    prisma.modelElement.findMany({ where: { projectId }, select: { frameSectionId: true } }),
+    prisma.modelArea.findMany({ where: { projectId }, select: { areaSectionId: true } }),
+  ]);
+  const memberCounts = new Map();
+  for (const e of elements) {
+    if (isUuid(e.frameSectionId)) memberCounts.set(e.frameSectionId, (memberCounts.get(e.frameSectionId) ?? 0) + 1);
+  }
+  const sections = memberCounts.size
+    ? await prisma.catalogFrameSection.findMany({ where: { id: { in: [...memberCounts.keys()] } } })
+    : [];
+  const areaIds = [...new Set(areas.map((a) => a.areaSectionId).filter(isUuid))];
+  const areaSections = areaIds.length
+    ? await prisma.catalogAreaSection.findMany({ where: { id: { in: areaIds } }, select: { materialId: true } })
+    : [];
+  const materialIds = new Set(areaSections.map((a) => a.materialId).filter(isUuid));
+  for (const s of sections) {
+    if (isUuid(s.materialId)) materialIds.add(s.materialId);
+    if (isUuid(s.reinforcement?.rebarMaterialId)) materialIds.add(s.reinforcement.rebarMaterialId);
+  }
+  const materials = materialIds.size
+    ? await prisma.catalogMaterial.findMany({ where: { id: { in: [...materialIds] } } })
+    : [];
+  return { materials, sections, memberCounts };
+}
+
+async function modelTable(project, table) {
+  if (table !== "materials" && table !== "sections") throw new AppError(404, "Tabla no encontrada.");
+  const snapshot = modelTableSnapshot(table, await modelCatalog(project.id));
+  return { snapshot, snapshotHash: snapshotFingerprint(snapshot) };
+}
+
 // ─── Espectros de respuesta ──────────────────────────────
 
 const spectrumFunctionsOf = async (project) => {
@@ -766,6 +807,7 @@ module.exports = {
     memberSheet: (project, designRunId, elementId) => memberSheet(project, designRunId, elementId),
     currentAnalysisSnapshot: (project) => currentAnalysisSnapshot(project),
     spectrumSheet: (project, name) => spectrumSheet(project, name),
+    modelTable: (project, table) => modelTable(project, table),
     archiveStates: (project) => archiveStates(project),
     buildMemoria: (project, lang) => buildMemoria(project, lang),
     renderAndStore: (project, opts) => renderAndStore(project, opts),
@@ -774,6 +816,7 @@ module.exports = {
   analysisSheet,
   spectrumFunctions,
   spectrumSheet,
+  modelTable,
   connectionSheet,
   designRunMembers,
   memberSheet,
