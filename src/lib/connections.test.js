@@ -102,3 +102,15 @@ test("arma la combinación automática de Vgravity por tipo de patrón (1.2D + f
   assert.equal(none.vgravity, undefined);
   assert.equal(none.combinations.length, 1);
 });
+
+test("la combinación automática de Vgravity no deja la comprobación como desactualizada", () => {
+  const { runSummary, VGRAVITY_COMBINATION } = require("./connections");
+  const { connectionLoadsHash } = require("./designInputs");
+  const combos = [{ name: "1.4D", factors: [{ factor: 1.4, pattern: "Dead" }] }];
+  const run = {
+    id: "r1", status: "done", createdAt: "2026-11-06", analysisRunId: "a1", results: { status: "pass" },
+    inputs: { combinations: [...combos, { name: VGRAVITY_COMBINATION, factors: [{ factor: 1.2, pattern: "Dead" }] }], comboNames: [] },
+  };
+  const s = runSummary(run, { latestSolvedRunId: "a1", connectionStatus: "checked", currentLoadsHash: connectionLoadsHash(combos, []) });
+  assert.equal(s.current, true);
+});
