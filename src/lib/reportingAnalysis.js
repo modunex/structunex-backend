@@ -146,6 +146,7 @@ function modelSummary({ nodes, elements, supports, areas, sections, materials, c
     massSource: configuration?.massSource
       ? {
           elementSelfMass: configuration.massSource.elementSelfMass !== false,
+          lateralMassOnly: configuration.massSource.lateralMassOnly === true,
           multipliers: configuration.massSource.specifiedLoadPatterns
             ? (configuration.massSource.multipliers || []).map((m) => ({ pattern: m.pattern, multiplier: num(m.multiplier) }))
             : [],
