@@ -18,11 +18,14 @@ const isShortList = (value) =>
   Array.isArray(value) && value.length <= MAX_OPTION_ITEMS
   && value.every((item) => typeof item === "string" && item.length <= 200);
 
+const TABLE_STEPS = [0.02, 0.04, 0.1, 0.2, 0.5];
+const TABLE_MAXIMA = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4];
+
 /** Opciones de presentación de un bloque técnico. No forman parte de su huella. */
 function optionsError(options) {
   if (options === undefined || options === null) return null;
   if (typeof options !== "object" || Array.isArray(options)) return "invalid options";
-  const known = new Set(["title", "sections", "cases", "hiddenColumns", "unitSystem", "significantDigits"]);
+  const known = new Set(["title", "sections", "cases", "hiddenColumns", "unitSystem", "significantDigits", "tableStep", "tableMax"]);
   if (Object.keys(options).some((key) => !known.has(key))) return "unknown option";
   if (options.title !== undefined && (typeof options.title !== "string" || options.title.length > 200)) return "invalid title";
   for (const key of ["sections", "cases", "hiddenColumns"]) {
@@ -30,6 +33,9 @@ function optionsError(options) {
   }
   if (options.unitSystem !== undefined && !UNIT_SYSTEMS.has(options.unitSystem)) return "invalid unitSystem";
   if (options.significantDigits !== undefined && ![3, 4, 5].includes(options.significantDigits)) return "invalid significantDigits";
+  // Tabla de un espectro: recortan lo que se imprime de una hoja de 0 a 4 s cada 0,02 s.
+  if (options.tableStep !== undefined && !TABLE_STEPS.includes(options.tableStep)) return "invalid tableStep";
+  if (options.tableMax !== undefined && !TABLE_MAXIMA.includes(options.tableMax)) return "invalid tableMax";
   return null;
 }
 

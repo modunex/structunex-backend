@@ -173,3 +173,14 @@ test("un bloque de espectro se verifica contra la función de Define", () => {
   assert.equal(verifyDocument(one, server({ ...snap, rows: [] }), opts).problems[0].reason, "changed");
   assert.equal(verifyDocument(one, new Map(), opts).problems[0].reason, "missing");
 });
+
+test("opciones de la tabla de un espectro", () => {
+  const snap = { kind: "spectrumSheet" };
+  const withOptions = (options) => ({
+    version: 1,
+    blocks: [{ id: "s", type: "spectrumSheet", binding: { source: "spectrumFunction", functionName: "RS-1" }, snapshot: snap, snapshotHash: sha256(snap), options }],
+  });
+  assert.equal(validateDocument(withOptions({ tableStep: 0.1, tableMax: 2, hiddenColumns: ["table.Av"] })), null);
+  assert.match(validateDocument(withOptions({ tableStep: 0.05 })), /invalid tableStep/);
+  assert.match(validateDocument(withOptions({ tableMax: 5 })), /invalid tableMax/);
+});
