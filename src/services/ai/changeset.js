@@ -14,6 +14,7 @@ const { createCatalogMaterial } = require("../../schemas/catalogMaterialSchema")
 const { createCatalogFrameSection } = require("../../schemas/catalogFrameSectionSchema");
 const { getShape } = require("../../lib/aiscShapes");
 const { UNIT_SYSTEM_IDS, unitSystemById, toBase, round } = require("./units");
+const { horizontalNormalSign, angleForRibs } = require("./slabAxes");
 
 // Misma tolerancia que checkModel/removeDuplicates del frontend (m).
 const COINCIDENT_TOL = 1e-4;
@@ -164,6 +165,12 @@ const operation = z.discriminatedUnion("type", [
     loadPattern: z.string().min(1),
     dir: z.enum(["gravity", "gx", "gy", "gz"]),
     value: num,
+  }),
+  z.object({
+    type: z.literal("set_area_local_axes"),
+    areas: z.array(z.string().min(1)).min(1),
+    ribDirection: z.enum(["x", "y"]).optional(),
+    angle: z.number().min(-360).max(360).optional(),
   }),
   z.object({
     type: z.literal("update_load_patterns"),
@@ -642,6 +649,42 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
           break;
         }
 
+        case "set_area_local_axes": {
+          if ((op.angle == null) === (op.ribDirection == null)) {
+            errors.push(`${where}: indica angle o ribDirection (uno de los dos)`);
+            break;
+          }
+          const missing = op.areas.filter((id) => !state.areaIds.has(id));
+          if (missing.length) {
+            errors.push(`${where}: áreas inexistentes: ${missing.join(", ")}`);
+            break;
+          }
+          const nodeById = new Map(state.nodes.map((n) => [n.id, n]));
+          const areaById = new Map((snapshot.areas || []).map((a) => [a.id, a]));
+          const sectionById = new Map((catalog.areaSections || []).map((s) => [s.id, s]));
+          for (const areaId of new Set(op.areas)) {
+            const area = areaById.get(areaId);
+            let angle = op.angle;
+            if (op.ribDirection) {
+              if (horizontalNormalSign(area, nodeById) == null) {
+                errors.push(`${where}: ${areaId} no es una losa horizontal; usa angle`);
+                continue;
+              }
+              const section = sectionById.get(area.areaSectionId);
+              angle = angleForRibs(op.ribDirection, section);
+              if (angle == null) {
+                errors.push(
+                  `${where}: ${areaId} no tiene sección deck (${section ? section.name : "sin sección"}): no hay nervios que orientar`
+                );
+                continue;
+              }
+            }
+            if ((area.localAxisAngle ?? 0) === angle) continue;
+            state.ops.push({ op: "setAreaAxis", areaId, angle });
+          }
+          break;
+        }
+
         case "update_load_patterns":
           op.patterns.forEach((p, k) => {
             const w = `${where}.patterns[${k}]`;
@@ -801,8 +844,8 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
         status: "proposed",
         note:
           "Usa estos conteos si das cifras al usuario. Propuesta registrada. El usuario la verá como vista previa y decidirá si la aplica; " +
-          "no está aplicada todavía. Al aplicarla, la rejilla se amplía sola con los ejes y niveles " +
-          "que necesiten los nudos nuevos.",
+          "no está aplicada todavía. Al aplicarla, la rejilla solo crece hacia fuera con los nudos " +
+          "nuevos (los nudos intermedios no crean ejes) y los ejes fijados con set_grid quedan tal cual.",
         created,
         counts: {
           materials: count("createMaterial"),
@@ -814,6 +857,7 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
           nodalLoads: count("addNodalLoad"),
           frameLoads: count("addFrameLoad"),
           areaLoads: count("setAreaLoad"),
+          areaAxes: count("setAreaAxis"),
           replacedAreaLoads,
           sectionAssignments: count("assignSection"),
           deletedElements: count("deleteElement"),

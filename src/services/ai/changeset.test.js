@@ -346,3 +346,83 @@ test("add_area_loads rechaza áreas o patrones inexistentes", () => {
   assert.equal(bad({ areas: ["A1"], loadPattern: "Wind" }), false);
   assert.equal(bad({ areas: ["A1"], loadPattern: "Dead", value: 0 }), false);
 });
+
+// ─── set_area_local_axes ───
+
+const DECK_ID = "0192f0a0-0000-7000-8000-0000000000d1";
+function slabBuilder(ribAngle = 0) {
+  return createChangesetBuilder({
+    snapshot: {
+      nodes: [
+        { id: "N1", x: 0, y: 0, z: 2.8 },
+        { id: "N2", x: 5, y: 0, z: 2.8 },
+        { id: "N3", x: 5, y: 5, z: 2.8 },
+        { id: "N4", x: 0, y: 5, z: 2.8 },
+      ],
+      elements: [],
+      supports: [],
+      areas: [
+        { id: "A1", nodeIds: ["N1", "N2", "N3", "N4"], areaSectionId: DECK_ID },
+        // Mismo paño con los nudos al revés: normal hacia abajo.
+        { id: "A2", nodeIds: ["N4", "N3", "N2", "N1"], areaSectionId: DECK_ID, localAxisAngle: 90 },
+        { id: "A3", nodeIds: ["N1", "N2", "N3", "N4"], areaSectionId: "maciza" },
+      ],
+      configuration: { loadPatterns: [] },
+    },
+    catalog: {
+      materials: [],
+      sections: [],
+      areaSections: [
+        { id: DECK_ID, name: "Deck 76", kind: "deck", deck: { ribAngle } },
+        { id: "maciza", name: "Losa 15", kind: "shell" },
+      ],
+    },
+    unitSystemId: "kn-m",
+  });
+}
+
+test("set_area_local_axes con ribDirection calcula el ángulo con el ribAngle del deck", () => {
+  const b = slabBuilder(0);
+  const r = b.apply({ summary: "girar", operations: [{ type: "set_area_local_axes", areas: ["A1", "A2"], ribDirection: "y" }] });
+  assert.equal(r.ok, true);
+  // A2 ya tiene los nervios en Y: no genera operación.
+  assert.deepEqual(b.finish().ops, [{ op: "setAreaAxis", areaId: "A1", angle: 90 }]);
+
+  const b2 = slabBuilder(90);
+  b2.apply({ summary: "x", operations: [{ type: "set_area_local_axes", areas: ["A1"], ribDirection: "y" }] });
+  assert.equal(b2.finish(), null); // ribAngle 90 ⇒ ya van en Y con ángulo 0
+});
+
+test("set_area_local_axes rechaza losas sin deck con ribDirection, y acepta angle", () => {
+  const b = slabBuilder();
+  assert.equal(b.apply({ summary: "x", operations: [{ type: "set_area_local_axes", areas: ["A3"], ribDirection: "x" }] }).ok, false);
+  assert.equal(b.apply({ summary: "x", operations: [{ type: "set_area_local_axes", areas: ["A1"] }] }).ok, false);
+  const r = b.apply({ summary: "x", operations: [{ type: "set_area_local_axes", areas: ["A3"], angle: 45 }] });
+  assert.equal(r.result.counts.areaAxes, 1);
+});
+
+test("get_model_summary dice hacia dónde van los nervios", () => {
+  const { runTool } = require("./tools");
+  const { unitSystemById } = require("./units");
+  const nodes = [
+    { id: "N1", x: 0, y: 0, z: 2.8 },
+    { id: "N2", x: 5, y: 0, z: 2.8 },
+    { id: "N3", x: 5, y: 5, z: 2.8 },
+    { id: "N4", x: 0, y: 5, z: 2.8 },
+  ];
+  const ctx = {
+    snapshot: {
+      nodes,
+      elements: [],
+      areas: [
+        { id: "A1", nodeIds: ["N1", "N2", "N3", "N4"], areaSectionId: DECK_ID },
+        { id: "A2", nodeIds: ["N4", "N3", "N2", "N1"], areaSectionId: DECK_ID, localAxisAngle: 90 },
+      ],
+      configuration: {},
+    },
+    sys: unitSystemById("kn-m"),
+    catalog: { areaSections: [{ id: DECK_ID, name: "Deck 76", kind: "deck", deck: { ribAngle: 0 } }] },
+  };
+  const s = runTool("get_model_summary", {}, ctx).content;
+  assert.deepEqual(s.areas.map((a) => a.ribDirection), ["X", "Y"]);
+});
