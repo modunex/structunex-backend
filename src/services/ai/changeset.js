@@ -159,6 +159,13 @@ const operation = z.discriminatedUnion("type", [
     distAbsolute: z.boolean().optional(),
   }),
   z.object({
+    type: z.literal("add_area_loads"),
+    areas: z.array(z.string().min(1)).min(1),
+    loadPattern: z.string().min(1),
+    dir: z.enum(["gravity", "gx", "gy", "gz"]),
+    value: num,
+  }),
+  z.object({
     type: z.literal("update_load_patterns"),
     patterns: z
       .array(
@@ -247,6 +254,7 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
     loads: clone(snapshot.loads || []),
     frameLoads: clone(snapshot.frameLoads || []),
     areaLoads: clone(snapshot.areaLoads || []),
+    areaIds: new Set((snapshot.areas || []).map((a) => a.id)),
     activeDofs: snapshot.activeDofs?.length ? [...snapshot.activeDofs] : null,
     // Catálogo: filas reales + temporales creadas en este turno.
     materials: (catalog.materials || []).map((m) => ({ ref: m.id, name: m.name, type: m.type })),
@@ -299,12 +307,13 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
     const Q = (v, q) => (v == null ? v : round(toBase(v, sys, q), 9));
 
     // Atomicidad: se trabaja sobre una copia y solo se confirma si todo va bien.
-    const { ops: _ops, summaries: _summaries, ...rollbackable } = state;
+    const { ops: _ops, summaries: _summaries, areaIds: _areaIds, ...rollbackable } = state;
     const saved = clone(rollbackable);
     const opsStart = state.ops.length;
     const errors = [];
     const warnings = [];
     const created = { nodes: [], elements: [], materials: [], sections: [] };
+    let replacedAreaLoads = 0;
 
     const nodeIds = () => new Set(state.nodes.map((n) => n.id));
     const elementIds = () => new Set(state.elements.map((e) => e.id));
@@ -609,6 +618,30 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
           break;
         }
 
+        case "add_area_loads": {
+          if (!requirePattern(op.loadPattern, where)) break;
+          const missing = op.areas.filter((id) => !state.areaIds.has(id));
+          if (missing.length) {
+            errors.push(`${where}: áreas inexistentes: ${missing.join(", ")}`);
+            break;
+          }
+          if (op.value === 0) {
+            errors.push(`${where}: value 0 no es una carga; para quitar cargas usa delete_loads`);
+            break;
+          }
+          // Igual que Assign ▸ Area Loads: una carga por área y patrón; la nueva sustituye.
+          const value = Q(op.value, "modulus");
+          for (const areaId of new Set(op.areas)) {
+            const replaced = state.areaLoads.some((l) => l.areaId === areaId && l.loadPattern === op.loadPattern);
+            if (replaced) replacedAreaLoads++;
+            state.areaLoads = state.areaLoads.filter((l) => !(l.areaId === areaId && l.loadPattern === op.loadPattern));
+            const areaLoad = { areaId, loadPattern: op.loadPattern, dir: op.dir, value };
+            state.areaLoads.push(areaLoad);
+            state.ops.push({ op: "setAreaLoad", areaLoad });
+          }
+          break;
+        }
+
         case "update_load_patterns":
           op.patterns.forEach((p, k) => {
             const w = `${where}.patterns[${k}]`;
@@ -767,7 +800,7 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
       result: {
         status: "proposed",
         note:
-          "Propuesta registrada. El usuario la verá como vista previa y decidirá si la aplica; " +
+          "Usa estos conteos si das cifras al usuario. Propuesta registrada. El usuario la verá como vista previa y decidirá si la aplica; " +
           "no está aplicada todavía. Al aplicarla, la rejilla se amplía sola con los ejes y niveles " +
           "que necesiten los nudos nuevos.",
         created,
@@ -780,6 +813,8 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
           loadPatterns: count("addLoadPattern"),
           nodalLoads: count("addNodalLoad"),
           frameLoads: count("addFrameLoad"),
+          areaLoads: count("setAreaLoad"),
+          replacedAreaLoads,
           sectionAssignments: count("assignSection"),
           deletedElements: count("deleteElement"),
           deletedNodes: count("deleteNode"),
