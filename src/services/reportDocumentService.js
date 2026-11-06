@@ -165,6 +165,9 @@ async function serverSnapshots(project, document) {
         // Solo se documenta el análisis vigente del modelo actual.
         if (!analysis || analysis.run.id !== b.binding.analysisRunId) out.set(key, { error: "stale" });
         else out.set(key, { snapshot: analysis, state: "current" });
+      } else if (b.type === "spectrumSheet") {
+        const { snapshot } = await internals.spectrumSheet(project, b.binding.functionName);
+        out.set(key, { snapshot, state: "current" });
       }
     } catch (err) {
       if (err instanceof AppError && (err.status === 404 || err.status === 409)) out.set(key, { error: "missing" });
@@ -213,7 +216,8 @@ async function exportDocument(project, reportId, { unitSystemId, revisionId } = 
     lang: report.lang,
     unitSystemId,
     // Mismo criterio que el resto de exportaciones: ids de ejecución sin prefijo.
-    runIds: [...new Set(technicalBlocks(document).map((b) => b.binding.runId || b.binding.designRunId || b.binding.analysisRunId))],
+    // Un espectro sale de la definición, no de una ejecución: no aporta id.
+    runIds: [...new Set(technicalBlocks(document).map((b) => b.binding.runId || b.binding.designRunId || b.binding.analysisRunId).filter(Boolean))],
     document,
     renderDocument: await images.withFigureData(document, versions),
     reportId,

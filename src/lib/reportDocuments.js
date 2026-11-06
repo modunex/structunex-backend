@@ -8,7 +8,7 @@
 // ingeniería que no salieron del motor, aunque el documento sea editable.
 const { sha256, snapshotFingerprint } = require("./reporting");
 
-const TECHNICAL = new Set(["connectionCheck", "memberCheck", "analysisSummary"]);
+const TECHNICAL = new Set(["connectionCheck", "memberCheck", "analysisSummary", "spectrumSheet"]);
 const UNIT_SYSTEMS = new Set([
   "lb-in", "lb-ft", "kip-in", "kip-ft", "kn-mm", "kn-m", "kgf-mm", "kgf-m",
   "n-mm", "n-m", "tonf-mm", "tonf-m", "kn-cm", "kgf-cm", "n-cm", "tonf-cm",
@@ -106,6 +106,9 @@ function bindingKey(b) {
   if (b.type === "connectionCheck" && x.source === "connectionRun" && x.runId) return `c:${x.runId}`;
   if (b.type === "memberCheck" && x.source === "designRun" && x.designRunId && x.elementId) return `m:${x.designRunId}:${x.elementId}`;
   if (b.type === "analysisSummary" && x.source === "analysisRun" && x.analysisRunId) return `a:${x.analysisRunId}`;
+  if (b.type === "spectrumSheet" && x.source === "spectrumFunction" && typeof x.functionName === "string" && x.functionName) {
+    return `s:${x.functionName}`;
+  }
   return null;
 }
 

@@ -18,7 +18,7 @@ const userTable = require("./userTable");
 // (params) para la de usuario.
 const GENERATORS = {
   covenin1756: { codeId: "covenin-1756", generate: covenin1756.sample },
-  "covenin1756-2019": { codeId: "covenin-1756-2019", generate: covenin1756v2019.sample },
+  "covenin1756-2019": { codeId: "covenin-1756-2019", generate: covenin1756v2019.sample, table: covenin1756v2019.table },
   nch433: { codeId: "nch433", generate: nch433.sample },
   "asce7-22": { codeId: "asce7-22", generate: asce7.sample },
   userTable: { codeId: null, generate: userTable.sample },
@@ -37,4 +37,14 @@ function sample(fn) {
   return gen.generate(code, params);
 }
 
-module.exports = { sample, GENERATORS };
+/** Normas que dan todas las curvas juntas (elástico, inelástico, desplazamientos, vertical). */
+const hasTable = (source) => Boolean(GENERATORS[source]?.table);
+
+// Tabla completa de una SpectrumFunction, la que se reporta. Lanza como `sample()`.
+function table(fn) {
+  const gen = GENERATORS[fn.source];
+  if (!gen?.table) throw new Error(`La fuente ${fn.source} no tiene tabla completa`);
+  return gen.table(getCode(gen.codeId), fn.params || {});
+}
+
+module.exports = { sample, table, hasTable, GENERATORS };
