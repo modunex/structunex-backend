@@ -13,7 +13,7 @@ const { prisma } = require("../config/db");
 const { env } = require("../config/env");
 const { AppError } = require("../middleware/errorHandler");
 const { isUuid, toApi } = require("../lib/ids");
-const { orphanReasons } = require("../lib/connections");
+const { orphanReasons, VGRAVITY_COMBINATION } = require("../lib/connections");
 const {
   archiveConnections,
   buildConnectionsDocument,
@@ -96,8 +96,13 @@ async function doneRunSummaries(connectionIds) {
       FROM "connection_runs"
      WHERE "connectionId" = ANY(${connectionIds}::uuid[]) AND "status" = 'done'
      ORDER BY "createdAt" DESC`;
-  // Huella de las combinaciones con que se comprobó (para saber si siguen vigentes).
-  return rows.map(({ combinations, comboNames, ...r }) => ({ ...r, loadsHash: connectionLoadsHash(combinations, comboNames) }));
+  // Huella de las combinaciones con que se comprobó (para saber si siguen vigentes). La
+  // combinación automática de Vgravity la arma el backend en cada petición: no es del
+  // proyecto y no cuenta (mismo criterio que runSummary en lib/connections.js).
+  return rows.map(({ combinations, comboNames, ...r }) => ({
+    ...r,
+    loadsHash: connectionLoadsHash((combinations || []).filter((c) => c?.name !== VGRAVITY_COMBINATION), comboNames),
+  }));
 }
 
 /** Combinaciones y preferencias vigentes del proyecto (lo que NO está en la huella del
