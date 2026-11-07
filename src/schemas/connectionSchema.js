@@ -77,6 +77,24 @@ const endPlateParamsV1 = z
       })
       .partial()
       .strict(),
+    // Refuerzo de la zona de panel (AISC 341-22 E3.6e.3): ninguna, en contacto con el alma
+    // o separadas (en pares simétricos). Medidas en m. Lo que falte: NO VERIFICABLE.
+    doublerPlate: z
+      .object({
+        arrangement: z.enum(["none", "contact", "spaced"]).nullable(),
+        count: z.union([z.literal(1), z.literal(2)]).nullable(),
+        thickness: length,
+        materialId: z.string().uuid().nullable(), // null = el acero de la placa extrema
+        height: length, // null = la que exige la disposición (el motor lo declara)
+        width: length, // null = wz = dc − 2tcf
+        offset: length, // separadas: distancia libre del alma a la placa
+        extent: z.enum(["extended", "between"]).nullable(), // respecto a las placas de continuidad
+        flangeWeld: z.enum(["CJP", "PJP", "fillet"]).nullable(),
+        flangeWeldSize: length, // garganta PJP / lado del filete
+        edgeWeld: length, // filete en los bordes superior e inferior
+      })
+      .partial()
+      .strict(),
     demand: z
       .object({
         Ry: z.number().min(1).max(2).nullable(),
@@ -92,6 +110,10 @@ const endPlateParamsV1 = z
         // ¿El análisis de estabilidad considera la deformación inelástica de la zona de
         // panel? (AISC 360-22 J10.6(b)). null/false = J10.6(a).
         panelZoneInStability: yesNo,
+        // Cortante de columna en la demanda de la zona de panel (AISC 341-22 E3.6e.1 y su
+        // comentario): neglect = despreciado (conservador); midHeight = descontado con
+        // puntos de inflexión a media altura de los entrepisos del modelo.
+        panelZoneColumnShear: z.enum(["neglect", "midHeight"]).nullable(),
       })
       .partial()
       .strict(),

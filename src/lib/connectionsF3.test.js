@@ -73,7 +73,7 @@ test("las entradas guardadas identifican el cálculo sin copiar el modelo", () =
   const req = buildCheckRequest({ inspectRequest, connection, plateMaterial: null });
   const inputs = runInputs(req, { demands: [{ label: "1.4D", V: 84 }], context: { beam: {} } });
   assert.deepEqual(Object.keys(inputs).sort(), [
-    "combinations", "comboNames", "connection", "context", "demands", "members", "nodeId",
+    "combinations", "comboNames", "connection", "context", "demands", "doublerMaterial", "members", "nodeId",
     "plateMaterial", "source",
   ]);
   assert.equal(inputs.demands[0].V, 84);
@@ -109,4 +109,42 @@ test("parámetros v1: topDistance opcional, positiva", () => {
   assert.ok(shearTabParamsV1.safeParse({ bolts: { topDistance: 0.076 } }).success);
   assert.ok(shearTabParamsV1.safeParse({ bolts: { topDistance: null } }).success);
   assert.ok(!shearTabParamsV1.safeParse({ bolts: { topDistance: -0.01 } }).success);
+});
+
+test("placa extendida v1: refuerzo de zona de panel (doubler plates) y cortante de columna", () => {
+  const { endPlateParamsV1 } = require("../schemas/connectionSchema");
+  const ok = endPlateParamsV1.safeParse({
+    doublerPlate: {
+      arrangement: "contact",
+      count: 2,
+      thickness: 0.013,
+      materialId: null,
+      height: null,
+      width: null,
+      offset: null,
+      extent: "extended",
+      flangeWeld: "CJP",
+      flangeWeldSize: null,
+      edgeWeld: null,
+    },
+    demand: { panelZoneColumnShear: "midHeight" },
+  });
+  assert.equal(ok.success, true, JSON.stringify(ok.error));
+  // Tres placas no existen; una disposición desconocida tampoco; un cortante inventado no.
+  assert.equal(endPlateParamsV1.safeParse({ doublerPlate: { count: 3 } }).success, false);
+  assert.equal(endPlateParamsV1.safeParse({ doublerPlate: { arrangement: "welded" } }).success, false);
+  assert.equal(endPlateParamsV1.safeParse({ demand: { panelZoneColumnShear: "half" } }).success, false);
+  assert.equal(endPlateParamsV1.safeParse({ doublerPlate: { thickness: -0.01 } }).success, false);
+  assert.equal(endPlateParamsV1.safeParse({ doublerPlate: { plugWelds: true } }).success, false);
+});
+
+test("la petición de comprobación lleva el acero de las doubler plates (o null)", () => {
+  const base = { source: "x", nodeId: "N1", combinations: [] };
+  const conn = { id: "c", typology: "extended_end_plate", code: "AISC360-22", paramsVersion: 1, params: {}, supportedElementId: "E1" };
+  const mat = { id: "m2", name: "A572 Gr50", Fy: 345000, Fu: 450000, E: 2e8 };
+  const req = buildCheckRequest({ inspectRequest: base, connection: conn, plateMaterial: mat, doublerMaterial: mat, comboNames: [] });
+  assert.deepEqual(req.doublerMaterial, { id: "m2", name: "A572 Gr50", Fy: 345000, Fu: 450000, E: 2e8 });
+  const none = buildCheckRequest({ inspectRequest: base, connection: conn, plateMaterial: mat, comboNames: [] });
+  assert.equal(none.doublerMaterial, null);
+  assert.equal(runInputs(req, null).doublerMaterial.id, "m2");
 });

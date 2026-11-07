@@ -36,6 +36,32 @@ function limitState(ls) {
   if (Array.isArray(ls.details?.spanElementIds) && ls.details.spanElementIds.length > 0) {
     out.spanElementIds = ls.details.spanElementIds.map(String);
   }
+  // Zona de panel: desglose de la demanda por viga, cortante de columna y resistencia del
+  // panel original y reforzado (AISC 341-22 E3.6e), tal como lo produjo el motor.
+  if (ls.details?.panelZone && typeof ls.details.panelZone === "object") {
+    const p = ls.details.panelZone;
+    out.panelZone = {
+      beams: (Array.isArray(p.beams) ? p.beams : []).map((b) => ({
+        elementId: b.elementId == null ? null : String(b.elementId),
+        Mf: num(b.Mf),
+        arm: num(b.arm),
+        V: num(b.V),
+        Mc: num(b.Mc),
+      })),
+      sumV: num(p.sumV),
+      Vc: num(p.Vc),
+      columnShear: p.columnShear ?? "neglect",
+      hAbove: num(p.hAbove),
+      hBelow: num(p.hBelow),
+      RnWeb: num(p.RnWeb),
+      RnReinforced: num(p.RnReinforced),
+      tWeb: num(p.tWeb),
+      tDoubler: num(p.tDoubler),
+      nDoublers: Number.isFinite(Number(p.nDoublers)) ? Number(p.nDoublers) : 0,
+      tTotal: num(p.tTotal),
+      equation: p.equation ?? null,
+    };
+  }
   // La traza solo existe donde el motor la produjo (nunca en un no verificable).
   if (typeof ls.equation === "string" && Array.isArray(ls.vars)) {
     out.equation = ls.equation;
@@ -55,6 +81,7 @@ function connectionSnapshot(connection, run) {
   const members = results.members || {};
   const context = results.context || {};
   const plate = inputs.plateMaterial || null;
+  const doubler = inputs.doublerMaterial || null;
   const supported = members.supported || {};
   const supporting = members.supporting || {};
   return {
@@ -97,6 +124,7 @@ function connectionSnapshot(connection, run) {
     params: inputs.connection?.params ?? {},
     materials: {
       plate: plate ? { name: plate.name ?? null, Fy: num(plate.Fy), Fu: num(plate.Fu) } : null,
+      doubler: doubler ? { name: doubler.name ?? null, Fy: num(doubler.Fy), Fu: num(doubler.Fu) } : null,
       beam: { Fy: num(context.beam?.Fy), Fu: num(context.beam?.Fu) },
       support: { Fy: num(context.support?.Fy), Fu: num(context.support?.Fu) },
     },
