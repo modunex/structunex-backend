@@ -144,7 +144,11 @@ function orphanReasons(connection, model) {
  * fuerzas que ve el usuario en el panel), más la conexión guardada, el material de la
  * placa y las combinaciones elegidas en Diseño (vacío = todas, como el diseño).
  */
-function buildCheckRequest({ inspectRequest, connection, plateMaterial, comboNames, omega0 }) {
+function materialPayload(m) {
+  return m ? { id: m.id, name: m.name, Fy: m.Fy ?? null, Fu: m.Fu ?? null, E: m.E ?? null } : null;
+}
+
+function buildCheckRequest({ inspectRequest, connection, plateMaterial, doublerMaterial, comboNames, omega0 }) {
   return {
     ...inspectRequest,
     // Ωo para el Pr automático de la columna (AISC 341 D1.4a). 3 si no está en Preferencias.
@@ -157,15 +161,9 @@ function buildCheckRequest({ inspectRequest, connection, plateMaterial, comboNam
       params: connection.params || {},
       supportedElementId: connection.supportedElementId,
     },
-    plateMaterial: plateMaterial
-      ? {
-          id: plateMaterial.id,
-          name: plateMaterial.name,
-          Fy: plateMaterial.Fy ?? null,
-          Fu: plateMaterial.Fu ?? null,
-          E: plateMaterial.E ?? null,
-        }
-      : null,
+    plateMaterial: materialPayload(plateMaterial),
+    // Acero de las placas de refuerzo de la zona de panel; null = el de la placa extrema.
+    doublerMaterial: materialPayload(doublerMaterial),
     comboNames: comboNames || [],
   };
 }
@@ -187,6 +185,7 @@ function runInputs(request, result) {
     nodeId: request.nodeId,
     connection: request.connection,
     plateMaterial: request.plateMaterial,
+    doublerMaterial: request.doublerMaterial ?? null,
     comboNames: request.comboNames,
     combinations: request.combinations,
     members: result?.members ?? null,

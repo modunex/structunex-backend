@@ -366,10 +366,19 @@ async function check(project, connectionId) {
       })
     : null;
 
+  const doublerMaterialId = row.params?.doublerPlate?.materialId;
+  const doublerMaterial = doublerMaterialId
+    ? await prisma.catalogMaterial.findFirst({
+        where: { id: doublerMaterialId, ownerId: project.ownerId },
+        select: { id: true, name: true, Fy: true, Fu: true, E: true },
+      })
+    : null;
+
   const request = buildCheckRequest({
     inspectRequest,
     connection: row,
     plateMaterial,
+    doublerMaterial,
     comboNames: designPreferences.comboNames || [],
     omega0: designPreferences.seismic?.omega0,
   });
