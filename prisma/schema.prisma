@@ -561,7 +561,16 @@ model ConnectionRun {
   id            String    @id @default(uuid(7)) @db.Uuid
   connectionId  String    @db.Uuid
   analysisRunId String?   @db.Uuid
-  status        String    @default("done") // done | error
+  status        String    @default("done") // aisc: done | error · cbfem: running | done | incomplete | notAnalysed | error | cancelled
+  // Motor de la ejecución: "aisc" (procedimiento de la tipología, síncrono) o "cbfem"
+  // (elementos finitos de la conexión, Fase 3: en segundo plano, campos en S3).
+  engine        String    @default("aisc")
+  analysisType  String? // cbfem: linear | nonlinear
+  progress      Json? // cbfem en curso: { step, current, total, caseName, updatedAt }
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  s3Prefix      String? // cbfem: dónde están la malla y los campos por combinación
+  files         Json      @default("{}")
   engineVersion String
   code          String
   method        String
@@ -576,6 +585,7 @@ model ConnectionRun {
   analysisRun AnalysisRun? @relation(fields: [analysisRunId], references: [id], onDelete: SetNull)
 
   @@index([connectionId, createdAt(sort: Desc)])
+  @@index([connectionId, engine, createdAt(sort: Desc)])
   @@index([analysisRunId])
   @@map("connection_runs")
 }

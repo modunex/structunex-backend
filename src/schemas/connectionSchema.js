@@ -236,9 +236,16 @@ const layoutPreviewSchema = z
   })
   .strict();
 
+// Fase 3 (CBFEM): tipo de análisis. No lineal por defecto (plasticidad, NLGEOM, pernos
+// y contacto); el lineal es una vista rápida sin contacto.
+const femStartSchema = z
+  .object({ analysis: z.enum(["linear", "nonlinear"]).default("nonlinear") })
+  .strict();
+
 const listConnectionsQuery = z.object({ nodeId: domainId.optional() });
 
 module.exports = {
+  femStartSchema,
   inspectConnectionSchema,
   layoutPreviewSchema,
   operationsSchema,

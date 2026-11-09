@@ -12,12 +12,18 @@ const {
   checkInputsHash,
   runInputs,
   runSummary,
+  buildCbfemRequest,
+  cbfemRunInputs,
+  cbfemInputsHash,
+  femRunSummary,
 } = require("../lib/connections");
 const { isUuid, toApi } = require("../lib/ids");
 const { PARAMS_SCHEMAS, DEFAULT_CODE } = require("../schemas/connectionSchema");
 const { freshness, STALE_MESSAGES } = require("../lib/analysisFreshness");
 const { AppError } = require("../middleware/errorHandler");
-const { fromCalcError } = require("./calcService");
+const { fromCalcError, connectionMesh } = require("./calcService");
+const femJob = require("./connectionFemJob");
+const s3Service = require("./s3Service");
 const { assembleDesignModel } = require("./designService");
 const { currentModelHash, runStaleReason } = require("./analysisService");
 const { connectionLoadsHash } = require("../lib/designInputs");
@@ -147,7 +153,10 @@ async function inspect(project, nodeId) {
 
 const WITH_MEMBERS = {
   members: { select: { elementId: true, end: true, role: true }, orderBy: { role: "asc" } }, // supported antes que supporting
+  // La última comprobación AISC: es la que da el estado de la conexión. Las ejecuciones
+  // CBFEM (Fase 3) no comprueban nada y van por su lado (`fem*`).
   runs: {
+    where: { engine: "aisc" },
     orderBy: { createdAt: "desc" },
     take: 1,
     select: {
@@ -502,7 +511,7 @@ async function check(project, connectionId) {
 async function latestRun(project, connectionId) {
   const row = await findOwned(project, connectionId);
   const runRow = await prisma.connectionRun.findFirst({
-    where: { connectionId: row.id },
+    where: { connectionId: row.id, engine: "aisc" },
     orderBy: { createdAt: "desc" },
   });
   if (!runRow) throw new AppError(404, "Esta conexión todavía no se ha comprobado.");
@@ -513,4 +522,118 @@ async function latestRun(project, connectionId) {
   };
 }
 
-module.exports = { inspect, list, getOne, create, update, remove, check, latestRun, layout };
+// ─── Fase 3: elementos finitos (CBFEM) ────────────────────────────────────────────
+
+/** Materiales del catálogo que cita la conexión (placa, refuerzos, placas de operaciones). */
+async function catalogMaterialsOf(project, row) {
+  const ids = connectionMaterialIds(row.params, row.operations);
+  if (!ids.length) return [];
+  return prisma.catalogMaterial.findMany({
+    where: { id: { in: ids }, ownerId: project.ownerId },
+    select: { id: true, name: true, Fy: true, Fu: true, E: true },
+  });
+}
+
+/** Vista previa de la malla CBFEM con lo guardado o con lo que se está editando. */
+async function mesh(project, connectionId, { params, operations } = {}) {
+  const row = await findOwned(project, connectionId);
+  const { request: inspectRequest } = await jointRequest(project, row.nodeId);
+  const request = buildLayoutRequest({ inspectRequest, connection: row, params, operations });
+  return connectionMesh(request);
+}
+
+/**
+ * Lanza el análisis CBFEM de la conexión guardada con el análisis vigente (las mismas
+ * fuerzas por combinación que el check). 409 si la conexión quedó huérfana, si el
+ * análisis no es del modelo actual o si ya hay uno en curso.
+ */
+async function femStart(project, connectionId, { analysis = "nonlinear" } = {}) {
+  const row = await findOwned(project, connectionId);
+  const orphan = orphanReasons(row, await modelIndex(project.id));
+  if (orphan.length) {
+    throw new AppError(409, "La conexión ya no corresponde al modelo (nudo o barra cambiados).", {
+      error: "connection.orphaned",
+      reasons: orphan,
+    });
+  }
+  const { run, request: inspectRequest, designPreferences } = await jointRequest(project, row.nodeId);
+  const [plateMaterial, doublerMaterial] = await Promise.all(
+    [row.params?.plate?.materialId, row.params?.doublerPlate?.materialId].map((id) =>
+      id
+        ? prisma.catalogMaterial.findFirst({
+            where: { id, ownerId: project.ownerId },
+            select: { id: true, name: true, Fy: true, Fu: true, E: true },
+          })
+        : null
+    )
+  );
+  const checkRequest = buildCheckRequest({
+    inspectRequest,
+    connection: row,
+    plateMaterial,
+    doublerMaterial,
+    comboNames: designPreferences.comboNames || [],
+    omega0: designPreferences.seismic?.omega0,
+  });
+  const request = buildCbfemRequest({
+    checkRequest,
+    catalogMaterials: await catalogMaterialsOf(project, row),
+    analysis,
+  });
+  const created = await femJob.start({
+    projectId: project.id,
+    connectionId: row.id,
+    analysisRunId: run.id,
+    analysis,
+    request,
+    inputs: cbfemRunInputs(request),
+    inputsHash: cbfemInputsHash(request),
+    code: row.code,
+    method: row.method,
+  });
+  return femRunSummary(created, { latestSolvedRunId: run.id, connectionUpdatedAt: row.updatedAt });
+}
+
+/** La última ejecución CBFEM (en curso o terminada), o null. */
+async function femLatest(project, connectionId) {
+  const row = await findOwned(project, connectionId);
+  let runRow = await prisma.connectionRun.findFirst({
+    where: { connectionId: row.id, engine: "cbfem" },
+    orderBy: { createdAt: "desc" },
+  });
+  runRow = await femJob.settleIfOrphaned(runRow);
+  const solvedId = await latestSolvedRunId(project.id);
+  return femRunSummary(runRow, { latestSolvedRunId: solvedId, connectionUpdatedAt: row.updatedAt });
+}
+
+function femCancel(project, connectionId) {
+  return { cancelled: femJob.cancel(connectionId) };
+}
+
+/**
+ * URLs firmadas de la malla y de los campos de las combinaciones pedidas de una
+ * ejecución CBFEM. `combinations` vacío = la que gobierna.
+ */
+async function femFiles(project, connectionId, runId, { combinations = [] } = {}) {
+  const row = await findOwned(project, connectionId);
+  const runRow = await prisma.connectionRun.findFirst({
+    where: { id: runId, connectionId: row.id, engine: "cbfem" },
+  });
+  if (!runRow) throw new AppError(404, "Esa ejecución no existe.");
+  const files = runRow.files || {};
+  if (!runRow.s3Prefix || !files.mesh) {
+    throw new AppError(409, "Esa ejecución no tiene resultados guardados.", { error: "connection.femNoFiles" });
+  }
+  const wanted = combinations.length ? combinations : [runRow.results?.governing].filter(Boolean);
+  const paths = { mesh: files.mesh };
+  for (const name of wanted) {
+    const path = files.fields?.[name];
+    if (path) paths[`fields:${name}`] = path;
+  }
+  return s3Service.signRunPaths(project.id, runRow.id, paths);
+}
+
+module.exports = {
+  inspect, list, getOne, create, update, remove, check, latestRun, layout,
+  mesh, femStart, femLatest, femCancel, femFiles,
+};

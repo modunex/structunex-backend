@@ -196,6 +196,82 @@ function buildLayoutRequest({ inspectRequest, connection, params, operations }) 
   };
 }
 
+// ─── Fase 3: CBFEM ────────────────────────────────────────────────────────────────
+
+const CBFEM_ANALYSES = new Set(["linear", "nonlinear"]);
+
+/**
+ * La petición de /connections/cbfem/stream: la misma del check (nudo, fuerzas,
+ * conexión, materiales), con los materiales de catálogo que citan las placas añadidos a
+ * `materials` (el modelo local los necesita por placa, no solo el de la placa extrema),
+ * el tipo de análisis y el destino de los campos.
+ */
+function buildCbfemRequest({ checkRequest, catalogMaterials = [], analysis = "nonlinear", storage = null }) {
+  if (!CBFEM_ANALYSES.has(analysis)) throw new Error(`análisis CBFEM desconocido: ${analysis}`);
+  const have = new Set((checkRequest.materials || []).map((m) => String(m.id)));
+  const extra = catalogMaterials
+    .filter((m) => m && !have.has(String(m.id)))
+    .map((m) => materialPayload(m));
+  return {
+    ...checkRequest,
+    materials: [...(checkRequest.materials || []), ...extra],
+    analysis,
+    ...(storage ? { storage } : {}),
+  };
+}
+
+/** Lo que se guarda como entradas de una ejecución CBFEM (sin el destino, que no
+ *  cambia el resultado). */
+function cbfemRunInputs(request) {
+  const { storage, ...rest } = request; // eslint-disable-line no-unused-vars
+  return {
+    source: rest.source,
+    nodeId: rest.nodeId,
+    connection: rest.connection,
+    analysis: rest.analysis,
+    plateMaterial: rest.plateMaterial,
+    doublerMaterial: rest.doublerMaterial ?? null,
+    comboNames: rest.comboNames,
+    combinations: rest.combinations,
+  };
+}
+
+/** Huella de una ejecución CBFEM: como la del check, sin el destino de los campos. */
+function cbfemInputsHash(request) {
+  const { storage, ...rest } = request; // eslint-disable-line no-unused-vars
+  return checkInputsHash(rest);
+}
+
+/** Resumen de una ejecución CBFEM para el panel: estado, avance y, al terminar, lo que
+ *  devolvió el motor sin los campos (que van en S3). Nunca un PASS: la Fase 3 no comprueba. */
+function femRunSummary(run, { latestSolvedRunId = null, connectionUpdatedAt = null } = {}) {
+  if (!run) return null;
+  const results = run.results || {};
+  const stale =
+    (latestSolvedRunId && run.analysisRunId && run.analysisRunId !== latestSolvedRunId) ||
+    (connectionUpdatedAt && run.createdAt && new Date(connectionUpdatedAt) > new Date(run.createdAt));
+  return {
+    id: run.id,
+    status: run.status,
+    analysis: run.analysisType ?? null,
+    progress: run.progress ?? null,
+    startedAt: run.startedAt ?? run.createdAt ?? null,
+    finishedAt: run.finishedAt ?? null,
+    error: run.error ?? null,
+    stale: Boolean(stale),
+    governing: results.governing ?? null,
+    cases: results.cases ?? [],
+    messages: results.messages ?? [],
+    assumptions: results.assumptions ?? [],
+    meshStats: results.meshStats ?? null,
+    meshRules: results.meshRules ?? null,
+    solver: results.solver ?? null,
+    inputs: results.inputs ?? null,
+    engineVersion: run.engineVersion,
+    files: run.files ?? {},
+  };
+}
+
 /** Los materiales del catálogo que una conexión cita: placa, refuerzos y las placas de
  *  sus operaciones (sin repetir). */
 function connectionMaterialIds(params, operations) {
@@ -274,6 +350,11 @@ function runSummary(run, { latestSolvedRunId, connectionStatus, currentLoadsHash
 }
 
 module.exports = {
+  buildCbfemRequest,
+  cbfemRunInputs,
+  cbfemInputsHash,
+  femRunSummary,
+  CBFEM_ANALYSES,
   buildLayoutRequest,
   connectionMaterialIds,
   VGRAVITY_COMBINATION,

@@ -78,6 +78,21 @@ async function designModelStream(request, options = {}) {
   return postStream("/design/stream", request, options);
 }
 
+// CBFEM de una conexión (Fase 3): minutos por combinación en el no lineal, con avance.
+async function connectionCbfemStream(request, options = {}) {
+  return postStream("/connections/cbfem/stream", request, options);
+}
+
+// Vista previa de la malla CBFEM (solo geometría): segundos.
+async function connectionMesh(request) {
+  try {
+    const { data } = await axios.post(`${env.calcServiceUrl}/connections/mesh`, request, { timeout: 120000 });
+    return data;
+  } catch (err) {
+    throw fromCalcError(err);
+  }
+}
+
 async function postStream(path, request, { onProgress, signal } = {}) {
   let response;
   try {
@@ -167,6 +182,8 @@ async function designModel(request, { signal } = {}) {
 }
 
 module.exports = {
+  connectionCbfemStream,
+  connectionMesh,
   analyzeModel,
   analyzeModelStream,
   designModel,

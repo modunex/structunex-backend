@@ -50,4 +50,30 @@ const layout = asyncHandler(async (req, res) => {
   res.json(await connectionService.layout(req.project, req.params.connectionId, req.body || {}));
 });
 
-module.exports = { inspect, list, getOne, create, update, remove, check, latestRun, layout };
+// Fase 3 (CBFEM): malla de la conexión y análisis por elementos finitos en segundo plano.
+const mesh = asyncHandler(async (req, res) => {
+  res.json(await connectionService.mesh(req.project, req.params.connectionId, req.body || {}));
+});
+
+const femStart = asyncHandler(async (req, res) => {
+  res.status(202).json(await connectionService.femStart(req.project, req.params.connectionId, req.body || {}));
+});
+
+const femLatest = asyncHandler(async (req, res) => {
+  res.json({ run: await connectionService.femLatest(req.project, req.params.connectionId) });
+});
+
+const femCancel = asyncHandler(async (req, res) => {
+  res.json(await connectionService.femCancel(req.project, req.params.connectionId));
+});
+
+const femFiles = asyncHandler(async (req, res) => {
+  const raw = req.query.combinations;
+  const combinations = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  res.json(await connectionService.femFiles(req.project, req.params.connectionId, req.params.runId, { combinations }));
+});
+
+module.exports = {
+  inspect, list, getOne, create, update, remove, check, latestRun, layout,
+  mesh, femStart, femLatest, femCancel, femFiles,
+};
