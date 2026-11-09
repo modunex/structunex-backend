@@ -41,35 +41,40 @@ async function getModel(projectId, db = prisma) {
 // Receives the project row (loadProject) because section references are checked
 // against the owner's catalog.
 async function saveModel(project, model) {
-  const projectId = project.id;
-  const present = CHILD_MODELS.filter(({ key }) => Array.isArray(model[key]));
-  const config = model.configuration; // objeto único (grid + defaults), o ausente
-
   await prisma.$transaction(
-    async (tx) => {
-      for (const { key, name } of present) {
-        const rows = await sanitizeSectionRefs(tx, project.ownerId, name, model[key]);
-        await tx[name].deleteMany({ where: { projectId } });
-        if (rows.length) {
-          await tx[name].createMany({
-            data: rows.map((row) => jsonNulls({ ...row, projectId }, name)),
-          });
-        }
-      }
-      if (config != null) {
-        const data = jsonNulls(stripConfig(config), "modelConfiguration");
-        await tx.modelConfiguration.upsert({
-          where: { projectId },
-          create: { ...data, projectId },
-          update: data,
-        });
-      }
-    },
+    (tx) => writeModel(tx, project, model),
     // El timeout por defecto (5 s) se queda corto al reescribir modelos grandes.
     { maxWait: 10_000, timeout: 30_000 }
   );
 
-  return getModel(projectId);
+  return getModel(project.id);
 }
 
-module.exports = { getModel, saveModel };
+// El cuerpo del reconcile, dentro de una transacción ya abierta (`tx`). Lo comparten el
+// autoguardado (saveModel) y la creación de un proyecto de ejemplo, que escribe proyecto,
+// catálogo y modelo en una sola transacción.
+async function writeModel(tx, project, model) {
+  const projectId = project.id;
+  const present = CHILD_MODELS.filter(({ key }) => Array.isArray(model[key]));
+  const config = model.configuration; // objeto único (grid + defaults), o ausente
+
+  for (const { key, name } of present) {
+    const rows = await sanitizeSectionRefs(tx, project.ownerId, name, model[key]);
+    await tx[name].deleteMany({ where: { projectId } });
+    if (rows.length) {
+      await tx[name].createMany({
+        data: rows.map((row) => jsonNulls({ ...row, projectId }, name)),
+      });
+    }
+  }
+  if (config != null) {
+    const data = jsonNulls(stripConfig(config), "modelConfiguration");
+    await tx.modelConfiguration.upsert({
+      where: { projectId },
+      create: { ...data, projectId },
+      update: data,
+    });
+  }
+}
+
+module.exports = { getModel, saveModel, writeModel };
