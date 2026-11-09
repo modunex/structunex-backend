@@ -160,12 +160,50 @@ function buildCheckRequest({ inspectRequest, connection, plateMaterial, doublerM
       paramsVersion: connection.paramsVersion,
       params: connection.params || {},
       supportedElementId: connection.supportedElementId,
+      // null = la plantilla de la tipología; una lista = conexión personalizada.
+      operations: connection.operations ?? null,
     },
     plateMaterial: materialPayload(plateMaterial),
     // Acero de las placas de refuerzo de la zona de panel; null = el de la placa extrema.
     doublerMaterial: materialPayload(doublerMaterial),
     comboNames: comboNames || [],
   };
+}
+
+/**
+ * La petición de /connections/layout: solo la geometría del modelo (sin resultados) y la
+ * conexión, con los parámetros u operaciones que se quieren ver (guardados o no).
+ */
+function buildLayoutRequest({ inspectRequest, connection, params, operations }) {
+  const { nodeId, nodes, elements, sections, materials, supports, areas } = inspectRequest;
+  return {
+    nodeId,
+    nodes,
+    elements,
+    sections,
+    materials,
+    supports,
+    areas,
+    connection: {
+      id: connection.id,
+      typology: connection.typology,
+      code: connection.code,
+      paramsVersion: connection.paramsVersion,
+      params: params ?? connection.params ?? {},
+      supportedElementId: connection.supportedElementId,
+      operations: operations === undefined ? connection.operations ?? null : operations,
+    },
+  };
+}
+
+/** Los materiales del catálogo que una conexión cita: placa, refuerzos y las placas de
+ *  sus operaciones (sin repetir). */
+function connectionMaterialIds(params, operations) {
+  const ids = new Set();
+  if (params?.plate?.materialId) ids.add(params.plate.materialId);
+  if (params?.doublerPlate?.materialId) ids.add(params.doublerPlate.materialId);
+  for (const op of operations || []) if (op?.materialId) ids.add(op.materialId);
+  return [...ids];
 }
 
 /** Huella de TODO lo que entra al motor: dos comprobaciones con la misma huella tienen
@@ -184,6 +222,9 @@ function runInputs(request, result) {
     source: request.source,
     nodeId: request.nodeId,
     connection: request.connection,
+    // La geometría que se comprobó (operaciones → layout, calc-service): su huella basta
+    // para identificarla; el layout completo va en los resultados.
+    layoutHash: result?.layout?.hash ?? null,
     plateMaterial: request.plateMaterial,
     doublerMaterial: request.doublerMaterial ?? null,
     comboNames: request.comboNames,
@@ -233,6 +274,8 @@ function runSummary(run, { latestSolvedRunId, connectionStatus, currentLoadsHash
 }
 
 module.exports = {
+  buildLayoutRequest,
+  connectionMaterialIds,
   VGRAVITY_COMBINATION,
   buildInspectRequest,
   membersFromInspection,

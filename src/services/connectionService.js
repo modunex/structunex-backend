@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { Prisma } = require("@prisma/client");
 const { prisma } = require("../config/db");
 const { env } = require("../config/env");
 const {
@@ -6,6 +7,8 @@ const {
   membersFromInspection,
   orphanReasons,
   buildCheckRequest,
+  buildLayoutRequest,
+  connectionMaterialIds,
   checkInputsHash,
   runInputs,
   runSummary,
@@ -285,20 +288,84 @@ async function validateParams(project, connection, params) {
       details: parsed.error.flatten(),
     });
   }
-  const materialId = parsed.data.plate?.materialId;
-  if (materialId) {
-    const material = await prisma.catalogMaterial.findFirst({
-      where: { id: materialId, ownerId: project.ownerId },
-      select: { id: true },
-    });
-    if (!material) throw new AppError(422, "El material de la placa no existe en tu catálogo.");
-  }
+  await assertMaterials(project, connectionMaterialIds(parsed.data, null));
   return parsed.data;
 }
 
-async function update(project, connectionId, { name, params, code }) {
+/** Cada material citado (placa, refuerzos, placas de las operaciones) existe en el
+ *  catálogo del dueño del proyecto. */
+async function assertMaterials(project, ids) {
+  if (!ids.length) return;
+  const found = await prisma.catalogMaterial.findMany({
+    where: { id: { in: ids }, ownerId: project.ownerId },
+    select: { id: true },
+  });
+  if (found.length !== ids.length) {
+    throw new AppError(422, "Un material de la conexión no existe en tu catálogo.", {
+      error: "connection.materialNotFound",
+      missing: ids.filter((id) => !found.some((m) => m.id === id)),
+    });
+  }
+}
+
+/**
+ * Operaciones → layout en el calc-service. Para la vista previa y para validar unas
+ * operaciones antes de guardarlas: el motor es quien las ejecuta, así que es quien dice
+ * si valen. Necesita el modelo del nudo, que se arma igual que para la inspección.
+ */
+async function computeLayout(project, row, { params, operations } = {}) {
+  const { request: inspectRequest } = await jointRequest(project, row.nodeId);
+  const request = buildLayoutRequest({ inspectRequest, connection: row, params, operations });
+  try {
+    const { data } = await axios.post(`${env.calcServiceUrl}/connections/layout`, request, {
+      timeout: 60000,
+    });
+    return data;
+  } catch (err) {
+    throw fromCalcError(err);
+  }
+}
+
+/** Vista previa de la geometría con parámetros u operaciones sin guardar (o lo guardado). */
+async function layout(project, connectionId, { params, operations } = {}) {
+  const row = await findOwned(project, connectionId);
+  let checkedParams;
+  if (params !== undefined) {
+    const schema = PARAMS_SCHEMAS[row.typology]?.[row.paramsVersion];
+    const parsed = schema ? schema.safeParse(params) : { success: false };
+    if (!parsed.success) {
+      throw new AppError(400, "Parámetros no válidos.", {
+        error: "ValidationError",
+        details: parsed.error?.flatten?.(),
+      });
+    }
+    checkedParams = parsed.data;
+  }
+  return computeLayout(project, row, { params: checkedParams, operations });
+}
+
+async function update(project, connectionId, { name, params, code, operations }) {
   const row = await findOwned(project, connectionId);
   const data = {};
+  if (operations !== undefined) {
+    if (operations === null) {
+      // Volver a la plantilla: las operaciones las escribe otra vez la tipología.
+      data.operations = Prisma.DbNull;
+    } else {
+      await assertMaterials(project, connectionMaterialIds(null, operations));
+      // Solo se guarda lo que el motor sabe ejecutar: una lista que rechaza es un 422
+      // con su motivo, nunca una conexión guardada que luego no se puede dibujar.
+      const result = await computeLayout(project, row, { operations });
+      if (result.status === "invalid") {
+        throw new AppError(422, "Las operaciones no son válidas.", {
+          error: "operations.invalid",
+          errors: result.errors || [],
+        });
+      }
+      data.operations = operations;
+    }
+    data.status = "draft";
+  }
   if (name !== undefined) data.name = name;
   if (code !== undefined && code !== row.code) {
     data.code = code;
@@ -446,4 +513,4 @@ async function latestRun(project, connectionId) {
   };
 }
 
-module.exports = { inspect, list, getOne, create, update, remove, check, latestRun };
+module.exports = { inspect, list, getOne, create, update, remove, check, latestRun, layout };

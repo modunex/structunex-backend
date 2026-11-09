@@ -151,6 +151,9 @@ const shearTabParamsV1 = z
         thickness: length,
         // Ancho horizontal de la placa (de la soldadura al borde libre).
         width: length,
+        // Lado del alma de la viga en el que va la placa, en el marco de la conexión
+        // (n = z × u). null = +n, y el layout lo declara. No cambia la comprobación.
+        side: z.enum(["+n", "-n"]).nullable(),
         // Material del catálogo del usuario (aporta Fy y Fu).
         materialId: z.string().uuid().nullable(),
       })
@@ -198,6 +201,21 @@ const PARAMS_SCHEMAS = {
   extended_end_plate: { 1: endPlateParamsV1 },
 };
 
+// ─── Operaciones (modelado por operaciones) ───
+// La FORMA completa la valida el calc-service (app/connections/operations/schema.py),
+// que es quien las ejecuta: aquí solo lo que no depende del motor (tipo e id de cada
+// operación, tamaño de la lista). Antes de guardar, el servicio las ejecuta y rechaza
+// una lista que el motor no acepta (422 con el motivo).
+const OPERATION_KINDS = ["cut", "plate", "boltGrid", "weld"];
+const operationSchema = z
+  .object({
+    op: z.enum(OPERATION_KINDS),
+    id: z.string().trim().min(1).max(40).regex(/^[A-Za-z0-9_-]+$/),
+  })
+  .passthrough();
+// null = volver a la plantilla de la tipología.
+const operationsSchema = z.array(operationSchema).max(200).nullable();
+
 const updateConnectionSchema = z
   .object({
     name: z.string().trim().min(1).max(80).optional(),
@@ -205,6 +223,16 @@ const updateConnectionSchema = z
     code: z.enum(CODES).optional(),
     // Se valida contra la tipología de la conexión en el servicio (depende de ella).
     params: z.record(z.any()).optional(),
+    // Lista = conexión personalizada; null = la plantilla. Invalida la última comprobación.
+    operations: operationsSchema.optional(),
+  })
+  .strict();
+
+// Vista previa de la geometría: lo que se quiere ver sin guardar. Sin campos = lo guardado.
+const layoutPreviewSchema = z
+  .object({
+    params: z.record(z.any()).optional(),
+    operations: operationsSchema.optional(),
   })
   .strict();
 
@@ -212,6 +240,9 @@ const listConnectionsQuery = z.object({ nodeId: domainId.optional() });
 
 module.exports = {
   inspectConnectionSchema,
+  layoutPreviewSchema,
+  operationsSchema,
+  OPERATION_KINDS,
   createConnectionSchema,
   updateConnectionSchema,
   listConnectionsQuery,

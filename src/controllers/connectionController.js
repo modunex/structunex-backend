@@ -44,4 +44,10 @@ const latestRun = asyncHandler(async (req, res) => {
   res.json(await connectionService.latestRun(req.project, req.params.connectionId));
 });
 
-module.exports = { inspect, list, getOne, create, update, remove, check, latestRun };
+// Geometría de la conexión (operaciones → layout) con lo guardado o con lo que se está
+// editando sin guardar. 409 si el análisis no es del modelo actual (como la inspección).
+const layout = asyncHandler(async (req, res) => {
+  res.json(await connectionService.layout(req.project, req.params.connectionId, req.body || {}));
+});
+
+module.exports = { inspect, list, getOne, create, update, remove, check, latestRun, layout };

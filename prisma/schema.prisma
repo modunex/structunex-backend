@@ -522,6 +522,10 @@ model Connection {
   method             String   @default("LRFD")
   paramsVersion      Int      @default(1)
   params             Json     @default("{}")
+  // Operaciones de la conexión (calc-service app/connections/operations): null = las
+  // escribe la plantilla de la tipología a partir de `params`; una lista = conexión
+  // personalizada (desacoplada de la plantilla: sin procedimiento, nunca precalificada).
+  operations         Json?
   status             String   @default("draft") // draft | checked (el resultado va en la última ConnectionRun)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt

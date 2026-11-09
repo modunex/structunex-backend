@@ -5,6 +5,7 @@ const {
   inspectConnectionSchema,
   createConnectionSchema,
   updateConnectionSchema,
+  layoutPreviewSchema,
 } = require("../schemas/connectionSchema");
 
 const router = Router({ mergeParams: true });
@@ -19,5 +20,6 @@ router.patch("/:connectionId", validate(updateConnectionSchema), c.update);
 router.delete("/:connectionId", c.remove);
 router.post("/:connectionId/check", c.check);
 router.get("/:connectionId/runs/latest", c.latestRun);
+router.post("/:connectionId/layout", validate(layoutPreviewSchema), c.layout);
 
 module.exports = router;
