@@ -91,6 +91,10 @@ function resolveProps(def) {
 }
 
 module.exports = {
+  // También lo usa la creación de proyectos de ejemplo, que da de alta la sección
+  // dentro de su propia transacción: así las props salen del mismo cálculo.
+  resolveProps,
+
   list: async (ownerId) =>
     (await db.findMany({ where: { ownerId }, orderBy: { createdAt: "desc" } })).map(
       (row) => toApi(row)

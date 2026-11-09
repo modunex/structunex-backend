@@ -1,0 +1,212 @@
+{
+  "_comment": "Modelo de ejemplo TM-01 tal como lo arma el backend (assembleModel + resolveOptions) para el calc-service. Los ids de material y sección del catálogo del usuario se sustituyen por MAT-<clave> / SEC-<clave>. Copia idéntica en structunex-backend/src/lib/fixtures/example_tm01.calc.json y en structunex-calc-service/tests/fixtures/example_tm01.json: el test del backend comprueba que su payload coincide; el del calc-service lo resuelve con MYSTRAN y lo compara con la referencia.",
+  "exampleId": "tm01",
+  "exampleVersion": 1,
+  "request": {
+    "analysisOptions": {
+      "activeDofs": [
+        "UZ",
+        "RY"
+      ],
+      "loadPatterns": [
+        {
+          "name": "DEAD",
+          "type": "dead",
+          "selfWeightMultiplier": 0
+        }
+      ]
+    },
+    "model": {
+      "nodes": [
+        {
+          "id": "N1",
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "id": "N2",
+          "x": 3,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "id": "N3",
+          "x": 6,
+          "y": 0,
+          "z": 0
+        }
+      ],
+      "materials": [
+        {
+          "id": "MAT-A992",
+          "E": 200000000.0,
+          "G": 76923076.92307693,
+          "density": 76.97
+        }
+      ],
+      "sections": [
+        {
+          "id": "SEC-W12X26",
+          "materialId": "MAT-A992",
+          "A": 0.00493547,
+          "Iz": 8.49112e-05,
+          "Iy": 7.2008e-06,
+          "J": 1.24869e-07
+        }
+      ],
+      "elements": [
+        {
+          "id": "E1",
+          "nodeA": "N1",
+          "nodeB": "N2",
+          "sectionId": "SEC-W12X26",
+          "roll": 0
+        },
+        {
+          "id": "E2",
+          "nodeA": "N2",
+          "nodeB": "N3",
+          "sectionId": "SEC-W12X26",
+          "roll": 0
+        }
+      ],
+      "supports": [
+        {
+          "nodeId": "N1",
+          "dx": true,
+          "dy": true,
+          "dz": true,
+          "rx": false,
+          "ry": false,
+          "rz": false
+        },
+        {
+          "nodeId": "N3",
+          "dx": false,
+          "dy": true,
+          "dz": true,
+          "rx": false,
+          "ry": false,
+          "rz": false
+        }
+      ],
+      "loads": [],
+      "frameLoads": [
+        {
+          "elementId": "E1",
+          "loadPattern": "DEAD",
+          "kind": "distributed",
+          "dir": "gravity",
+          "value": 10,
+          "distAbsolute": false
+        },
+        {
+          "elementId": "E2",
+          "loadPattern": "DEAD",
+          "kind": "distributed",
+          "dir": "gravity",
+          "value": 10,
+          "distAbsolute": false
+        }
+      ],
+      "areas": [],
+      "areaLoads": [],
+      "areaSprings": [],
+      "areaSections": []
+    },
+    "massSource": null,
+    "modalCases": [],
+    "responseSpectrum": null
+  },
+  "reference": {
+    "source": "AISC Steel Construction Manual, Table 3-23, Case 1 (simple beam, uniformly distributed load)",
+    "theory": "Euler–Bernoulli, small displacements, linear elastic. Shear deformation not included.",
+    "loadPattern": "DEAD",
+    "inputs": {
+      "L": {
+        "value": 6,
+        "unit": "m"
+      },
+      "w": {
+        "value": 10,
+        "unit": "kN/m"
+      },
+      "E": {
+        "value": 200000000,
+        "unit": "kPa"
+      },
+      "I": {
+        "value": 8.49112e-05,
+        "unit": "m^4",
+        "from": "AISC Shapes Database v16.0, W12X26, Ix"
+      }
+    },
+    "tolerance": {
+      "rel": 0.005
+    },
+    "checks": [
+      {
+        "key": "maxMoment",
+        "formula": "w·L²/8",
+        "quantity": "moment",
+        "extract": {
+          "kind": "elementForceMaxAbs",
+          "field": "momentZ",
+          "elementIds": [
+            "E1",
+            "E2"
+          ]
+        },
+        "expected": 45
+      },
+      {
+        "key": "maxShear",
+        "formula": "w·L/2",
+        "quantity": "force",
+        "extract": {
+          "kind": "elementForceMaxAbs",
+          "field": "shearY",
+          "elementIds": [
+            "E1",
+            "E2"
+          ]
+        },
+        "expected": 30
+      },
+      {
+        "key": "reactionLeft",
+        "formula": "w·L/2",
+        "quantity": "force",
+        "extract": {
+          "kind": "reaction",
+          "nodeId": "N1",
+          "field": "fz"
+        },
+        "expected": 30
+      },
+      {
+        "key": "reactionRight",
+        "formula": "w·L/2",
+        "quantity": "force",
+        "extract": {
+          "kind": "reaction",
+          "nodeId": "N3",
+          "field": "fz"
+        },
+        "expected": 30
+      },
+      {
+        "key": "midspanDeflection",
+        "formula": "5·w·L⁴/(384·E·I)",
+        "quantity": "length",
+        "extract": {
+          "kind": "nodeDisplacement",
+          "nodeId": "N2",
+          "field": "dz"
+        },
+        "expected": -0.009936851675632897
+      }
+    ]
+  }
+}

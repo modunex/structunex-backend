@@ -1,0 +1,118 @@
+{
+  "id": "tm01",
+  "version": 1,
+  "code": "TM-01",
+  "defaultName": "TM-01 · Viga simplemente apoyada",
+  "project": {
+    "templateId": "beam",
+    "analysisType": "beam",
+    "dofPerNode": 2,
+    "params": { "length": 6, "beamSupports": "simple" }
+  },
+  "catalog": {
+    "materials": [
+      {
+        "key": "A992",
+        "name": "ASTM A992",
+        "type": "steel",
+        "E": 200000000,
+        "nu": 0.3,
+        "density": 76.97,
+        "Fy": 345000,
+        "Fu": 450000
+      }
+    ],
+    "frameSections": [
+      {
+        "key": "W12X26",
+        "name": "W12X26",
+        "materialKey": "A992",
+        "propertyType": "steel",
+        "source": "catalog",
+        "catalogLabel": "W12X26"
+      }
+    ]
+  },
+  "model": {
+    "nodes": [
+      { "id": "N1", "x": 0, "y": 0, "z": 0 },
+      { "id": "N2", "x": 3, "y": 0, "z": 0 },
+      { "id": "N3", "x": 6, "y": 0, "z": 0 }
+    ],
+    "elements": [
+      { "id": "E1", "nodeA": "N1", "nodeB": "N2", "frameSectionKey": "W12X26" },
+      { "id": "E2", "nodeA": "N2", "nodeB": "N3", "frameSectionKey": "W12X26" }
+    ],
+    "supports": [
+      { "nodeId": "N1", "dx": true, "dy": true, "dz": true },
+      { "nodeId": "N3", "dy": true, "dz": true }
+    ],
+    "loads": [],
+    "frameLoads": [
+      { "elementId": "E1", "loadPattern": "DEAD", "kind": "distributed", "dir": "gravity", "value": 10 },
+      { "elementId": "E2", "loadPattern": "DEAD", "kind": "distributed", "dir": "gravity", "value": 10 }
+    ],
+    "configuration": {
+      "gridSystem": {
+        "x": [
+          { "id": "A", "ordinate": 0 },
+          { "id": "B", "ordinate": 3 },
+          { "id": "C", "ordinate": 6 }
+        ],
+        "y": [],
+        "z": []
+      },
+      "loadPatterns": [{ "name": "DEAD", "type": "dead", "selfWeightMultiplier": 0 }],
+      "loadCombinations": [{ "name": "1.4D", "factors": [{ "pattern": "DEAD", "factor": 1.4 }] }]
+    }
+  },
+  "reference": {
+    "source": "AISC Steel Construction Manual, Table 3-23, Case 1 (simple beam, uniformly distributed load)",
+    "theory": "Euler–Bernoulli, small displacements, linear elastic. Shear deformation not included.",
+    "loadPattern": "DEAD",
+    "inputs": {
+      "L": { "value": 6, "unit": "m" },
+      "w": { "value": 10, "unit": "kN/m" },
+      "E": { "value": 200000000, "unit": "kPa" },
+      "I": { "value": 0.0000849112, "unit": "m^4", "from": "AISC Shapes Database v16.0, W12X26, Ix" }
+    },
+    "tolerance": { "rel": 0.005 },
+    "checks": [
+      {
+        "key": "maxMoment",
+        "formula": "w·L²/8",
+        "quantity": "moment",
+        "extract": { "kind": "elementForceMaxAbs", "field": "momentZ", "elementIds": ["E1", "E2"] },
+        "expected": 45
+      },
+      {
+        "key": "maxShear",
+        "formula": "w·L/2",
+        "quantity": "force",
+        "extract": { "kind": "elementForceMaxAbs", "field": "shearY", "elementIds": ["E1", "E2"] },
+        "expected": 30
+      },
+      {
+        "key": "reactionLeft",
+        "formula": "w·L/2",
+        "quantity": "force",
+        "extract": { "kind": "reaction", "nodeId": "N1", "field": "fz" },
+        "expected": 30
+      },
+      {
+        "key": "reactionRight",
+        "formula": "w·L/2",
+        "quantity": "force",
+        "extract": { "kind": "reaction", "nodeId": "N3", "field": "fz" },
+        "expected": 30
+      },
+      {
+        "key": "midspanDeflection",
+        "formula": "5·w·L⁴/(384·E·I)",
+        "quantity": "length",
+        "extract": { "kind": "nodeDisplacement", "nodeId": "N2", "field": "dz" },
+        "expected": -0.009936851675632897
+      }
+    ]
+  }
+}
