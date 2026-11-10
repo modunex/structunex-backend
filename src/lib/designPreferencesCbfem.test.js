@@ -22,3 +22,11 @@ test("no entra en la huella del diseño de miembros", () => {
   const p = mergePreferences({ cbfem: { plasticStrainLimit: 0.02 } }, null);
   assert.equal(canonicalPreferences(p).cbfem, undefined);
 });
+
+test("pandeo: αcr ≥ 15 por defecto, entre 1 y 100", () => {
+  assert.equal(mergePreferences({}, null).cbfem.bucklingFactorLimit, 15);
+  assert.equal(mergePreferences({ cbfem: { plasticStrainLimit: 0.03 } }, null).cbfem.bucklingFactorLimit, 15);
+  for (const v of [0.5, 101, "15"]) {
+    assert.throws(() => checkPreferences({ cbfem: { bucklingFactorLimit: v } }), /pandeo/);
+  }
+});

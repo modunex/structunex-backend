@@ -46,6 +46,9 @@ test("posición de las fuerzas y criterio del proyecto viajan en la petición y 
   assert.notEqual(cbfemInputsHash(a), cbfemInputsHash(b));
   assert.deepEqual(cbfemRunInputs(b).criteria, { plasticStrainLimit: 0.03 });
   assert.throws(() => buildCbfemRequest({ checkRequest, forcesAt: "weld" }));
+  const c = buildCbfemRequest({ checkRequest, forcesAt: "bolts", stiffness: true, criteria: { plasticStrainLimit: 0.05 } });
+  assert.equal(c.stiffness, true);
+  assert.notEqual(cbfemInputsHash(a), cbfemInputsHash(c));
 });
 
 test("análisis desconocido: error", () => {

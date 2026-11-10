@@ -20,7 +20,8 @@ const DEFAULT_SEISMIC = Object.freeze({ ry: null, omega0: 3 });
 // Conexiones por elementos finitos (CBFEM, Fase 4): criterio de aceptación de las placas.
 // AISC 360-22 no fija uno; 5 % es el valor CBFEM (EN 1993-1-5, Anexo C). Decisión del
 // proyecto (P1), guardada con cada ejecución.
-const DEFAULT_CBFEM = Object.freeze({ plasticStrainLimit: 0.05 });
+// Fase 5: factor crítico de pandeo lineal mínimo (αcr ≥ 15 por defecto).
+const DEFAULT_CBFEM = Object.freeze({ plasticStrainLimit: 0.05, bucklingFactorLimit: 15 });
 
 const DEFAULT_PREFERENCES = Object.freeze({
   code: "ACI318-19",
@@ -81,6 +82,10 @@ function checkCbfem(cbfem) {
   const v = cbfem.plasticStrainLimit;
   if (v !== undefined && (!isNum(v) || v <= 0 || v > 0.2)) {
     throw bad("La deformación plástica límite debe estar entre 0 y 20 %.", "cbfem.plasticStrainLimit");
+  }
+  const b = cbfem.bucklingFactorLimit;
+  if (b !== undefined && (!isNum(b) || b < 1 || b > 100)) {
+    throw bad("El factor de pandeo mínimo debe estar entre 1 y 100.", "cbfem.bucklingFactorLimit");
   }
 }
 

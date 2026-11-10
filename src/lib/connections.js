@@ -213,6 +213,7 @@ function buildCbfemRequest({
   catalogMaterials = [],
   analysis = "nonlinear",
   forcesAt = "node",
+  stiffness = false,
   criteria = null,
   storage = null,
 }) {
@@ -227,6 +228,7 @@ function buildCbfemRequest({
     materials: [...(checkRequest.materials || []), ...extra],
     analysis,
     forcesAt,
+    stiffness: Boolean(stiffness),
     ...(criteria ? { criteria } : {}),
     ...(storage ? { storage } : {}),
   };
@@ -242,6 +244,7 @@ function cbfemRunInputs(request) {
     connection: rest.connection,
     analysis: rest.analysis,
     forcesAt: rest.forcesAt,
+    stiffness: Boolean(rest.stiffness),
     criteria: rest.criteria ?? null,
     plateMaterial: rest.plateMaterial,
     doublerMaterial: rest.doublerMaterial ?? null,
@@ -278,6 +281,7 @@ function femRunSummary(run, { latestSolvedRunId = null, connectionUpdatedAt = nu
     messages: results.messages ?? [],
     assumptions: results.assumptions ?? [],
     checks: results.checks ?? null,
+    stiffness: results.stiffness ?? [],
     meshStats: results.meshStats ?? null,
     meshRules: results.meshRules ?? null,
     solver: results.solver ?? null,
