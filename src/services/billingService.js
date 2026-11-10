@@ -12,6 +12,7 @@ const { env } = require("../config/env");
 const { AppError } = require("../middleware/errorHandler");
 const plans = require("../lib/billingPlans");
 const credits = require("../lib/billingCredits");
+const emailService = require("./emailService");
 
 let stripeClient = null;
 function stripe() {
@@ -340,7 +341,13 @@ async function syncSubscription(subscriptionId, { deleted = false, clerkIdHint }
     // Vuelve a Free: sus créditos pasan a los del plan gratuito desde hoy.
     Object.assign(data, { aiCreditsMonthly: plans.PLANS.free.aiCreditsMonthly, aiCreditsResetAt: new Date() });
   }
-  await prisma.user.update({ where: { id: user.id }, data });
+  const updated = await prisma.user.update({ where: { id: user.id }, data });
+
+  // Alta o mejora de plan: correo con lo que incluye (el recibo lo envía Stripe).
+  const rank = { free: 0, student: 1, principal: 2 };
+  if (!ended && rank[plan] > rank[user.plan]) {
+    await emailService.sendPlanActivated(updated, { plan, subscriptionId: sub.id });
+  }
 }
 
 /** Factura cobrada de una suscripción: repone los créditos del plan (no se acumulan). */

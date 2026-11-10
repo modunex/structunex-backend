@@ -50,6 +50,11 @@ services:
         sync: false
       - key: BILLING_ENFORCE
         value: "false"
+      # Correos transaccionales (Resend).
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
       - key: MAILCHIMP_API_KEY
         sync: false
       - key: MAILCHIMP_AUDIENCE_ID

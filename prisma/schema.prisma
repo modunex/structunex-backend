@@ -31,6 +31,7 @@ model User {
   firstName         String?
   lastName          String?
   imageUrl          String?
+  language          String? // es | en, de unsafeMetadata.language en Clerk (idioma de los correos)
   mailchimpSyncedAt DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -53,6 +54,7 @@ model User {
   forumProfile ForumProfile?
   creditGrants AiCreditGrant[]
   creditLedger AiCreditEntry[]
+  emails       EmailDelivery[]
 
   @@index([email])
   @@map("users")
@@ -92,6 +94,25 @@ model AiCreditEntry {
 
   @@index([userId, createdAt(sort: Desc)])
   @@map("ai_credit_entries")
+}
+
+// Correos transaccionales de la app (Resend). `key` hace que cada correo salga una sola vez
+// aunque el webhook que lo dispara llegue repetido ("welcome", "plan:<sub>:<plan>").
+model EmailDelivery {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  userId     String   @db.Uuid
+  key        String   @unique
+  kind       String // welcome | plan_activated
+  status     String // sent | failed | skipped
+  providerId String? // id del correo en Resend
+  error      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("email_deliveries")
 }
 
 // Eventos de Stripe ya procesados: Stripe reenvía y puede duplicar entregas.
