@@ -1,5 +1,6 @@
 const { prisma } = require("../config/db");
 const { AppError } = require("../middleware/errorHandler");
+const { assertCatalogItemFree } = require("./modelLock");
 const { isUuid, toApi, jsonNulls } = require("../lib/ids");
 const { getShape } = require("../lib/aiscShapes");
 const { computeSectionProps } = require("../lib/sectionGeometry");
@@ -121,6 +122,8 @@ module.exports = {
 
   update: async (ownerId, id, data) => {
     if (!isUuid(id)) throw notFound();
+    // Lo que usa un proyecto bloqueado no se toca: cambiaría sus resultados (modelLock).
+    await assertCatalogItemFree(ownerId, "frameSections", id);
     const existing = await db.findFirst({ where: { id, ownerId } });
     if (!existing) throw notFound();
 
@@ -151,6 +154,8 @@ module.exports = {
   // Las barras que la usaban quedan sin sección (FK con ON DELETE SET NULL).
   remove: async (ownerId, id) => {
     if (!isUuid(id)) throw notFound();
+    // Lo que usa un proyecto bloqueado no se toca: cambiaría sus resultados (modelLock).
+    await assertCatalogItemFree(ownerId, "frameSections", id);
     const { count } = await db.deleteMany({ where: { id, ownerId } });
     if (!count) throw notFound();
     return { deleted: true };

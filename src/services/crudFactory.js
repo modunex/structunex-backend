@@ -2,6 +2,7 @@ const { prisma } = require("../config/db");
 const { AppError } = require("../middleware/errorHandler");
 const { isUuid, childToApi, jsonNulls } = require("../lib/ids");
 const { sanitizeSectionRefs } = require("./sectionRefs");
+const { guardedModelTransaction } = require("./modelLock");
 
 // Builds the standard project-scoped CRUD for a table of the structural model. Every
 // row is addressed by its `pk` (exposed as `_id`) and always constrained to its
@@ -30,27 +31,36 @@ function makeChildService(name) {
       return childToApi(row, name);
     },
 
+    // Escrituras: con el proyecto bloqueado, se rechazan (409) si cambian la huella del
+    // modelo (modelLock).
     create: async (project, data) => {
-      const row = await db.create({
-        data: { ...(await prepare(project, data)), projectId: project.id },
-      });
+      const fields = await prepare(project, data);
+      const row = await guardedModelTransaction(project.id, (tx) =>
+        tx[name].create({ data: { ...fields, projectId: project.id } })
+      );
       return childToApi(row, name);
     },
 
     update: async (project, id, data) => {
       if (!isUuid(id)) throw notFound();
-      const { count } = await db.updateMany({
-        where: { pk: id, projectId: project.id },
-        data: await prepare(project, data),
+      const fields = await prepare(project, data);
+      const row = await guardedModelTransaction(project.id, async (tx) => {
+        const { count } = await tx[name].updateMany({
+          where: { pk: id, projectId: project.id },
+          data: fields,
+        });
+        if (!count) throw notFound();
+        return tx[name].findUnique({ where: { pk: id } });
       });
-      if (!count) throw notFound();
-      return childToApi(await db.findUnique({ where: { pk: id } }), name);
+      return childToApi(row, name);
     },
 
     remove: async (project, id) => {
       if (!isUuid(id)) throw notFound();
-      const { count } = await db.deleteMany({ where: { pk: id, projectId: project.id } });
-      if (!count) throw notFound();
+      await guardedModelTransaction(project.id, async (tx) => {
+        const { count } = await tx[name].deleteMany({ where: { pk: id, projectId: project.id } });
+        if (!count) throw notFound();
+      });
       return { deleted: true };
     },
   };

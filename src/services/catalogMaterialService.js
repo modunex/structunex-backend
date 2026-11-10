@@ -1,5 +1,6 @@
 const { prisma } = require("../config/db");
 const { AppError } = require("../middleware/errorHandler");
+const { assertCatalogItemFree } = require("./modelLock");
 const { isUuid, toApi } = require("../lib/ids");
 
 // CRUD for the user-owned material catalog. Every row is addressed by its id and
@@ -34,6 +35,8 @@ module.exports = {
 
   update: async (ownerId, id, data) => {
     if (!isUuid(id)) throw notFound();
+    // Lo que usa un proyecto bloqueado no se toca: cambiaría sus resultados (modelLock).
+    await assertCatalogItemFree(ownerId, "materials", id);
     const patch = { ...data };
     if (data.type) {
       for (const field of fieldsToDrop(data.type)) {
@@ -48,6 +51,8 @@ module.exports = {
 
   remove: async (ownerId, id) => {
     if (!isUuid(id)) throw notFound();
+    // Lo que usa un proyecto bloqueado no se toca: cambiaría sus resultados (modelLock).
+    await assertCatalogItemFree(ownerId, "materials", id);
     let count;
     try {
       ({ count } = await db.deleteMany({ where: { id, ownerId } }));

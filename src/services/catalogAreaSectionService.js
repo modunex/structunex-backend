@@ -1,6 +1,7 @@
 const { Prisma } = require("@prisma/client");
 const { prisma } = require("../config/db");
 const { AppError } = require("../middleware/errorHandler");
+const { assertCatalogItemFree } = require("./modelLock");
 const { isUuid, toApi } = require("../lib/ids");
 const { deckProperties } = require("../lib/deckSection");
 
@@ -84,6 +85,8 @@ module.exports = {
 
   update: async (ownerId, id, data) => {
     if (!isUuid(id)) throw notFound();
+    // Lo que usa un proyecto bloqueado no se toca: cambiaría sus resultados (modelLock).
+    await assertCatalogItemFree(ownerId, "areaSections", id);
     if (data.materialId) await assertMaterial(ownerId, data.materialId);
     const current = await db.findFirst({ where: { id, ownerId } });
     if (!current) throw notFound();
@@ -109,6 +112,8 @@ module.exports = {
   // Las áreas que la usaban quedan sin sección (FK con ON DELETE SET NULL).
   remove: async (ownerId, id) => {
     if (!isUuid(id)) throw notFound();
+    // Lo que usa un proyecto bloqueado no se toca: cambiaría sus resultados (modelLock).
+    await assertCatalogItemFree(ownerId, "areaSections", id);
     const { count } = await db.deleteMany({ where: { id, ownerId } });
     if (!count) throw notFound();
     return { deleted: true };

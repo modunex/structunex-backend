@@ -1,4 +1,5 @@
 const { prisma, CHILD_MODELS } = require("../models");
+const { guardedModelTransaction } = require("./modelLock");
 const { stripChild, jsonNulls } = require("../lib/ids");
 const { sanitizeSectionRefs } = require("./sectionRefs");
 
@@ -41,7 +42,9 @@ async function getModel(projectId, db = prisma) {
 // Receives the project row (loadProject) because section references are checked
 // against the owner's catalog.
 async function saveModel(project, model) {
-  await prisma.$transaction(
+  // Con el proyecto bloqueado, se rechaza (409) si el cambio altera la huella del modelo.
+  await guardedModelTransaction(
+    project.id,
     (tx) => writeModel(tx, project, model),
     // El timeout por defecto (5 s) se queda corto al reescribir modelos grandes.
     { maxWait: 10_000, timeout: 30_000 }

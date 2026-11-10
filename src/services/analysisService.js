@@ -43,7 +43,7 @@ const ALL_DOFS = ["UX", "UY", "UZ", "RX", "RY", "RZ"];
 // Bars without an assigned section can't be solved and are omitted. Areas carry
 // no stiffness (v1): they pass through only to lump their surface loads to the
 // boundary nodes.
-async function assembleModel(projectId) {
+async function assembleModel(projectId, db = prisma) {
   // Same order as CHILD_MODELS; each table read in insertion order (`seq`).
   const [
     nodes,
@@ -56,7 +56,7 @@ async function assembleModel(projectId) {
     areaSprings,
   ] = await Promise.all(
     CHILD_MODELS.map(({ name }) =>
-      prisma[name]
+      db[name]
         .findMany({ where: { projectId }, orderBy: { seq: "asc" } })
         .then((rows) => rows.map((row) => stripChild(row, name)))
     )
@@ -66,7 +66,7 @@ async function assembleModel(projectId) {
   const sectionIds = [...new Set(assigned.map((e) => String(e.frameSectionId)))];
 
   const catSections = sectionIds.length
-    ? await prisma.catalogFrameSection.findMany({ where: { id: { in: sectionIds } } })
+    ? await db.catalogFrameSection.findMany({ where: { id: { in: sectionIds } } })
     : [];
   const sectionById = new Map(catSections.map((s) => [s.id, s]));
 
@@ -81,7 +81,7 @@ async function assembleModel(projectId) {
     ),
   ];
   const catAreaSections = areaSectionIds.length
-    ? await prisma.catalogAreaSection.findMany({ where: { id: { in: areaSectionIds } } })
+    ? await db.catalogAreaSection.findMany({ where: { id: { in: areaSectionIds } } })
     : [];
 
   // Materials come from BOTH frame and area sections (union), so shell materials land
@@ -103,8 +103,8 @@ async function assembleModel(projectId) {
     ),
   ];
   const [catMaterials, deckMaterials] = await Promise.all([
-    materialIds.length ? prisma.catalogMaterial.findMany({ where: { id: { in: materialIds } } }) : [],
-    deckMaterialIds.length ? prisma.catalogMaterial.findMany({ where: { id: { in: deckMaterialIds } } }) : [],
+    materialIds.length ? db.catalogMaterial.findMany({ where: { id: { in: materialIds } } }) : [],
+    deckMaterialIds.length ? db.catalogMaterial.findMany({ where: { id: { in: deckMaterialIds } } }) : [],
   ]);
   const densityById = new Map([...catMaterials, ...deckMaterials].map((m) => [m.id, m.density]));
   const modulusById = new Map([...catMaterials, ...deckMaterials].map((m) => [m.id, m.E]));
@@ -225,7 +225,7 @@ async function assembleModel(projectId) {
 // Normalizes the analysisOptions from the request body against the project's
 // stored configuration. activeDofs defaults to a full space frame; load patterns
 // fall back to the project's Define -> Load Patterns.
-async function resolveOptions(projectId, options) {
+async function resolveOptions(projectId, options, db = prisma) {
   const opts = options || {};
   let activeDofs = Array.isArray(opts.activeDofs)
     ? opts.activeDofs.filter((d) => ALL_DOFS.includes(d))
@@ -235,7 +235,7 @@ async function resolveOptions(projectId, options) {
   // One config read for load patterns + the modal inputs (Mass Source, Modal cases) +
   // the response-spectrum condition. SAP-style single Run: the calc-service also solves
   // modes when modalCases is present, and combines them for each responseSpectrumCase.
-  const config = await prisma.modelConfiguration.findUnique({
+  const config = await db.modelConfiguration.findUnique({
     where: { projectId },
     select: {
       loadPatterns: true,
@@ -511,11 +511,11 @@ function cancel(projectId) {
  * Devuelve null si el modelo actual ni siquiera se puede armar (p. ej. sin secciones):
  * entonces no puede coincidir con nada.
  */
-async function currentModelHash(projectId) {
+async function currentModelHash(projectId, db = prisma) {
   try {
     const { analysisOptions, massSource, modalCases, responseSpectrum } =
-      await resolveOptions(projectId, undefined);
-    const model = await assembleModel(projectId);
+      await resolveOptions(projectId, undefined, db);
+    const model = await assembleModel(projectId, db);
     return modelHash({
       model,
       loadPatterns: analysisOptions.loadPatterns,
