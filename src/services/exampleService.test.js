@@ -1,8 +1,6 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const crypto = require("node:crypto");
 const path = require("node:path");
-const { Prisma } = require("@prisma/client");
 
 // Runner integrado de Node:  node --test src/services/exampleService.test.js
 //
@@ -14,103 +12,11 @@ const { Prisma } = require("@prisma/client");
 // prisma/schema.prisma). Así se comprueba, sin Postgres, que el ejemplo que se crea es
 // exactamente el modelo que el calc-service resuelve en su test de validación.
 
-// --- Base de datos en memoria --------------------------------------------------------
-// Defaults de las columnas que el payload lee (prisma/schema.prisma). Los demás campos
-// sin valor salen como null, igual que en Postgres.
-const DEFAULTS = {
-  modelNode: { z: 0 },
-  modelElement: { roll: 0 },
-  modelSupport: { dx: false, dy: false, dz: false, rx: false, ry: false, rz: false },
-  modelFrameLoad: { kind: "distributed", dir: "gravity", value: 0, distAbsolute: false },
-  catalogFrameSection: { modifiers: {} },
-  catalogAreaSection: { kind: "shell", materialAngle: 0, modifiers: {} },
-  modelLoad: { fx: 0, fy: 0, fz: 0, mx: 0, my: 0, mz: 0 },
-  modelArea: { localAxisAngle: 0 },
-  modelAreaLoad: { dir: "gravity", value: 0 },
-  modelConfiguration: { loadPatterns: [], loadCombinations: [], modalCases: [], diaphragms: [], lateralSystems: [], spectrumFunctions: [], responseSpectrumCases: [] },
-};
-const CHILD = new Set(["modelNode", "modelElement", "modelSupport", "modelLoad", "modelArea", "modelFrameLoad", "modelAreaLoad", "modelAreaSpring"]);
-const COLUMNS = {
-  modelNode: ["id", "x", "y", "z"],
-  modelElement: ["id", "nodeA", "nodeB", "frameSectionId", "roll", "releases", "lateralSystem"],
-  modelSupport: ["nodeId", "dx", "dy", "dz", "rx", "ry", "rz"],
-  modelFrameLoad: ["elementId", "loadPattern", "kind", "dir", "value", "value2", "dist", "dist2", "distAbsolute"],
-  modelLoad: ["nodeId", "loadPattern", "fx", "fy", "fz", "mx", "my", "mz"],
-  modelArea: ["id", "nodeIds", "areaSectionId", "mesh", "localAxisAngle", "diaphragm"],
-  modelAreaLoad: ["areaId", "loadPattern", "dir", "value"],
-  catalogAreaSection: ["deck", "color"],
-};
-
-function fakePrisma() {
-  const tables = {};
-  let seq = 0;
-  const rows = (name) => (tables[name] ||= []);
-  const matches = (row, where = {}) =>
-    Object.entries(where).every(([k, v]) =>
-      v && typeof v === "object" && Array.isArray(v.in) ? v.in.includes(row[k]) : row[k] === v
-    );
-  const pick = (row, select) =>
-    select ? Object.fromEntries(Object.keys(select).filter((k) => select[k]).map((k) => [k, row[k]])) : { ...row };
-  const sortBy = (list, orderBy) => {
-    if (!orderBy) return list;
-    const [[key, dir]] = Object.entries(orderBy);
-    return [...list].sort((a, b) => (a[key] < b[key] ? -1 : a[key] > b[key] ? 1 : 0) * (dir === "desc" ? -1 : 1));
-  };
-  const insert = (name, data) => {
-    const now = new Date();
-    const base = { ...(DEFAULTS[name] || {}) };
-    for (const col of COLUMNS[name] || []) if (!(col in base)) base[col] = null;
-    const row = { ...base, ...data, createdAt: now, updatedAt: now };
-    // jsonNulls escribe Prisma.DbNull para un NULL en columnas Json: se lee como null.
-    for (const [k, v] of Object.entries(row)) if (v === Prisma.DbNull) row[k] = null;
-    if (CHILD.has(name)) Object.assign(row, { pk: crypto.randomUUID(), seq: BigInt(++seq) });
-    else if (name !== "modelConfiguration") row.id ||= crypto.randomUUID();
-    rows(name).push(row);
-    return row;
-  };
-  const delegate = (name) => ({
-    findMany: async ({ where, orderBy, select } = {}) => sortBy(rows(name).filter((r) => matches(r, where)), orderBy).map((r) => pick(r, select)),
-    findFirst: async ({ where, orderBy, select } = {}) => {
-      const r = sortBy(rows(name).filter((x) => matches(x, where)), orderBy)[0];
-      return r ? pick(r, select) : null;
-    },
-    findUnique: async ({ where, select }) => {
-      const r = rows(name).find((x) => matches(x, where));
-      return r ? pick(r, select) : null;
-    },
-    create: async ({ data }) => ({ ...insert(name, data) }),
-    createMany: async ({ data }) => ({ count: data.map((d) => insert(name, d)).length }),
-    deleteMany: async ({ where }) => {
-      const before = rows(name).length;
-      tables[name] = rows(name).filter((r) => !matches(r, where));
-      return { count: before - tables[name].length };
-    },
-    update: async ({ where, data }) => {
-      const r = rows(name).find((x) => matches(x, where));
-      Object.assign(r, data, { updatedAt: new Date() });
-      return { ...r };
-    },
-    upsert: async ({ where, create, update }) => {
-      const r = rows(name).find((x) => matches(x, where));
-      if (r) return Object.assign(r, update);
-      return insert(name, create);
-    },
-  });
-  const prisma = new Proxy(
-    { $transaction: async (fn) => fn(prisma), _tables: tables },
-    { get: (target, key) => (key in target ? target[key] : (target[key] = delegate(key))) }
-  );
-  return prisma;
-}
+// --- Base de datos en memoria (src/testing/fakePrisma) ----------------------------
+const { installFakeDb } = require("../testing/fakePrisma");
 
 // --- Módulos reales sobre la base en memoria ------------------------------------------
-const db = fakePrisma();
-require.cache[path.join(__dirname, "../config/db.js")] = {
-  id: "fake-db",
-  filename: path.join(__dirname, "../config/db.js"),
-  loaded: true,
-  exports: { prisma: db, connectDb: async () => {}, disconnectDb: async () => {} },
-};
+const db = installFakeDb();
 const { makeExampleService } = require("./exampleService");
 const { writeModel } = require("./modelService");
 const { resolveProps } = require("./catalogFrameSectionService");
