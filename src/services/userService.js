@@ -4,8 +4,8 @@ const { prisma } = require("../config/db");
 // (same value as `ownerId` on projects/catalogs), so writes are idempotent on
 // webhook re-delivery.
 
-async function upsertFromClerk({ clerkId, email, firstName, lastName, imageUrl }) {
-  const data = { email, firstName, lastName, imageUrl };
+async function upsertFromClerk({ clerkId, email, firstName, lastName, imageUrl, language }) {
+  const data = { email, firstName, lastName, imageUrl, language };
   const user = await prisma.user.upsert({
     where: { clerkId },
     create: { clerkId, ...data },

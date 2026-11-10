@@ -124,6 +124,12 @@ const env = {
   // Créditos de IA: tarifas de Bedrock (USD por millón de tokens) y margen sobre el costo.
   aiPricesUsdPerMtok: process.env.AI_PRICES_USD_PER_MTOK || "",
   aiCreditMarkup: Number(process.env.AI_CREDIT_MARKUP || 4),
+
+  // Correos transaccionales (Resend): bienvenida y plan activado. El remitente debe ser de
+  // un dominio verificado en Resend, p. ej. "Structunex <hola@mail.structunex.com>".
+  resendApiKey: process.env.RESEND_API_KEY || "",
+  emailFrom: process.env.EMAIL_FROM || "",
+  emailReplyTo: process.env.EMAIL_REPLY_TO || "",
 };
 
 if (!env.databaseUrl) {
@@ -172,6 +178,13 @@ if (env.billingEnforce && !env.aiPricesUsdPerMtok) {
   console.warn(
     "[env] BILLING_ENFORCE is on but AI_PRICES_USD_PER_MTOK is not set — AI messages " +
       "will be refused, because their credit cost cannot be computed."
+  );
+}
+
+if (!env.resendApiKey || !env.emailFrom) {
+  console.warn(
+    "[env] RESEND_API_KEY / EMAIL_FROM not set — welcome and plan emails are not sent " +
+      "(they are recorded as skipped)."
   );
 }
 

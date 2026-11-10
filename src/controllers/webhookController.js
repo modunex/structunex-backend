@@ -3,6 +3,7 @@ const { env } = require("../config/env");
 const { asyncHandler } = require("../middleware/errorHandler");
 const userService = require("../services/userService");
 const mailchimpService = require("../services/mailchimpService");
+const emailService = require("../services/emailService");
 
 // Pull the fields we care about out of a Clerk user.* event payload.
 function parseClerkUser(data) {
@@ -15,6 +16,8 @@ function parseClerkUser(data) {
     firstName: data.first_name || undefined,
     lastName: data.last_name || undefined,
     imageUrl: data.image_url || undefined,
+    // Idioma elegido en la app (Cuenta → Idioma): el de los correos.
+    language: ["es", "en"].includes(data.unsafe_metadata?.language) ? data.unsafe_metadata.language : undefined,
   };
 }
 
@@ -40,7 +43,8 @@ const handleClerkWebhook = asyncHandler(async (req, res) => {
 
   if (type === "user.created" || type === "user.updated") {
     const user = parseClerkUser(data);
-    await userService.upsertFromClerk(user);
+    const saved = await userService.upsertFromClerk(user);
+    if (type === "user.created") await emailService.sendWelcome(saved);
     if (user.email) {
       const result = await mailchimpService.addOrUpdateMember(user);
       if (result && result.ok) {
