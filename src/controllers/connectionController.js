@@ -60,7 +60,11 @@ const femStart = asyncHandler(async (req, res) => {
 });
 
 const femLatest = asyncHandler(async (req, res) => {
-  res.json({ run: await connectionService.femLatest(req.project, req.params.connectionId) });
+  const [run, criteria] = await Promise.all([
+    connectionService.femLatest(req.project, req.params.connectionId),
+    connectionService.femCriteria(req.project),
+  ]);
+  res.json({ run, criteria });
 });
 
 const femCancel = asyncHandler(async (req, res) => {

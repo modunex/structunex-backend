@@ -610,6 +610,15 @@ async function femLatest(project, connectionId) {
   return femRunSummary(runRow, { latestSolvedRunId: solvedId, connectionUpdatedAt: row.updatedAt });
 }
 
+/** El criterio CBFEM vigente del proyecto (el que usará el próximo análisis). */
+async function femCriteria(project) {
+  const configuration = await prisma.modelConfiguration.findUnique({
+    where: { projectId: project.id },
+    select: { designPreferences: true },
+  });
+  return mergePreferences(configuration?.designPreferences || {}, null).cbfem;
+}
+
 function femCancel(project, connectionId) {
   return { cancelled: femJob.cancel(connectionId) };
 }
@@ -639,5 +648,5 @@ async function femFiles(project, connectionId, runId, { combinations = [] } = {}
 
 module.exports = {
   inspect, list, getOne, create, update, remove, check, latestRun, layout,
-  mesh, femStart, femLatest, femCancel, femFiles,
+  mesh, femStart, femLatest, femCancel, femFiles, femCriteria,
 };
