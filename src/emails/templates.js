@@ -29,7 +29,7 @@ function escapeHtml(s) {
 const n = (v, lang) => Number(v).toLocaleString(lang === "en" ? "en-US" : "es-ES");
 
 /** Marco común: cabecera con la marca, cuerpo, botón y pie. */
-function layout({ lang, preheader, heading, paragraphs, list, after, cta, footer }) {
+function layout({ lang, preheader, heading, paragraphs, list, after, cta, resources, footer }) {
   const p = (html) =>
     `<p style="margin:0 0 16px;font-size:15px;line-height:24px;color:${BRAND.ink};">${html}</p>`;
   const items = (list || [])
@@ -60,6 +60,7 @@ ${(after || []).map(p).join("\n")}
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 8px;"><tr><td style="background:${BRAND.active};border-radius:8px;">
 <a href="${cta.href}" style="display:inline-block;padding:12px 22px;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;">${cta.label}</a>
 </td></tr></table>
+${resources ? resourcesBlock(resources) : ""}
 </td></tr>
 <tr><td style="padding:20px 32px;border-top:1px solid ${BRAND.border};font-size:12px;line-height:18px;color:${BRAND.muted};">${footer}</td></tr>
 </table>
@@ -69,8 +70,22 @@ ${(after || []).map(p).join("\n")}
 </html>`;
 }
 
+/** Lista de enlaces útiles bajo el botón: título y una línea de descripción por enlace. */
+function resourcesBlock({ title, links }) {
+  const rows = links
+    .map(
+      (l) =>
+        `<tr><td style="padding:8px 0;border-top:1px solid ${BRAND.border};">` +
+        `<a href="${l.href}" style="font-size:15px;font-weight:bold;color:${BRAND.active};text-decoration:none;">${l.label}</a>` +
+        `<div style="font-size:13px;line-height:19px;color:${BRAND.muted};">${l.description}</div></td></tr>`
+    )
+    .join("");
+  return `<h2 style="margin:28px 0 8px;font-size:16px;color:${BRAND.ink};">${title}</h2>` +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table>`;
+}
+
 /** Versión en texto plano de los mismos bloques. */
-function plain({ heading, paragraphs, list, after, cta, footer }) {
+function plain({ heading, paragraphs, list, after, cta, resources, footer }) {
   const strip = (s) => String(s).replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">");
   return [
     strip(heading),
@@ -81,6 +96,9 @@ function plain({ heading, paragraphs, list, after, cta, footer }) {
     ...(after || []).map(strip).flatMap((x) => [x, ""]),
     `${strip(cta.label)}: ${cta.href}`,
     "",
+    ...(resources
+      ? [strip(resources.title), ...resources.links.map((l) => `- ${strip(l.label)}: ${l.href}`), ""]
+      : []),
     "--",
     strip(footer),
   ]
@@ -111,6 +129,14 @@ const COPY = {
       plan: (p) =>
         `Tu plan <strong>Free</strong> incluye modelos de hasta ${p.maxElements} barras y áreas, ${p.maxProjects} proyectos y ${p.credits} créditos de IA al mes.`,
       cta: "Abrir Structunex",
+      resourcesTitle: "Recursos para empezar",
+      resources: [
+        { key: "docs", label: "Documentación", description: "Cómo funciona cada herramienta, paso a paso." },
+        { key: "guides", label: "Guías", description: "Flujos completos: de un modelo a su memoria de cálculo." },
+        { key: "learn", label: "Aprender", description: "Conceptos de análisis y diseño estructural." },
+        { key: "community", label: "Comunidad", description: "Pregunta, comparte modelos y conoce a otros ingenieros." },
+        { key: "youtube", label: "YouTube", description: "Videos y tutoriales de Structunex." },
+      ],
     },
     planActivated: {
       subject: (plan) => `Tu plan ${plan} está activo`,
@@ -156,6 +182,14 @@ const COPY = {
       plan: (p) =>
         `Your <strong>Free</strong> plan includes models of up to ${p.maxElements} frames and areas, ${p.maxProjects} projects and ${p.credits} AI credits per month.`,
       cta: "Open Structunex",
+      resourcesTitle: "Resources to get started",
+      resources: [
+        { key: "docs", label: "Docs", description: "How each tool works, step by step." },
+        { key: "guides", label: "Guides", description: "Complete workflows, from a model to its calculation report." },
+        { key: "learn", label: "Learn", description: "Structural analysis and design concepts." },
+        { key: "community", label: "Community", description: "Ask questions, share models and meet other engineers." },
+        { key: "youtube", label: "YouTube", description: "Structunex videos and tutorials." },
+      ],
     },
     planActivated: {
       subject: (plan) => `Your ${plan} plan is active`,
@@ -187,7 +221,14 @@ const COPY = {
 
 const PLAN_NAMES = { free: "Free", student: "Student", principal: "Principal" };
 
-function welcomeEmail({ firstName, lang, appUrl }) {
+// Páginas de structunex.com por idioma (la Comunidad lleva el idioma al final de la ruta).
+function siteLink(siteUrl, lang, key) {
+  if (key === "youtube") return "https://www.youtube.com/@Structunex";
+  if (key === "community") return lang === "es" ? `${siteUrl}/community/es` : `${siteUrl}/community`;
+  return lang === "es" ? `${siteUrl}/es/${key}` : `${siteUrl}/${key}`;
+}
+
+function welcomeEmail({ firstName, lang, appUrl, siteUrl = "https://structunex.com" }) {
   const l = langOf(lang);
   const c = COPY[l];
   const free = PLANS.free;
@@ -208,6 +249,10 @@ function welcomeEmail({ firstName, lang, appUrl }) {
     ],
     list: c.welcome.list,
     cta: { label: c.welcome.cta, href: `${appUrl}/projects` },
+    resources: {
+      title: c.welcome.resourcesTitle,
+      links: c.welcome.resources.map((r) => ({ ...r, href: siteLink(siteUrl, l, r.key) })),
+    },
     footer: c.footer,
   });
 }

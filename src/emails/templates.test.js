@@ -52,3 +52,21 @@ test("escapeHtml", () => {
   assert.equal(t.escapeHtml(`a&b<c>"d"'e'`), "a&amp;b&lt;c&gt;&quot;d&quot;&#39;e&#39;");
   assert.equal(t.escapeHtml(null), "");
 });
+
+test("bienvenida: enlaces a docs, guías, aprender, comunidad y YouTube en el idioma del usuario", () => {
+  const es = t.welcomeEmail({ lang: "es", appUrl: APP, siteUrl: "https://structunex.com" }).text;
+  for (const url of [
+    "https://structunex.com/es/docs",
+    "https://structunex.com/es/guides",
+    "https://structunex.com/es/learn",
+    "https://structunex.com/community/es",
+    "https://www.youtube.com/@Structunex",
+  ]) {
+    assert.ok(es.includes(url), url);
+  }
+  const en = t.welcomeEmail({ lang: "en", appUrl: APP, siteUrl: "https://structunex.com" }).text;
+  for (const url of ["https://structunex.com/docs", "https://structunex.com/guides", "https://structunex.com/community"]) {
+    assert.ok(en.includes(url), url);
+  }
+  assert.ok(!en.includes("/es/"));
+});

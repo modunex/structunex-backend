@@ -74,7 +74,13 @@ function sendWelcome(user) {
     user,
     key: `welcome:${user.id}`,
     kind: "welcome",
-    build: () => templates.welcomeEmail({ firstName: user.firstName, lang: user.language, appUrl: env.appUrl }),
+    build: () =>
+      templates.welcomeEmail({
+        firstName: user.firstName,
+        lang: user.language,
+        appUrl: env.appUrl,
+        siteUrl: env.publicSiteUrl,
+      }),
   });
 }
 
