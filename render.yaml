@@ -41,6 +41,15 @@ services:
         sync: false
       - key: CLERK_WEBHOOK_SIGNING_SECRET
         sync: false
+      # Facturación (Stripe). Ver .env.example.
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: AI_PRICES_USD_PER_MTOK
+        sync: false
+      - key: BILLING_ENFORCE
+        value: "false"
       - key: MAILCHIMP_API_KEY
         sync: false
       - key: MAILCHIMP_AUDIENCE_ID

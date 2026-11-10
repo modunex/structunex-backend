@@ -5,6 +5,38 @@ const svc = require("../services/aiChatService");
 const { runTurn, describeError } = require("../services/ai/agent");
 const { UNIT_SYSTEM_IDS } = require("../services/ai/units");
 const aiModels = require("../services/ai/models");
+const billing = require("../services/billingService");
+
+const USAGE_KEYS = ["input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"];
+
+/**
+ * Cobra los créditos de un turno con el uso que quedó guardado en sus mensajes (cada
+ * iteración del agente guarda el suyo). Así se cobra también un turno cortado a medias o
+ * que falló después de varias llamadas al modelo. Un fallo al cobrar no rompe el chat.
+ */
+async function chargeTurn({ userId, projectId, conversationId, afterSeq, model }) {
+  try {
+    const rows = await prisma.aiMessage.findMany({
+      where: { conversationId, role: "assistant", seq: { gt: afterSeq } },
+      orderBy: { seq: "asc" },
+      select: { id: true, usage: true },
+    });
+    if (!rows.length) return;
+    const usage = {};
+    for (const row of rows) {
+      for (const k of USAGE_KEYS) usage[k] = (usage[k] || 0) + (row.usage?.[k] || 0);
+    }
+    await billing.chargeAiTurn({
+      clerkId: userId,
+      usage,
+      modelId: model,
+      messageId: rows[rows.length - 1].id,
+      projectId,
+    });
+  } catch (err) {
+    console.error("[ai] could not charge turn", err);
+  }
+}
 
 // Un turno a la vez por usuario: evita dobles envíos y pone un techo al gasto.
 const activeTurns = new Set();
@@ -129,6 +161,18 @@ module.exports = {
     );
     const atts = await svc.resolveAttachments(conversation.id, body.attachmentIds);
 
+    // Plan: modelo incluido y saldo de créditos. Antes de abrir el stream, para que el
+    // 402 llegue como JSON normal.
+    const run = aiModels.resolve(body.model, body.effort);
+    await billing.assertAiTurn(req.userId, run.model);
+
+    // Último mensaje antes del turno: lo que se guarde después es de este turno.
+    const lastBefore = await prisma.aiMessage.findFirst({
+      where: { conversationId: conversation.id },
+      orderBy: { seq: "desc" },
+      select: { seq: true },
+    });
+
     if (activeTurns.has(req.userId)) {
       throw new AppError(409, "Ya hay una respuesta del asistente en curso.");
     }
@@ -163,7 +207,6 @@ module.exports = {
 
     const controller = new AbortController();
     res.on("close", () => controller.abort());
-    const run = aiModels.resolve(body.model, body.effort);
     send("meta", { model: run.model, label: run.label, effort: run.effort });
 
     try {
@@ -189,6 +232,13 @@ module.exports = {
       clearInterval(heartbeat);
       activeTurns.delete(req.userId);
       res.end();
+      await chargeTurn({
+        userId: req.userId,
+        projectId: req.projectId,
+        conversationId: conversation.id,
+        afterSeq: lastBefore?.seq ?? 0,
+        model: run.model,
+      });
     }
   }),
 };
