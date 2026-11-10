@@ -80,6 +80,7 @@ function sendWelcome(user) {
         lang: user.language,
         appUrl: env.appUrl,
         siteUrl: env.publicSiteUrl,
+        logoUrl: env.emailLogoUrl,
       }),
   });
 }
@@ -95,7 +96,13 @@ function sendPlanActivated(user, { plan, subscriptionId }) {
     key: `plan:${subscriptionId}:${plan}`,
     kind: "plan_activated",
     build: () =>
-      templates.planActivatedEmail({ firstName: user.firstName, lang: user.language, plan, appUrl: env.appUrl }),
+      templates.planActivatedEmail({
+        firstName: user.firstName,
+        lang: user.language,
+        plan,
+        appUrl: env.appUrl,
+        logoUrl: env.emailLogoUrl,
+      }),
   });
 }
 

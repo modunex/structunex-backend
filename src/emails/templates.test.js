@@ -70,3 +70,13 @@ test("bienvenida: enlaces a docs, guías, aprender, comunidad y YouTube en el id
   }
   assert.ok(!en.includes("/es/"));
 });
+
+test("cabecera: marca PNG con texto al lado; sin URL, solo el texto", () => {
+  const logo = "https://app.structunex.com/email/structunex-mark.png";
+  const withLogo = t.welcomeEmail({ lang: "es", appUrl: APP, logoUrl: logo }).html;
+  assert.match(withLogo, /<img src="https:\/\/app\.structunex\.com\/email\/structunex-mark\.png" width="32" height="32"/);
+  assert.match(withLogo, /STRUCTU<span[^>]*>NEX<\/span>/);
+  const plan = t.planActivatedEmail({ lang: "es", plan: "student", appUrl: APP, logoUrl: logo }).html;
+  assert.match(plan, /structunex-mark\.png/);
+  assert.doesNotMatch(t.welcomeEmail({ lang: "es", appUrl: APP }).html, /<img/);
+});

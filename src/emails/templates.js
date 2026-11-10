@@ -1,8 +1,10 @@
 // Plantillas de los correos transaccionales (Resend), en español e inglés.
 //
 // HTML de tablas con estilos en línea: es lo único que los clientes de correo (Outlook,
-// Gmail) muestran igual. Sin imágenes remotas: el logotipo es texto, así nada depende de
-// que el cliente cargue imágenes. Cada correo lleva también su versión en texto plano.
+// Gmail) muestran igual. La marca "S" es un PNG (Gmail no muestra SVG) servido por la app
+// (structunex-frontend/public/email); el nombre STRUCTUNEX va como texto al lado, así el
+// correo sigue llevando la marca cuando el cliente bloquea imágenes. Cada correo lleva
+// también su versión en texto plano.
 const { PLANS } = require("../lib/billingPlans");
 
 const BRAND = {
@@ -29,7 +31,7 @@ function escapeHtml(s) {
 const n = (v, lang) => Number(v).toLocaleString(lang === "en" ? "en-US" : "es-ES");
 
 /** Marco común: cabecera con la marca, cuerpo, botón y pie. */
-function layout({ lang, preheader, heading, paragraphs, list, after, cta, resources, footer }) {
+function layout({ lang, preheader, heading, paragraphs, list, after, cta, resources, footer, logoUrl }) {
   const p = (html) =>
     `<p style="margin:0 0 16px;font-size:15px;line-height:24px;color:${BRAND.ink};">${html}</p>`;
   const items = (list || [])
@@ -51,7 +53,12 @@ function layout({ lang, preheader, heading, paragraphs, list, after, cta, resour
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BRAND.ground};">
 <tr><td align="center" style="padding:32px 16px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid ${BRAND.border};border-radius:12px;">
-<tr><td style="padding:22px 32px;border-bottom:1px solid ${BRAND.border};font-size:18px;font-weight:bold;letter-spacing:1px;color:${BRAND.ink};">STRUCTU<span style="color:${BRAND.emerald};">NEX</span></td></tr>
+<tr><td style="padding:20px 32px;border-bottom:1px solid ${BRAND.border};">
+<table role="presentation" cellpadding="0" cellspacing="0"><tr>
+${logoUrl ? `<td style="padding-right:10px;vertical-align:middle;"><img src="${logoUrl}" width="32" height="32" alt="" style="display:block;border:0;width:32px;height:32px;"></td>` : ""}
+<td style="vertical-align:middle;font-size:18px;font-weight:bold;letter-spacing:1px;color:${BRAND.ink};">STRUCTU<span style="color:${BRAND.emerald};">NEX</span></td>
+</tr></table>
+</td></tr>
 <tr><td style="padding:32px;">
 <h1 style="margin:0 0 20px;font-size:22px;line-height:30px;color:${BRAND.ink};">${heading}</h1>
 ${paragraphs.map(p).join("\n")}
@@ -228,12 +235,13 @@ function siteLink(siteUrl, lang, key) {
   return lang === "es" ? `${siteUrl}/es/${key}` : `${siteUrl}/${key}`;
 }
 
-function welcomeEmail({ firstName, lang, appUrl, siteUrl = "https://structunex.com" }) {
+function welcomeEmail({ firstName, lang, appUrl, siteUrl = "https://structunex.com", logoUrl }) {
   const l = langOf(lang);
   const c = COPY[l];
   const free = PLANS.free;
   return render({
     lang: l,
+    logoUrl,
     subject: c.welcome.subject,
     preheader: c.welcome.preheader,
     heading: c.welcome.heading,
@@ -257,7 +265,7 @@ function welcomeEmail({ firstName, lang, appUrl, siteUrl = "https://structunex.c
   });
 }
 
-function planActivatedEmail({ firstName, lang, plan, appUrl }) {
+function planActivatedEmail({ firstName, lang, plan, appUrl, logoUrl }) {
   const l = langOf(lang);
   const c = COPY[l];
   const listFor = c.planActivated.list[plan];
@@ -266,6 +274,7 @@ function planActivatedEmail({ firstName, lang, plan, appUrl }) {
   const name = PLAN_NAMES[plan];
   return render({
     lang: l,
+    logoUrl,
     subject: c.planActivated.subject(name),
     preheader: c.planActivated.preheader,
     heading: c.planActivated.heading(name),

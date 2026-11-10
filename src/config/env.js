@@ -131,6 +131,8 @@ const env = {
   emailFrom: process.env.EMAIL_FROM || "",
   emailReplyTo: process.env.EMAIL_REPLY_TO || "",
 };
+// Marca "S" de la cabecera de los correos (PNG público). Por defecto, la que sirve la app.
+env.emailLogoUrl = process.env.EMAIL_LOGO_URL || `${env.appUrl}/email/structunex-mark.png`;
 
 if (!env.databaseUrl) {
   console.warn(
