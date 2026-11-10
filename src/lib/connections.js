@@ -216,7 +216,7 @@ function buildCbfemRequest({
   stiffness = false,
   capacity = null,
   combinationsMode = "governing",
-  geometricNonlinear = false,
+  geometricNonlinear = true,
   criteria = null,
   storage = null,
 }) {
@@ -262,7 +262,7 @@ function cbfemRunInputs(request) {
     stiffness: Boolean(rest.stiffness),
     capacity: rest.capacity ?? null,
     combinationsMode: rest.combinationsMode ?? "governing",
-    geometricNonlinear: Boolean(rest.geometricNonlinear),
+    geometricNonlinear: rest.geometricNonlinear !== false,
     criteria: rest.criteria ?? null,
     plateMaterial: rest.plateMaterial,
     doublerMaterial: rest.doublerMaterial ?? null,
