@@ -23,6 +23,7 @@ const { freshness, STALE_MESSAGES } = require("../lib/analysisFreshness");
 const { AppError } = require("../middleware/errorHandler");
 const { fromCalcError, connectionMesh } = require("./calcService");
 const femJob = require("./connectionFemJob");
+const { mergePreferences } = require("../lib/designPreferences");
 const s3Service = require("./s3Service");
 const { assembleDesignModel } = require("./designService");
 const { currentModelHash, runStaleReason } = require("./analysisService");
@@ -547,7 +548,7 @@ async function mesh(project, connectionId, { params, operations } = {}) {
  * fuerzas por combinación que el check). 409 si la conexión quedó huérfana, si el
  * análisis no es del modelo actual o si ya hay uno en curso.
  */
-async function femStart(project, connectionId, { analysis = "nonlinear" } = {}) {
+async function femStart(project, connectionId, { analysis = "nonlinear", forcesAt = "node" } = {}) {
   const row = await findOwned(project, connectionId);
   const orphan = orphanReasons(row, await modelIndex(project.id));
   if (orphan.length) {
@@ -575,10 +576,13 @@ async function femStart(project, connectionId, { analysis = "nonlinear" } = {}) 
     comboNames: designPreferences.comboNames || [],
     omega0: designPreferences.seismic?.omega0,
   });
+  const prefs = mergePreferences(designPreferences, null);
   const request = buildCbfemRequest({
     checkRequest,
     catalogMaterials: await catalogMaterialsOf(project, row),
     analysis,
+    forcesAt,
+    criteria: { plasticStrainLimit: prefs.cbfem.plasticStrainLimit },
   });
   const created = await femJob.start({
     projectId: project.id,

@@ -17,6 +17,11 @@ const DEFAULT_STEEL = Object.freeze({
 
 const DEFAULT_SEISMIC = Object.freeze({ ry: null, omega0: 3 });
 
+// Conexiones por elementos finitos (CBFEM, Fase 4): criterio de aceptación de las placas.
+// AISC 360-22 no fija uno; 5 % es el valor CBFEM (EN 1993-1-5, Anexo C). Decisión del
+// proyecto (P1), guardada con cada ejecución.
+const DEFAULT_CBFEM = Object.freeze({ plasticStrainLimit: 0.05 });
+
 const DEFAULT_PREFERENCES = Object.freeze({
   code: "ACI318-19",
   steelCode: "AISC360-16",
@@ -24,6 +29,7 @@ const DEFAULT_PREFERENCES = Object.freeze({
   ratioLimit: 1,
   steel: DEFAULT_STEEL,
   seismic: DEFAULT_SEISMIC,
+  cbfem: DEFAULT_CBFEM,
   comboNames: [],
   overrides: [],
 });
@@ -66,6 +72,18 @@ function checkSeismic(seismic) {
   }
 }
 
+/** CBFEM: deformación plástica límite de las placas, fracción en (0, 0,20]. */
+function checkCbfem(cbfem) {
+  if (cbfem === undefined) return;
+  if (cbfem === null || typeof cbfem !== "object" || Array.isArray(cbfem)) {
+    throw bad("Preferencias CBFEM inválidas.", "cbfem");
+  }
+  const v = cbfem.plasticStrainLimit;
+  if (v !== undefined && (!isNum(v) || v <= 0 || v > 0.2)) {
+    throw bad("La deformación plástica límite debe estar entre 0 y 20 %.", "cbfem.plasticStrainLimit");
+  }
+}
+
 /** Lanza 400 si algo de lo pedido está fuera de lo que el motor acepta. */
 function checkPreferences(requested) {
   if (!requested) return;
@@ -81,6 +99,7 @@ function checkPreferences(requested) {
   }
   checkDisplay(requested.display, requested.ratioLimit);
   checkSeismic(requested.seismic);
+  checkCbfem(requested.cbfem);
   const steel = requested.steel;
   if (steel === undefined) return;
   if (steel === null || typeof steel !== "object" || Array.isArray(steel)) {
@@ -112,7 +131,12 @@ function mergePreferences(stored, requested) {
     const pick = [r.seismic?.[key], s.seismic?.[key]].find((v) => v !== undefined);
     seismic[key] = pick === undefined ? DEFAULT_SEISMIC[key] : pick;
   }
-  return { ...DEFAULT_PREFERENCES, ...s, ...r, steel, seismic };
+  const cbfem = {};
+  for (const key of Object.keys(DEFAULT_CBFEM)) {
+    const pick = [r.cbfem?.[key], s.cbfem?.[key]].find((v) => v !== undefined);
+    cbfem[key] = pick === undefined ? DEFAULT_CBFEM[key] : pick;
+  }
+  return { ...DEFAULT_PREFERENCES, ...s, ...r, steel, seismic, cbfem };
 }
 
 /**
@@ -124,6 +148,9 @@ function canonicalPreferences(preferences) {
   const p = { ...(preferences || {}) };
   // Solo visual (colores de la leyenda): no cambia ningún resultado.
   delete p.display;
+  // Criterio de conexiones por elementos finitos: no cambia el diseño de miembros (va
+  // en las entradas de cada ejecución CBFEM).
+  delete p.cbfem;
   if (p.method === DEFAULT_PREFERENCES.method) delete p.method;
   if (p.ratioLimit === DEFAULT_PREFERENCES.ratioLimit) delete p.ratioLimit;
   if (p.steel && typeof p.steel === "object") {
@@ -147,6 +174,7 @@ module.exports = {
   DEFAULT_PREFERENCES,
   DEFAULT_STEEL,
   DEFAULT_SEISMIC,
+  DEFAULT_CBFEM,
   checkPreferences,
   mergePreferences,
   canonicalPreferences,

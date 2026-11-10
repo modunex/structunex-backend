@@ -34,7 +34,18 @@ test("la petición CBFEM añade los materiales de catálogo de las placas, sin r
   assert.equal(req.materials[0].name, "A992"); // el del modelo manda
   assert.deepEqual(Object.keys(req.materials[1]).sort(), ["E", "Fu", "Fy", "id", "name"]);
   assert.equal(req.analysis, "linear");
+  assert.equal(req.forcesAt, "node");
   assert.equal(req.storage, undefined);
+});
+
+test("posición de las fuerzas y criterio del proyecto viajan en la petición y en la huella", () => {
+  const a = buildCbfemRequest({ checkRequest, forcesAt: "bolts", criteria: { plasticStrainLimit: 0.05 } });
+  assert.equal(a.forcesAt, "bolts");
+  assert.deepEqual(a.criteria, { plasticStrainLimit: 0.05 });
+  const b = buildCbfemRequest({ checkRequest, forcesAt: "bolts", criteria: { plasticStrainLimit: 0.03 } });
+  assert.notEqual(cbfemInputsHash(a), cbfemInputsHash(b));
+  assert.deepEqual(cbfemRunInputs(b).criteria, { plasticStrainLimit: 0.03 });
+  assert.throws(() => buildCbfemRequest({ checkRequest, forcesAt: "weld" }));
 });
 
 test("análisis desconocido: error", () => {

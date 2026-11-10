@@ -206,8 +206,18 @@ const CBFEM_ANALYSES = new Set(["linear", "nonlinear"]);
  * `materials` (el modelo local los necesita por placa, no solo el de la placa extrema),
  * el tipo de análisis y el destino de los campos.
  */
-function buildCbfemRequest({ checkRequest, catalogMaterials = [], analysis = "nonlinear", storage = null }) {
+const CBFEM_FORCES_AT = new Set(["node", "bolts"]);
+
+function buildCbfemRequest({
+  checkRequest,
+  catalogMaterials = [],
+  analysis = "nonlinear",
+  forcesAt = "node",
+  criteria = null,
+  storage = null,
+}) {
   if (!CBFEM_ANALYSES.has(analysis)) throw new Error(`análisis CBFEM desconocido: ${analysis}`);
+  if (!CBFEM_FORCES_AT.has(forcesAt)) throw new Error(`posición de fuerzas desconocida: ${forcesAt}`);
   const have = new Set((checkRequest.materials || []).map((m) => String(m.id)));
   const extra = catalogMaterials
     .filter((m) => m && !have.has(String(m.id)))
@@ -216,6 +226,8 @@ function buildCbfemRequest({ checkRequest, catalogMaterials = [], analysis = "no
     ...checkRequest,
     materials: [...(checkRequest.materials || []), ...extra],
     analysis,
+    forcesAt,
+    ...(criteria ? { criteria } : {}),
     ...(storage ? { storage } : {}),
   };
 }
@@ -229,6 +241,8 @@ function cbfemRunInputs(request) {
     nodeId: rest.nodeId,
     connection: rest.connection,
     analysis: rest.analysis,
+    forcesAt: rest.forcesAt,
+    criteria: rest.criteria ?? null,
     plateMaterial: rest.plateMaterial,
     doublerMaterial: rest.doublerMaterial ?? null,
     comboNames: rest.comboNames,
@@ -263,6 +277,7 @@ function femRunSummary(run, { latestSolvedRunId = null, connectionUpdatedAt = nu
     cases: results.cases ?? [],
     messages: results.messages ?? [],
     assumptions: results.assumptions ?? [],
+    checks: results.checks ?? null,
     meshStats: results.meshStats ?? null,
     meshRules: results.meshRules ?? null,
     solver: results.solver ?? null,
