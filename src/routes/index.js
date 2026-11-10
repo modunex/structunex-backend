@@ -7,6 +7,7 @@ const aiscShapeRoutes = require("./aiscShapeRoutes");
 const loadCombinationRoutes = require("./loadCombinationRoutes");
 const seismicCodeRoutes = require("./seismicCodeRoutes");
 const { createCommunityRouter } = require("./communityRoutes");
+const billingRoutes = require("./billingRoutes");
 
 const router = Router();
 
@@ -19,5 +20,6 @@ router.use("/shapes", aiscShapeRoutes);
 router.use("/load-combinations", loadCombinationRoutes);
 router.use("/seismic-codes", seismicCodeRoutes);
 router.use("/community", createCommunityRouter());
+router.use("/billing", billingRoutes);
 
 module.exports = router;

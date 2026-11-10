@@ -1,0 +1,775 @@
+{
+  "_comment": "Modelo de ejemplo TM-02 tal como lo arma el backend (assembleModel + resolveOptions) para el calc-service. Los ids de material y sección del catálogo del usuario se sustituyen por MAT-<clave> / SEC-<clave>. Copia idéntica en structunex-backend/src/lib/fixtures/example_tm02.calc.json y en structunex-calc-service/tests/fixtures/example_tm02.json: el test del backend comprueba que su payload coincide; el del calc-service lo resuelve con MYSTRAN y lo compara con la referencia.",
+  "exampleId": "tm02",
+  "exampleVersion": 1,
+  "request": {
+    "analysisOptions": {
+      "activeDofs": [
+        "UX",
+        "UY",
+        "UZ",
+        "RX",
+        "RY",
+        "RZ"
+      ],
+      "loadPatterns": [
+        {
+          "name": "DEAD",
+          "type": "dead",
+          "selfWeightMultiplier": 1
+        },
+        {
+          "name": "LIVE",
+          "type": "live",
+          "selfWeightMultiplier": 0
+        },
+        {
+          "name": "WIND",
+          "type": "wind",
+          "selfWeightMultiplier": 0
+        }
+      ]
+    },
+    "model": {
+      "nodes": [
+        {
+          "z": 0,
+          "id": "N1",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "z": 0,
+          "id": "N2",
+          "x": 6,
+          "y": 0
+        },
+        {
+          "z": 0,
+          "id": "N3",
+          "x": 12,
+          "y": 0
+        },
+        {
+          "z": 0,
+          "id": "N4",
+          "x": 0,
+          "y": 6
+        },
+        {
+          "z": 0,
+          "id": "N5",
+          "x": 6,
+          "y": 6
+        },
+        {
+          "z": 0,
+          "id": "N6",
+          "x": 12,
+          "y": 6
+        },
+        {
+          "z": 3.5,
+          "id": "N7",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "z": 3.5,
+          "id": "N8",
+          "x": 6,
+          "y": 0
+        },
+        {
+          "z": 3.5,
+          "id": "N9",
+          "x": 12,
+          "y": 0
+        },
+        {
+          "z": 3.5,
+          "id": "N10",
+          "x": 0,
+          "y": 6
+        },
+        {
+          "z": 3.5,
+          "id": "N11",
+          "x": 6,
+          "y": 6
+        },
+        {
+          "z": 3.5,
+          "id": "N12",
+          "x": 12,
+          "y": 6
+        },
+        {
+          "z": 7,
+          "id": "N13",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "z": 7,
+          "id": "N14",
+          "x": 6,
+          "y": 0
+        },
+        {
+          "z": 7,
+          "id": "N15",
+          "x": 12,
+          "y": 0
+        },
+        {
+          "z": 7,
+          "id": "N16",
+          "x": 0,
+          "y": 6
+        },
+        {
+          "z": 7,
+          "id": "N17",
+          "x": 6,
+          "y": 6
+        },
+        {
+          "z": 7,
+          "id": "N18",
+          "x": 12,
+          "y": 6
+        }
+      ],
+      "materials": [
+        {
+          "id": "MAT-A992",
+          "E": 200000000,
+          "G": 76923076.92307693,
+          "density": 76.97
+        },
+        {
+          "id": "MAT-C28",
+          "E": 24870062,
+          "G": 10362525.833333334,
+          "density": 23.56
+        }
+      ],
+      "sections": [
+        {
+          "id": "SEC-W10X49",
+          "materialId": "MAT-A992",
+          "A": 0.0092903,
+          "Iz": 0.000113215,
+          "Iy": 0.000038876,
+          "J": 5.78562e-7
+        },
+        {
+          "id": "SEC-W16X26",
+          "materialId": "MAT-A992",
+          "A": 0.00495483,
+          "Iz": 0.000125286,
+          "Iy": 0.00000399166,
+          "J": 1.09053e-7
+        }
+      ],
+      "elements": [
+        {
+          "id": "C1",
+          "nodeA": "N1",
+          "nodeB": "N7",
+          "sectionId": "SEC-W10X49",
+          "roll": 0
+        },
+        {
+          "id": "C2",
+          "nodeA": "N2",
+          "nodeB": "N8",
+          "sectionId": "SEC-W10X49",
+          "roll": 0
+        },
+        {
+          "id": "C3",
+          "nodeA": "N3",
+          "nodeB": "N9",
+          "sectionId": "SEC-W10X49",
+          "roll": 0
+        },
+        {
+          "id": "C4",
+          "nodeA": "N4",
+          "nodeB": "N10",
+          "sectionId": "SEC-W10X49",
+          "roll": 0
+        },
+        {
+          "id": "C5",
+          "nodeA": "N5",
+          "nodeB": "N11",
+          "sectionId": "SEC-W10X49",
+          "roll": 0
+        },
+        {
+          "id": "C6",
+          "nodeA": "N6",
+          "nodeB": "N12",
+          "sectionId": "SEC-W10X49",
+          "roll": 0
+        },
+        {
+          "id": "C7",
+          "nodeA": "N7",
+          "nodeB": "N13",
+          "sectionId": "SEC-W10X49",
+          "roll": 0
+        },
+        {
+          "id": "C8",
+          "nodeA": "N8",
+          "nodeB": "N14",
+          "sectionId": "SEC-W10X49",
+          "roll": 0
+        },
+        {
+          "id": "C9",
+          "nodeA": "N9",
+          "nodeB": "N15",
+          "sectionId": "SEC-W10X49",
+          "roll": 0
+        },
+        {
+          "id": "C10",
+          "nodeA": "N10",
+          "nodeB": "N16",
+          "sectionId": "SEC-W10X49",
+          "roll": 0
+        },
+        {
+          "id": "C11",
+          "nodeA": "N11",
+          "nodeB": "N17",
+          "sectionId": "SEC-W10X49",
+          "roll": 0
+        },
+        {
+          "id": "C12",
+          "nodeA": "N12",
+          "nodeB": "N18",
+          "sectionId": "SEC-W10X49",
+          "roll": 0
+        },
+        {
+          "id": "B1",
+          "nodeA": "N7",
+          "nodeB": "N8",
+          "sectionId": "SEC-W16X26",
+          "roll": 0
+        },
+        {
+          "id": "B2",
+          "nodeA": "N8",
+          "nodeB": "N9",
+          "sectionId": "SEC-W16X26",
+          "roll": 0
+        },
+        {
+          "id": "B3",
+          "nodeA": "N10",
+          "nodeB": "N11",
+          "sectionId": "SEC-W16X26",
+          "roll": 0
+        },
+        {
+          "id": "B4",
+          "nodeA": "N11",
+          "nodeB": "N12",
+          "sectionId": "SEC-W16X26",
+          "roll": 0
+        },
+        {
+          "id": "B5",
+          "nodeA": "N7",
+          "nodeB": "N10",
+          "sectionId": "SEC-W16X26",
+          "roll": 0
+        },
+        {
+          "id": "B6",
+          "nodeA": "N8",
+          "nodeB": "N11",
+          "sectionId": "SEC-W16X26",
+          "roll": 0
+        },
+        {
+          "id": "B7",
+          "nodeA": "N9",
+          "nodeB": "N12",
+          "sectionId": "SEC-W16X26",
+          "roll": 0
+        },
+        {
+          "id": "B8",
+          "nodeA": "N13",
+          "nodeB": "N14",
+          "sectionId": "SEC-W16X26",
+          "roll": 0
+        },
+        {
+          "id": "B9",
+          "nodeA": "N14",
+          "nodeB": "N15",
+          "sectionId": "SEC-W16X26",
+          "roll": 0
+        },
+        {
+          "id": "B10",
+          "nodeA": "N16",
+          "nodeB": "N17",
+          "sectionId": "SEC-W16X26",
+          "roll": 0
+        },
+        {
+          "id": "B11",
+          "nodeA": "N17",
+          "nodeB": "N18",
+          "sectionId": "SEC-W16X26",
+          "roll": 0
+        },
+        {
+          "id": "B12",
+          "nodeA": "N13",
+          "nodeB": "N16",
+          "sectionId": "SEC-W16X26",
+          "roll": 0
+        },
+        {
+          "id": "B13",
+          "nodeA": "N14",
+          "nodeB": "N17",
+          "sectionId": "SEC-W16X26",
+          "roll": 0
+        },
+        {
+          "id": "B14",
+          "nodeA": "N15",
+          "nodeB": "N18",
+          "sectionId": "SEC-W16X26",
+          "roll": 0
+        }
+      ],
+      "supports": [
+        {
+          "dx": true,
+          "dy": true,
+          "dz": true,
+          "rx": true,
+          "ry": true,
+          "rz": true,
+          "nodeId": "N1"
+        },
+        {
+          "dx": true,
+          "dy": true,
+          "dz": true,
+          "rx": true,
+          "ry": true,
+          "rz": true,
+          "nodeId": "N2"
+        },
+        {
+          "dx": true,
+          "dy": true,
+          "dz": true,
+          "rx": true,
+          "ry": true,
+          "rz": true,
+          "nodeId": "N3"
+        },
+        {
+          "dx": true,
+          "dy": true,
+          "dz": true,
+          "rx": true,
+          "ry": true,
+          "rz": true,
+          "nodeId": "N4"
+        },
+        {
+          "dx": true,
+          "dy": true,
+          "dz": true,
+          "rx": true,
+          "ry": true,
+          "rz": true,
+          "nodeId": "N5"
+        },
+        {
+          "dx": true,
+          "dy": true,
+          "dz": true,
+          "rx": true,
+          "ry": true,
+          "rz": true,
+          "nodeId": "N6"
+        }
+      ],
+      "loads": [
+        {
+          "fx": 7.5,
+          "fy": 0,
+          "fz": 0,
+          "mx": 0,
+          "my": 0,
+          "mz": 0,
+          "nodeId": "N7",
+          "loadPattern": "WIND"
+        },
+        {
+          "fx": 7.5,
+          "fy": 0,
+          "fz": 0,
+          "mx": 0,
+          "my": 0,
+          "mz": 0,
+          "nodeId": "N10",
+          "loadPattern": "WIND"
+        },
+        {
+          "fx": 15,
+          "fy": 0,
+          "fz": 0,
+          "mx": 0,
+          "my": 0,
+          "mz": 0,
+          "nodeId": "N13",
+          "loadPattern": "WIND"
+        },
+        {
+          "fx": 15,
+          "fy": 0,
+          "fz": 0,
+          "mx": 0,
+          "my": 0,
+          "mz": 0,
+          "nodeId": "N16",
+          "loadPattern": "WIND"
+        }
+      ],
+      "frameLoads": [],
+      "areas": [
+        {
+          "localAxisAngle": 0,
+          "id": "A1",
+          "nodeIds": [
+            "N7",
+            "N8",
+            "N11",
+            "N10"
+          ],
+          "areaSectionId": "ASEC-LOSA15",
+          "mesh": {
+            "along12": 4,
+            "along13": 4
+          },
+          "diaphragm": null
+        },
+        {
+          "localAxisAngle": 0,
+          "id": "A2",
+          "nodeIds": [
+            "N8",
+            "N9",
+            "N12",
+            "N11"
+          ],
+          "areaSectionId": "ASEC-LOSA15",
+          "mesh": {
+            "along12": 4,
+            "along13": 4
+          },
+          "diaphragm": null
+        },
+        {
+          "localAxisAngle": 0,
+          "id": "A3",
+          "nodeIds": [
+            "N13",
+            "N14",
+            "N17",
+            "N16"
+          ],
+          "areaSectionId": "ASEC-LOSA15",
+          "mesh": {
+            "along12": 4,
+            "along13": 4
+          },
+          "diaphragm": null
+        },
+        {
+          "localAxisAngle": 0,
+          "id": "A4",
+          "nodeIds": [
+            "N14",
+            "N15",
+            "N18",
+            "N17"
+          ],
+          "areaSectionId": "ASEC-LOSA15",
+          "mesh": {
+            "along12": 4,
+            "along13": 4
+          },
+          "diaphragm": null
+        }
+      ],
+      "areaLoads": [
+        {
+          "dir": "gravity",
+          "value": 2,
+          "areaId": "A1",
+          "loadPattern": "DEAD"
+        },
+        {
+          "dir": "gravity",
+          "value": 2,
+          "areaId": "A2",
+          "loadPattern": "DEAD"
+        },
+        {
+          "dir": "gravity",
+          "value": 2,
+          "areaId": "A3",
+          "loadPattern": "DEAD"
+        },
+        {
+          "dir": "gravity",
+          "value": 2,
+          "areaId": "A4",
+          "loadPattern": "DEAD"
+        },
+        {
+          "dir": "gravity",
+          "value": 3,
+          "areaId": "A1",
+          "loadPattern": "LIVE"
+        },
+        {
+          "dir": "gravity",
+          "value": 3,
+          "areaId": "A2",
+          "loadPattern": "LIVE"
+        },
+        {
+          "dir": "gravity",
+          "value": 3,
+          "areaId": "A3",
+          "loadPattern": "LIVE"
+        },
+        {
+          "dir": "gravity",
+          "value": 3,
+          "areaId": "A4",
+          "loadPattern": "LIVE"
+        }
+      ],
+      "areaSprings": [],
+      "areaSections": [
+        {
+          "id": "ASEC-LOSA15",
+          "materialId": "MAT-C28",
+          "shellType": "shell-thin",
+          "thicknessMembrane": 0.15,
+          "thicknessBending": 0.15,
+          "modifiers": {}
+        }
+      ]
+    },
+    "massSource": null,
+    "modalCases": [],
+    "responseSpectrum": null
+  },
+  "reference": {
+    "source": "Estática: equilibrio global de fuerzas, simetría del modelo bajo carga simétrica y linealidad de las combinaciones",
+    "theory": "Exacto para cualquier modelo lineal: la suma de reacciones equilibra la carga aplicada. No valida desplazamientos ni esfuerzos internos.",
+    "verification": "equilibrium",
+    "loadPattern": "DEAD",
+    "inputs": {
+      "columnLength": {
+        "value": 42,
+        "unit": "m",
+        "from": "12 columnas W10X49 de 3.5 m"
+      },
+      "beamLength": {
+        "value": 84,
+        "unit": "m",
+        "from": "14 vigas W16X26 de 6 m"
+      },
+      "slabArea": {
+        "value": 144,
+        "unit": "m^2",
+        "from": "4 losas de 6 × 6 m"
+      },
+      "slabThickness": {
+        "value": 0.15,
+        "unit": "m"
+      },
+      "steelDensity": {
+        "value": 76.97,
+        "unit": "kN/m^3"
+      },
+      "concreteDensity": {
+        "value": 23.56,
+        "unit": "kN/m^3"
+      },
+      "superimposedDead": {
+        "value": 2,
+        "unit": "kN/m^2"
+      },
+      "live": {
+        "value": 3,
+        "unit": "kN/m^2"
+      },
+      "windTotal": {
+        "value": 45,
+        "unit": "kN",
+        "from": "7.5 kN × 2 en el nivel 1 y 15 kN × 2 en el nivel 2, sobre la fachada x = 0"
+      }
+    },
+    "combinations": {
+      "1.2D+1.6L": [
+        {
+          "pattern": "DEAD",
+          "factor": 1.2
+        },
+        {
+          "pattern": "LIVE",
+          "factor": 1.6
+        }
+      ],
+      "1.2D+1.0L+1.0W": [
+        {
+          "pattern": "DEAD",
+          "factor": 1.2
+        },
+        {
+          "pattern": "LIVE",
+          "factor": 1
+        },
+        {
+          "pattern": "WIND",
+          "factor": 1
+        }
+      ]
+    },
+    "tolerance": {
+      "rel": 0.005
+    },
+    "checks": [
+      {
+        "key": "deadVertical",
+        "pattern": "DEAD",
+        "formula": "ΣRz = peso propio + 2 kN/m²·A_losas",
+        "quantity": "force",
+        "extract": {
+          "kind": "reactionSum",
+          "field": "fz"
+        },
+        "expected": 858.9644786903999
+      },
+      {
+        "key": "liveVertical",
+        "pattern": "LIVE",
+        "formula": "ΣRz = 3 kN/m²·A_losas",
+        "quantity": "force",
+        "extract": {
+          "kind": "reactionSum",
+          "field": "fz"
+        },
+        "expected": 432
+      },
+      {
+        "key": "windHorizontal",
+        "pattern": "WIND",
+        "formula": "ΣRx = −ΣFx",
+        "quantity": "force",
+        "extract": {
+          "kind": "reactionSum",
+          "field": "fx"
+        },
+        "expected": -45
+      },
+      {
+        "key": "symmetryX",
+        "pattern": "DEAD",
+        "formula": "Rz(N1) = Rz(N3)",
+        "quantity": "force",
+        "extract": {
+          "kind": "reactionEqual",
+          "field": "fz",
+          "nodeId": "N1",
+          "otherNodeId": "N3"
+        },
+        "expected": null
+      },
+      {
+        "key": "symmetryY",
+        "pattern": "DEAD",
+        "formula": "Rz(N1) = Rz(N4)",
+        "quantity": "force",
+        "extract": {
+          "kind": "reactionEqual",
+          "field": "fz",
+          "nodeId": "N1",
+          "otherNodeId": "N4"
+        },
+        "expected": null
+      },
+      {
+        "key": "symmetryCenter",
+        "pattern": "DEAD",
+        "formula": "Rz(N2) = Rz(N5)",
+        "quantity": "force",
+        "extract": {
+          "kind": "reactionEqual",
+          "field": "fz",
+          "nodeId": "N2",
+          "otherNodeId": "N5"
+        },
+        "expected": null
+      },
+      {
+        "key": "comboGravity",
+        "combination": "1.2D+1.6L",
+        "formula": "ΣRz = 1.2·W_D + 1.6·W_L",
+        "quantity": "force",
+        "extract": {
+          "kind": "reactionSum",
+          "field": "fz"
+        },
+        "expected": 1721.9573744284799
+      },
+      {
+        "key": "comboWindVertical",
+        "combination": "1.2D+1.0L+1.0W",
+        "formula": "ΣRz = 1.2·W_D + 1.0·W_L",
+        "quantity": "force",
+        "extract": {
+          "kind": "reactionSum",
+          "field": "fz"
+        },
+        "expected": 1462.7573744284798
+      },
+      {
+        "key": "comboWindHorizontal",
+        "combination": "1.2D+1.0L+1.0W",
+        "formula": "ΣRx = −1.0·ΣFx",
+        "quantity": "force",
+        "extract": {
+          "kind": "reactionSum",
+          "field": "fx"
+        },
+        "expected": -45
+      }
+    ]
+  }
+}

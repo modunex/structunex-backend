@@ -31,6 +31,10 @@ router.use(requireAuth);
 // Collection-level (no specific project yet).
 router.get("/", pc.list);
 router.post("/", validate(createProjectSchema), pc.create);
+// Modelos de ejemplo: antes de "/:projectId" para que "examples" y "from-example" no se
+// lean como un id de proyecto.
+router.get("/examples", pc.examples);
+router.post("/from-example/:exampleId", pc.createFromExample);
 
 // Anything under a specific project first loads + authorizes it. loadProject
 // attaches req.project / req.projectId for all handlers and sub-routers below.
@@ -39,6 +43,7 @@ router.use("/:projectId", loadProject);
 router.get("/:projectId", pc.getOne);
 router.patch("/:projectId", validate(updateProjectMetaSchema), pc.update);
 router.delete("/:projectId", pc.remove);
+router.get("/:projectId/example", pc.getExample);
 
 // Sub-resources — each its own router (CRUD), model built incrementally.
 router.use("/:projectId/nodes", nodeRoutes);

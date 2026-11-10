@@ -1,6 +1,14 @@
 const { AppError, asyncHandler } = require("../middleware/errorHandler");
 const { listConnectionsQuery } = require("../schemas/connectionSchema");
 const connectionService = require("../services/connectionService");
+const billing = require("../services/billingService");
+const { CONNECTION_FEATURE } = require("../lib/billingPlans");
+const { prisma } = require("../config/db");
+const { isUuid } = require("../lib/ids");
+
+// Cada tipología es una feature del plan (lib/billingPlans). Una tipología sin feature
+// declarada no se cobra.
+const assertTypology = (userId, typology) => billing.assertFeature(userId, CONNECTION_FEATURE[typology]);
 
 // req.project / req.projectId los pone loadProject (propiedad ya comprobada).
 //
@@ -23,6 +31,7 @@ const getOne = asyncHandler(async (req, res) => {
 // 201 con la conexión creada; 422 con los motivos si la tipología no aplica; 409 si ya
 // hay una conexión en ese extremo de barra, o si el análisis no es del modelo actual.
 const create = asyncHandler(async (req, res) => {
+  await assertTypology(req.userId, req.body.typology);
   res.status(201).json(await connectionService.create(req.project, req.body));
 });
 
@@ -37,6 +46,13 @@ const remove = asyncHandler(async (req, res) => {
 // F3: comprueba con el análisis vigente y guarda la ejecución. 409 si la conexión está
 // huérfana o el análisis caducó; un dato que falta sale como NO VERIFICABLE (200).
 const check = asyncHandler(async (req, res) => {
+  if (isUuid(req.params.connectionId)) {
+    const c = await prisma.connection.findFirst({
+      where: { id: req.params.connectionId, projectId: req.projectId },
+      select: { typology: true },
+    });
+    if (c) await assertTypology(req.userId, c.typology);
+  }
   res.json(await connectionService.check(req.project, req.params.connectionId));
 });
 

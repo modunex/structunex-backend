@@ -8,6 +8,8 @@ const { deckProperties } = require("../lib/deckSection");
 const { withoutDesignFields } = require("../lib/analysisModel");
 const { modelHash } = require("../lib/modelHash");
 const { freshness } = require("../lib/analysisFreshness");
+const { modelSize } = require("../lib/billingPlans");
+const billing = require("./billingService");
 
 // Lo que se devuelve de una ejecución: metadatos y resumen, nunca el payload. Los
 // resultados pesados están en S3 en Parquet y los baja el navegador con una URL
@@ -334,6 +336,8 @@ async function run(project, options) {
   const { analysisOptions, massSource, modalCases, responseSpectrum } =
     await resolveOptions(projectId, options);
   const model = await assembleModel(projectId);
+  // Límite del plan: barras + áreas, antes del mallado. Antes de encolar el job.
+  await billing.assertModelSize(project.ownerId, modelSize(model));
 
   await analysisJob.start(
     projectId,

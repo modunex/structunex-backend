@@ -12,7 +12,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "users:backfill": "node scripts/backfill-users.js",
-    "community:role": "node scripts/community-role.js"
+    "community:role": "node scripts/community-role.js",
+    "stripe:features": "node scripts/stripe-features.js"
   },
   "engines": {
     "node": "22.x"
@@ -33,6 +34,7 @@
     "mammoth": "^1.13.0",
     "pg": "^8.23.1",
     "sharp": "^0.34.5",
+    "stripe": "^23.1.0",
     "svix": "^1.99.1",
     "zod": "^3.23.8"
   },
