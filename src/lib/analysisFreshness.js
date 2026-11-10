@@ -26,4 +26,17 @@ const STALE_MESSAGES = {
     "El modelo cambió después del último análisis. Vuelve a analizar el modelo.",
 };
 
-module.exports = { freshness, STALE_MESSAGES };
+/**
+ * Marca cada ejecución del historial con si corresponde al modelo actual. Solo las
+ * frescas pueden mostrar sus resultados sobre la geometría de hoy: las de otra versión
+ * del modelo podrían referirse a nudos y barras que ya no existen o se movieron.
+ * `currentHash` null (el modelo no se puede armar ahora) deja todas como no frescas.
+ */
+function withFreshness(runs, currentHash) {
+  return runs.map(({ modelHash, ...run }) => {
+    const state = freshness({ runHash: modelHash ?? null, currentHash });
+    return { ...run, fresh: state.fresh, staleReason: state.fresh ? null : state.reason };
+  });
+}
+
+module.exports = { freshness, withFreshness, STALE_MESSAGES };

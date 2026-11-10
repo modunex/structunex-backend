@@ -29,3 +29,30 @@ test("cada motivo tiene su mensaje", () => {
     assert.ok(STALE_MESSAGES[reason]);
   }
 });
+
+const { withFreshness } = require("./analysisFreshness");
+
+test("withFreshness: cada ejecución del historial dice si es del modelo actual", () => {
+  const runs = [
+    { _id: "r3", status: "solved", modelHash: "h2" },
+    { _id: "r2", status: "solved", modelHash: "h1" },
+    { _id: "r1", status: "solved" }, // anterior a la huella: legado
+  ];
+  const out = withFreshness(runs, "h2");
+  assert.deepEqual(
+    out.map((r) => [r._id, r.fresh, r.staleReason]),
+    [
+      ["r3", true, null],
+      ["r2", false, "analysis.stale"],
+      ["r1", false, "analysis.legacy"],
+    ]
+  );
+  // La huella no sale en la respuesta: es un detalle interno.
+  assert.ok(out.every((r) => !("modelHash" in r)));
+});
+
+test("withFreshness: si el modelo actual no se puede armar, ninguna es fresca", () => {
+  const out = withFreshness([{ _id: "r1", modelHash: "h1" }], null);
+  assert.equal(out[0].fresh, false);
+  assert.equal(out[0].staleReason, "analysis.stale");
+});

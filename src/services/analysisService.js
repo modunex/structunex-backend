@@ -7,7 +7,7 @@ const spectrumGenerators = require("../lib/spectrumGenerators");
 const { deckProperties } = require("../lib/deckSection");
 const { withoutDesignFields } = require("../lib/analysisModel");
 const { modelHash } = require("../lib/modelHash");
-const { freshness } = require("../lib/analysisFreshness");
+const { freshness, withFreshness } = require("../lib/analysisFreshness");
 const { modelSize } = require("../lib/billingPlans");
 const billing = require("./billingService");
 
@@ -445,14 +445,20 @@ async function runStaleReason(projectId, runId) {
   return state.fresh ? null : state.reason;
 }
 
-/** Historial de ejecuciones del proyecto, de la más reciente a la más antigua. */
+/**
+ * Historial de ejecuciones del proyecto, de la más reciente a la más antigua, cada una
+ * con `fresh` (se hizo sobre la versión actual del modelo) y su `staleReason` si no.
+ */
 async function listRuns(projectId) {
-  const rows = await prisma.analysisRun.findMany({
-    where: { projectId },
-    orderBy: { startedAt: "desc" },
-    select: RUN_SELECT,
-  });
-  return rows.map(runToApi);
+  const [rows, currentHash] = await Promise.all([
+    prisma.analysisRun.findMany({
+      where: { projectId },
+      orderBy: { startedAt: "desc" },
+      select: { ...RUN_SELECT, modelHash: true },
+    }),
+    currentModelHash(projectId),
+  ]);
+  return withFreshness(rows.map(runToApi), currentHash);
 }
 
 /**
