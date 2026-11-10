@@ -50,6 +50,25 @@ function makeExampleService({ prisma, writeModel, resolveProps, currentModelHash
     return row.id;
   }
 
+  // Y la sección de área (losa): mismo material, tipo y espesores.
+  async function ensureAreaSection(tx, ownerId, def, materialId) {
+    const { key, materialKey, ...fields } = def;
+    const existing = await tx.catalogAreaSection.findFirst({
+      where: {
+        ownerId,
+        materialId,
+        kind: fields.kind,
+        shellType: fields.shellType,
+        thicknessMembrane: fields.thicknessMembrane,
+        thicknessBending: fields.thicknessBending,
+      },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
+    const row = await tx.catalogAreaSection.create({ data: { ...fields, materialId, ownerId } });
+    return row.id;
+  }
+
   async function createFromExample(ownerId, exampleId, { name } = {}) {
     const example = getExample(exampleId);
     if (!example) throw new AppError(404, "Ejemplo no encontrado");
@@ -64,6 +83,11 @@ function makeExampleService({ prisma, writeModel, resolveProps, currentModelHash
         const materialId = materialIds[def.materialKey];
         if (!materialId) throw new Error(`Material sin resolver en ${example.id}: ${def.materialKey}`);
         sectionIds[def.key] = await ensureFrameSection(tx, ownerId, def, materialId);
+      }
+      for (const def of example.catalog.areaSections || []) {
+        const materialId = materialIds[def.materialKey];
+        if (!materialId) throw new Error(`Material sin resolver en ${example.id}: ${def.materialKey}`);
+        sectionIds[def.key] = await ensureAreaSection(tx, ownerId, def, materialId);
       }
 
       const created = await tx.project.create({

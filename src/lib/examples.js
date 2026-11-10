@@ -4,9 +4,9 @@
 // Cada ejemplo es una fixture versionada en src/data/examples/<id>.json con:
 //  - `project`: los mismos campos de metadatos que crea el asistente (plantilla,
 //    formulación, parámetros), para que el visor lo abra como cualquier proyecto;
-//  - `catalog`: el material y las secciones que necesita. Las barras referencian el
-//    catálogo del USUARIO (ids distintos por cuenta), así que en la fixture van por
-//    `frameSectionKey` y se resuelven al crear el proyecto;
+//  - `catalog`: los materiales y las secciones (de barra y de área) que necesita. El
+//    modelo referencia el catálogo del USUARIO (ids distintos por cuenta), así que en
+//    la fixture va por `frameSectionKey` / `areaSectionKey` y se resuelve al crear;
 //  - `model`: el cuerpo de PUT /model, salvo esa clave;
 //  - `reference`: entradas, fórmulas, fuente y valores esperados. Son DATOS: el test
 //    examples.test.js los recalcula desde las entradas y desde el catálogo AISC.
@@ -16,6 +16,7 @@
 
 const EXAMPLES = {
   tm01: require("../data/examples/tm01.json"),
+  tm02: require("../data/examples/tm02.json"),
 };
 
 /** Lista pública de ejemplos (sin modelo ni referencia). */
@@ -35,18 +36,30 @@ function getExample(id) {
 }
 
 /**
- * Cuerpo de PUT /model para el ejemplo, con cada `frameSectionKey` cambiado por el id
- * de la sección del catálogo del usuario. Lanza si una clave no está resuelta: un
- * ejemplo con barras sin sección no se puede analizar y no debe crearse.
+ * Cuerpo de PUT /model para el ejemplo, con cada `frameSectionKey` / `areaSectionKey`
+ * cambiado por el id de la sección del catálogo del usuario. Lanza si una clave no está
+ * resuelta: un ejemplo con barras o losas sin sección no se puede analizar y no debe
+ * crearse.
  */
 function buildExampleModel(example, sectionIdByKey) {
+  const resolve = (key) => {
+    const id = sectionIdByKey[key];
+    if (!id) throw new Error(`Sección sin resolver en el ejemplo ${example.id}: ${key}`);
+    return id;
+  };
   const { model } = example;
-  const elements = model.elements.map(({ frameSectionKey, ...element }) => {
-    const id = sectionIdByKey[frameSectionKey];
-    if (!id) throw new Error(`Sección sin resolver en el ejemplo ${example.id}: ${frameSectionKey}`);
-    return { ...element, frameSectionId: id };
-  });
-  return { ...model, elements };
+  const elements = model.elements.map(({ frameSectionKey, ...element }) => ({
+    ...element,
+    frameSectionId: resolve(frameSectionKey),
+  }));
+  const out = { ...model, elements };
+  if (Array.isArray(model.areas)) {
+    out.areas = model.areas.map(({ areaSectionKey, ...area }) => ({
+      ...area,
+      areaSectionId: resolve(areaSectionKey),
+    }));
+  }
+  return out;
 }
 
 /** Metadatos de ejemplo guardados en Project.params.example, o null. */

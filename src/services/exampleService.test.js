@@ -23,6 +23,10 @@ const DEFAULTS = {
   modelSupport: { dx: false, dy: false, dz: false, rx: false, ry: false, rz: false },
   modelFrameLoad: { kind: "distributed", dir: "gravity", value: 0, distAbsolute: false },
   catalogFrameSection: { modifiers: {} },
+  catalogAreaSection: { kind: "shell", materialAngle: 0, modifiers: {} },
+  modelLoad: { fx: 0, fy: 0, fz: 0, mx: 0, my: 0, mz: 0 },
+  modelArea: { localAxisAngle: 0 },
+  modelAreaLoad: { dir: "gravity", value: 0 },
   modelConfiguration: { loadPatterns: [], loadCombinations: [], modalCases: [], diaphragms: [], lateralSystems: [], spectrumFunctions: [], responseSpectrumCases: [] },
 };
 const CHILD = new Set(["modelNode", "modelElement", "modelSupport", "modelLoad", "modelArea", "modelFrameLoad", "modelAreaLoad", "modelAreaSpring"]);
@@ -31,6 +35,10 @@ const COLUMNS = {
   modelElement: ["id", "nodeA", "nodeB", "frameSectionId", "roll", "releases", "lateralSystem"],
   modelSupport: ["nodeId", "dx", "dy", "dz", "rx", "ry", "rz"],
   modelFrameLoad: ["elementId", "loadPattern", "kind", "dir", "value", "value2", "dist", "dist2", "distAbsolute"],
+  modelLoad: ["nodeId", "loadPattern", "fx", "fy", "fz", "mx", "my", "mz"],
+  modelArea: ["id", "nodeIds", "areaSectionId", "mesh", "localAxisAngle", "diaphragm"],
+  modelAreaLoad: ["areaId", "loadPattern", "dir", "value"],
+  catalogAreaSection: ["deck", "color"],
 };
 
 function fakePrisma() {
@@ -107,6 +115,8 @@ const { makeExampleService } = require("./exampleService");
 const { writeModel } = require("./modelService");
 const { resolveProps } = require("./catalogFrameSectionService");
 const analysisService = require("./analysisService");
+const fs = require("node:fs");
+const { getExample } = require("../lib/examples");
 const calcFixture = require("../lib/fixtures/example_tm01.calc.json");
 
 const service = makeExampleService({
@@ -118,15 +128,26 @@ const service = makeExampleService({
 const OWNER = "user_test";
 
 // El payload real con los ids del catálogo del usuario cambiados por las claves de la
-// fixture compartida con el calc-service.
-async function payloadFor(projectId, activeDofs) {
+// fixture compartida con el calc-service: MAT-<clave>, SEC-<perfil>, ASEC-<clave>.
+async function payloadFor(projectId, activeDofs, ownerId = OWNER) {
   const { analysisOptions, massSource, modalCases, responseSpectrum } =
     await analysisService.resolveOptions(projectId, { activeDofs });
   const model = await analysisService.assembleModel(projectId);
-  const json = JSON.stringify({ analysisOptions, model, massSource, modalCases, responseSpectrum });
-  const [mat] = await db.catalogMaterial.findMany({ where: { ownerId: OWNER } });
-  const [sec] = await db.catalogFrameSection.findMany({ where: { ownerId: OWNER } });
-  return JSON.parse(json.split(mat.id).join("MAT-A992").split(sec.id).join("SEC-W12X26"));
+  let json = JSON.stringify({ analysisOptions, model, massSource, modalCases, responseSpectrum });
+  const defs = ["tm01", "tm02"].flatMap((id) => {
+    const c = getExample(id).catalog;
+    return [
+      ...c.materials.map((m) => ["catalogMaterial", { name: m.name }, `MAT-${m.key}`]),
+      ...c.frameSections.map((s) => ["catalogFrameSection", { catalogLabel: s.catalogLabel }, `SEC-${s.key}`]),
+      ...(c.areaSections || []).map((s) => ["catalogAreaSection", { name: s.name }, `ASEC-${s.key}`]),
+    ];
+  });
+  for (const [table, where, label] of defs) {
+    for (const row of await db[table].findMany({ where: { ownerId, ...where } })) {
+      json = json.split(row.id).join(label);
+    }
+  }
+  return JSON.parse(json);
 }
 
 test("crear TM-01 escribe proyecto, catálogo y modelo, y guarda su huella", async () => {
@@ -200,4 +221,48 @@ test("una versión distinta de la fixture no sirve de referencia", async () => {
 test("errores: ejemplo inexistente y proyecto que no es ejemplo", async () => {
   await assert.rejects(service.createFromExample(OWNER, "nope"), (err) => err.status === 404);
   await assert.rejects(service.getProjectExample({ id: "x", params: { length: 6 } }), (err) => err.status === 404);
+});
+
+// --- TM-02: pórtico 3D con losas ------------------------------------------------------
+// Para regenerar la fixture compartida tras cambiar tm02.json:
+//   WRITE_EXAMPLE_FIXTURES=1 node --test src/services/exampleService.test.js
+// y copiar src/lib/fixtures/example_tm02.calc.json a calc-service/tests/fixtures/.
+const OWNER2 = "user_tm02";
+const TM02_FIXTURE = path.join(__dirname, "../lib/fixtures/example_tm02.calc.json");
+
+test("TM-02: crea catálogo (acero, concreto, 2 perfiles, losa) y modelo con losas", async () => {
+  const project = await service.createFromExample(OWNER2, "tm02");
+  assert.equal(project.analysisType, "space_frame");
+  assert.equal(project.dofPerNode, 6);
+  assert.equal((await db.catalogMaterial.findMany({ where: { ownerId: OWNER2 } })).length, 2);
+  assert.equal((await db.catalogFrameSection.findMany({ where: { ownerId: OWNER2 } })).length, 2);
+  const [slab] = await db.catalogAreaSection.findMany({ where: { ownerId: OWNER2 } });
+  assert.equal(slab.thicknessMembrane, 0.15);
+  const areas = await db.modelArea.findMany({ where: { projectId: project._id } });
+  assert.equal(areas.length, 4);
+  assert.ok(areas.every((a) => a.areaSectionId === slab.id));
+  // Reabrirlo no duplica nada del catálogo.
+  await service.createFromExample(OWNER2, "tm02");
+  assert.equal((await db.catalogMaterial.findMany({ where: { ownerId: OWNER2 } })).length, 2);
+  assert.equal((await db.catalogAreaSection.findMany({ where: { ownerId: OWNER2 } })).length, 1);
+});
+
+test("TM-02: el payload es exactamente el que resuelve el calc-service", async () => {
+  const [project] = await db.project.findMany({ where: { ownerId: OWNER2 } });
+  // GDL de "space_frame" (frontend utils/dofs.ts): los seis.
+  const request = await payloadFor(project.id, ["UX", "UY", "UZ", "RX", "RY", "RZ"], OWNER2);
+  const reference = getExample("tm02").reference;
+  if (process.env.WRITE_EXAMPLE_FIXTURES) {
+    const out = {
+      _comment: calcFixture._comment.replace(/TM-01/g, "TM-02").replace(/tm01/g, "tm02"),
+      exampleId: "tm02",
+      exampleVersion: getExample("tm02").version,
+      request,
+      reference,
+    };
+    fs.writeFileSync(TM02_FIXTURE, JSON.stringify(out, null, 2) + "\n");
+  }
+  const shared = JSON.parse(fs.readFileSync(TM02_FIXTURE, "utf8"));
+  assert.deepEqual(request, shared.request);
+  assert.deepEqual(reference, shared.reference);
 });

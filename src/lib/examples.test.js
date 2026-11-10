@@ -19,6 +19,7 @@ test("listExamples expone metadatos, sin modelo ni referencia", () => {
   const list = listExamples();
   assert.deepEqual(list, [
     { id: "tm01", version: 1, code: "TM-01", templateId: "beam", analysisType: "beam" },
+    { id: "tm02", version: 1, code: "TM-02", templateId: "frame3d", analysisType: "space_frame" },
   ]);
   assert.equal(getExample("no-existe"), null);
   assert.equal(getExample("__proto__"), null);
@@ -93,4 +94,119 @@ test("exampleMeta lee params.example y nada más", () => {
   assert.equal(exampleMeta(null), null);
   assert.equal(exampleMeta({ params: { length: 6 } }), null);
   assert.deepEqual(exampleMeta({ params: { example: { id: "tm01", version: 1 } } }), { id: "tm01", version: 1 });
+});
+
+// --- TM-02: pórtico 3D de 2 niveles con losas -----------------------------------------
+// Sin solución cerrada: se verifica por equilibrio, simetría y linealidad. Estos tests
+// recalculan las cargas totales desde la geometría, el catálogo AISC y los materiales
+// (cálculo independiente del script que generó la fixture) y comprueban que el modelo
+// es de verdad simétrico bajo la carga en que se compara la simetría.
+
+const tm02 = getExample("tm02");
+const ref2 = tm02.reference;
+const check2 = (key) => ref2.checks.find((c) => c.key === key);
+const close2 = (a, b) => assert.ok(Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b)), `${a} != ${b}`);
+
+function tm02Totals() {
+  const { nodes, elements, areas, areaLoads, loads } = tm02.model;
+  const pos = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const mats = Object.fromEntries(tm02.catalog.materials.map((m) => [m.key, m]));
+  const frameDefs = Object.fromEntries(tm02.catalog.frameSections.map((s) => [s.key, s]));
+  const areaDefs = Object.fromEntries(tm02.catalog.areaSections.map((s) => [s.key, s]));
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+  // Área de un polígono plano horizontal (fórmula del lazo).
+  const polygonArea = (ids) => {
+    const p = ids.map((id) => pos[id]);
+    let s = 0;
+    for (let i = 0; i < p.length; i++) {
+      const q = p[(i + 1) % p.length];
+      s += p[i].x * q.y - q.x * p[i].y;
+    }
+    return Math.abs(s) / 2;
+  };
+  let frames = 0;
+  for (const e of elements) {
+    const def = frameDefs[e.frameSectionKey];
+    frames += getShape(def.catalogLabel).A * mats[def.materialKey].density * dist(pos[e.nodeA], pos[e.nodeB]);
+  }
+  let slabs = 0;
+  const areaOf = {};
+  for (const a of areas) {
+    areaOf[a.id] = polygonArea(a.nodeIds);
+    const def = areaDefs[a.areaSectionKey];
+    slabs += mats[def.materialKey].density * def.thicknessMembrane * areaOf[a.id];
+  }
+  const surface = (pattern) =>
+    areaLoads.filter((l) => l.loadPattern === pattern).reduce((s, l) => s + l.value * areaOf[l.areaId], 0);
+  const lateral = loads.filter((l) => l.loadPattern === "WIND").reduce((s, l) => s + (l.fx || 0), 0);
+  return { W_D: frames + slabs + surface("DEAD"), W_L: surface("LIVE"), F_x: lateral };
+}
+
+test("TM-02: el modelo resuelto pasa el schema de PUT /model (strict)", () => {
+  const ids = { W10X49: UUID, W16X26: UUID, LOSA15: UUID };
+  const model = buildExampleModel(tm02, ids);
+  const parsed = modelSchema.safeParse(model);
+  assert.equal(parsed.success, true, JSON.stringify(parsed.error?.issues));
+  assert.ok(model.areas.every((a) => a.areaSectionId === UUID && !("areaSectionKey" in a)));
+  assert.throws(() => buildExampleModel(tm02, { W10X49: UUID, W16X26: UUID }), /LOSA15/);
+});
+
+test("TM-02: los perfiles existen en el catálogo AISC", () => {
+  for (const def of tm02.catalog.frameSections) assert.ok(getShape(def.catalogLabel), def.catalogLabel);
+});
+
+test("TM-02: las cargas totales esperadas salen de la geometría y los materiales", () => {
+  const { W_D, W_L, F_x } = tm02Totals();
+  close2(check2("deadVertical").expected, W_D);
+  close2(check2("liveVertical").expected, W_L);
+  close2(check2("windHorizontal").expected, -F_x);
+  close2(check2("comboGravity").expected, 1.2 * W_D + 1.6 * W_L);
+  close2(check2("comboWindVertical").expected, 1.2 * W_D + 1.0 * W_L);
+  close2(check2("comboWindHorizontal").expected, -1.0 * F_x);
+  // Solo el patrón DEAD lleva peso propio: si otro lo llevara, sus totales no serían estos.
+  const swm = Object.fromEntries(tm02.model.configuration.loadPatterns.map((p) => [p.name, p.selfWeightMultiplier]));
+  assert.deepEqual(swm, { DEAD: 1, LIVE: 0, WIND: 0 });
+});
+
+test("TM-02: las combinaciones de la referencia son las del modelo", () => {
+  const model = Object.fromEntries(tm02.model.configuration.loadCombinations.map((c) => [c.name, c.factors]));
+  for (const [name, factors] of Object.entries(ref2.combinations)) assert.deepEqual(model[name], factors, name);
+  for (const c of ref2.checks) {
+    assert.ok(!!c.pattern !== !!c.combination, `${c.key}: un patrón o una combinación`);
+    if (c.combination) assert.ok(ref2.combinations[c.combination], c.key);
+  }
+});
+
+test("TM-02: el modelo es simétrico respecto de x = 6 y de y = 3 bajo DEAD", () => {
+  const { nodes, elements, areas, supports, areaLoads, loads } = tm02.model;
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const key = (n) => `${n.x},${n.y},${n.z}`;
+  const at = Object.fromEntries(nodes.map((n) => [key(n), n.id]));
+  for (const mirror of [(n) => ({ ...n, x: 12 - n.x }), (n) => ({ ...n, y: 6 - n.y })]) {
+    const m = (id) => at[key(mirror(byId[id]))];
+    // Nudos, barras (con su sección), losas y apoyos tienen su imagen especular.
+    for (const n of nodes) assert.ok(m(n.id), n.id);
+    const bars = new Set(elements.map((e) => [e.nodeA, e.nodeB].sort().join("-") + e.frameSectionKey));
+    for (const e of elements) assert.ok(bars.has([m(e.nodeA), m(e.nodeB)].sort().join("-") + e.frameSectionKey), e.id);
+    const slabs = new Set(areas.map((a) => [...a.nodeIds].sort().join("-")));
+    for (const a of areas) assert.ok(slabs.has(a.nodeIds.map(m).sort().join("-")), a.id);
+    const supported = new Set(supports.map((s) => s.nodeId));
+    for (const s of supports) assert.ok(supported.has(m(s.nodeId)), s.nodeId);
+  }
+  // DEAD es uniforme en todas las losas y no tiene cargas nodales.
+  const dead = areaLoads.filter((l) => l.loadPattern === "DEAD");
+  assert.equal(dead.length, areas.length);
+  assert.ok(dead.every((l) => l.value === dead[0].value && l.dir === "gravity"));
+  assert.ok(!loads.some((l) => l.loadPattern === "DEAD"));
+  // Y los pares que compara la referencia son imágenes especulares en la base.
+  for (const c of ref2.checks.filter((c) => c.extract.kind === "reactionEqual")) {
+    const a = byId[c.extract.nodeId];
+    const b = byId[c.extract.otherNodeId];
+    assert.equal(a.z, 0);
+    assert.ok(
+      (a.x === 12 - b.x && a.y === b.y) || (a.y === 6 - b.y && a.x === b.x),
+      `${c.key}: ${a.id} y ${b.id} no son simétricos`
+    );
+    assert.equal(c.expected, null);
+  }
 });
