@@ -552,7 +552,14 @@ async function mesh(project, connectionId, { params, operations } = {}) {
 async function femStart(
   project,
   connectionId,
-  { analysis = "nonlinear", forcesAt = "node", stiffness = false, capacity = null } = {}
+  {
+    analysis = "nonlinear",
+    forcesAt = "node",
+    stiffness = false,
+    capacity = null,
+    combinationsMode = "governing",
+    geometricNonlinear = false,
+  } = {}
 ) {
   const row = await findOwned(project, connectionId);
   const orphan = orphanReasons(row, await modelIndex(project.id));
@@ -589,6 +596,8 @@ async function femStart(
     forcesAt,
     stiffness,
     capacity,
+    combinationsMode,
+    geometricNonlinear,
     criteria: {
       plasticStrainLimit: prefs.cbfem.plasticStrainLimit,
       bucklingFactorLimit: prefs.cbfem.bucklingFactorLimit,

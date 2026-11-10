@@ -215,6 +215,8 @@ function buildCbfemRequest({
   forcesAt = "node",
   stiffness = false,
   capacity = null,
+  combinationsMode = "governing",
+  geometricNonlinear = false,
   criteria = null,
   storage = null,
 }) {
@@ -231,6 +233,8 @@ function buildCbfemRequest({
     forcesAt,
     stiffness: Boolean(stiffness),
     ...(capacity ? { capacity: cleanCapacity(capacity) } : {}),
+    combinationsMode: combinationsMode === "all" ? "all" : "governing",
+    geometricNonlinear: Boolean(geometricNonlinear),
     ...(criteria ? { criteria } : {}),
     ...(storage ? { storage } : {}),
   };
@@ -257,6 +261,8 @@ function cbfemRunInputs(request) {
     forcesAt: rest.forcesAt,
     stiffness: Boolean(rest.stiffness),
     capacity: rest.capacity ?? null,
+    combinationsMode: rest.combinationsMode ?? "governing",
+    geometricNonlinear: Boolean(rest.geometricNonlinear),
     criteria: rest.criteria ?? null,
     plateMaterial: rest.plateMaterial,
     doublerMaterial: rest.doublerMaterial ?? null,
