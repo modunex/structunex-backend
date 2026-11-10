@@ -60,4 +60,40 @@ const latestRun = asyncHandler(async (req, res) => {
   res.json(await connectionService.latestRun(req.project, req.params.connectionId));
 });
 
-module.exports = { inspect, list, getOne, create, update, remove, check, latestRun };
+// Geometría de la conexión (operaciones → layout) con lo guardado o con lo que se está
+// editando sin guardar. 409 si el análisis no es del modelo actual (como la inspección).
+const layout = asyncHandler(async (req, res) => {
+  res.json(await connectionService.layout(req.project, req.params.connectionId, req.body || {}));
+});
+
+// Fase 3 (CBFEM): malla de la conexión y análisis por elementos finitos en segundo plano.
+const mesh = asyncHandler(async (req, res) => {
+  res.json(await connectionService.mesh(req.project, req.params.connectionId, req.body || {}));
+});
+
+const femStart = asyncHandler(async (req, res) => {
+  res.status(202).json(await connectionService.femStart(req.project, req.params.connectionId, req.body || {}));
+});
+
+const femLatest = asyncHandler(async (req, res) => {
+  const [run, criteria] = await Promise.all([
+    connectionService.femLatest(req.project, req.params.connectionId),
+    connectionService.femCriteria(req.project),
+  ]);
+  res.json({ run, criteria });
+});
+
+const femCancel = asyncHandler(async (req, res) => {
+  res.json(await connectionService.femCancel(req.project, req.params.connectionId));
+});
+
+const femFiles = asyncHandler(async (req, res) => {
+  const raw = req.query.combinations;
+  const combinations = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  res.json(await connectionService.femFiles(req.project, req.params.connectionId, req.params.runId, { combinations }));
+});
+
+module.exports = {
+  inspect, list, getOne, create, update, remove, check, latestRun, layout,
+  mesh, femStart, femLatest, femCancel, femFiles,
+};

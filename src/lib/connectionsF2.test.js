@@ -165,3 +165,20 @@ test("los parámetros de la placa extendida validan su forma y rechazan lo desco
   assert.equal(endPlateParamsV1.safeParse({ demand: { columnPr: -1 } }).success, false);
   assert.equal(endPlateParamsV1.safeParse({ continuityPlate: { flangeWeld: "PJP" } }).success, false);
 });
+
+test("doble ángulo: parámetros v1 estrictos y el acero de los ángulos viaja como el de la placa", () => {
+  const { PARAMS_SCHEMAS } = require("../schemas/connectionSchema");
+  const { plateMaterialId, connectionMaterialIds } = require("./connections");
+  const schema = PARAMS_SCHEMAS.double_angle[1];
+  const id = "8b3c7f0e-1a2b-4c3d-9e8f-0a1b2c3d4e5f";
+  const ok = schema.safeParse({
+    angles: { legBeam: 0.0889, legSupport: 0.127, thickness: 0.0079, materialId: id },
+    bolts: { diameter: 0.01905, grade: "A325", threads: "N", hole: "STD", rows: 8, pitch: 0.0762, edgeVertical: 0.0318 },
+    beamGage: 0.054, supportGage: 0.2, setback: 0.0127,
+  });
+  assert.equal(ok.success, true);
+  assert.equal(schema.safeParse({ bolts: { hole: "SSLT" } }).success, false);
+  assert.equal(schema.safeParse({ plate: { thickness: 0.01 } }).success, false);
+  assert.equal(plateMaterialId(ok.data), id);
+  assert.deepEqual(connectionMaterialIds(ok.data, null), [id]);
+});

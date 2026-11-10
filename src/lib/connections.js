@@ -160,12 +160,164 @@ function buildCheckRequest({ inspectRequest, connection, plateMaterial, doublerM
       paramsVersion: connection.paramsVersion,
       params: connection.params || {},
       supportedElementId: connection.supportedElementId,
+      // null = la plantilla de la tipología; una lista = conexión personalizada.
+      operations: connection.operations ?? null,
     },
     plateMaterial: materialPayload(plateMaterial),
     // Acero de las placas de refuerzo de la zona de panel; null = el de la placa extrema.
     doublerMaterial: materialPayload(doublerMaterial),
     comboNames: comboNames || [],
   };
+}
+
+/**
+ * La petición de /connections/layout: solo la geometría del modelo (sin resultados) y la
+ * conexión, con los parámetros u operaciones que se quieren ver (guardados o no).
+ */
+function buildLayoutRequest({ inspectRequest, connection, params, operations }) {
+  const { nodeId, nodes, elements, sections, materials, supports, areas } = inspectRequest;
+  return {
+    nodeId,
+    nodes,
+    elements,
+    sections,
+    materials,
+    supports,
+    areas,
+    connection: {
+      id: connection.id,
+      typology: connection.typology,
+      code: connection.code,
+      paramsVersion: connection.paramsVersion,
+      params: params ?? connection.params ?? {},
+      supportedElementId: connection.supportedElementId,
+      operations: operations === undefined ? connection.operations ?? null : operations,
+    },
+  };
+}
+
+// ─── Fase 3: CBFEM ────────────────────────────────────────────────────────────────
+
+const CBFEM_ANALYSES = new Set(["linear", "nonlinear"]);
+
+/**
+ * La petición de /connections/cbfem/stream: la misma del check (nudo, fuerzas,
+ * conexión, materiales), con los materiales de catálogo que citan las placas añadidos a
+ * `materials` (el modelo local los necesita por placa, no solo el de la placa extrema),
+ * el tipo de análisis y el destino de los campos.
+ */
+const CBFEM_FORCES_AT = new Set(["node", "bolts"]);
+
+function buildCbfemRequest({
+  checkRequest,
+  catalogMaterials = [],
+  analysis = "nonlinear",
+  forcesAt = "node",
+  stiffness = false,
+  capacity = null,
+  criteria = null,
+  storage = null,
+}) {
+  if (!CBFEM_ANALYSES.has(analysis)) throw new Error(`análisis CBFEM desconocido: ${analysis}`);
+  if (!CBFEM_FORCES_AT.has(forcesAt)) throw new Error(`posición de fuerzas desconocida: ${forcesAt}`);
+  const have = new Set((checkRequest.materials || []).map((m) => String(m.id)));
+  const extra = catalogMaterials
+    .filter((m) => m && !have.has(String(m.id)))
+    .map((m) => materialPayload(m));
+  return {
+    ...checkRequest,
+    materials: [...(checkRequest.materials || []), ...extra],
+    analysis,
+    forcesAt,
+    stiffness: Boolean(stiffness),
+    ...(capacity ? { capacity: cleanCapacity(capacity) } : {}),
+    ...(criteria ? { criteria } : {}),
+    ...(storage ? { storage } : {}),
+  };
+}
+
+/** Los datos del diseño por capacidad sin los vacíos (null = no dado). */
+function cleanCapacity(capacity) {
+  const out = {};
+  for (const k of ["Ry", "Sh", "Lh", "gravityCombination"]) {
+    if (capacity[k] !== null && capacity[k] !== undefined && capacity[k] !== "") out[k] = capacity[k];
+  }
+  return out;
+}
+
+/** Lo que se guarda como entradas de una ejecución CBFEM (sin el destino, que no
+ *  cambia el resultado). */
+function cbfemRunInputs(request) {
+  const { storage, ...rest } = request; // eslint-disable-line no-unused-vars
+  return {
+    source: rest.source,
+    nodeId: rest.nodeId,
+    connection: rest.connection,
+    analysis: rest.analysis,
+    forcesAt: rest.forcesAt,
+    stiffness: Boolean(rest.stiffness),
+    capacity: rest.capacity ?? null,
+    criteria: rest.criteria ?? null,
+    plateMaterial: rest.plateMaterial,
+    doublerMaterial: rest.doublerMaterial ?? null,
+    comboNames: rest.comboNames,
+    combinations: rest.combinations,
+  };
+}
+
+/** Huella de una ejecución CBFEM: como la del check, sin el destino de los campos. */
+function cbfemInputsHash(request) {
+  const { storage, ...rest } = request; // eslint-disable-line no-unused-vars
+  return checkInputsHash(rest);
+}
+
+/** Resumen de una ejecución CBFEM para el panel: estado, avance y, al terminar, lo que
+ *  devolvió el motor sin los campos (que van en S3). Nunca un PASS: la Fase 3 no comprueba. */
+function femRunSummary(run, { latestSolvedRunId = null, connectionUpdatedAt = null } = {}) {
+  if (!run) return null;
+  const results = run.results || {};
+  const stale =
+    (latestSolvedRunId && run.analysisRunId && run.analysisRunId !== latestSolvedRunId) ||
+    (connectionUpdatedAt && run.createdAt && new Date(connectionUpdatedAt) > new Date(run.createdAt));
+  return {
+    id: run.id,
+    status: run.status,
+    analysis: run.analysisType ?? null,
+    progress: run.progress ?? null,
+    startedAt: run.startedAt ?? run.createdAt ?? null,
+    finishedAt: run.finishedAt ?? null,
+    error: run.error ?? null,
+    stale: Boolean(stale),
+    governing: results.governing ?? null,
+    cases: results.cases ?? [],
+    messages: results.messages ?? [],
+    assumptions: results.assumptions ?? [],
+    checks: results.checks ?? null,
+    stiffness: results.stiffness ?? [],
+    capacity: results.capacity ?? null,
+    meshStats: results.meshStats ?? null,
+    meshRules: results.meshRules ?? null,
+    solver: results.solver ?? null,
+    inputs: results.inputs ?? null,
+    engineVersion: run.engineVersion,
+    files: run.files ?? {},
+  };
+}
+
+/** El acero de las placas de la conexión: la placa (shear tab, placa extrema) o los
+ *  ángulos (doble ángulo). Viaja al motor como `plateMaterial`. */
+function plateMaterialId(params) {
+  return params?.plate?.materialId ?? params?.angles?.materialId ?? null;
+}
+
+/** Los materiales del catálogo que una conexión cita: placa, refuerzos y las placas de
+ *  sus operaciones (sin repetir). */
+function connectionMaterialIds(params, operations) {
+  const ids = new Set();
+  if (plateMaterialId(params)) ids.add(plateMaterialId(params));
+  if (params?.doublerPlate?.materialId) ids.add(params.doublerPlate.materialId);
+  for (const op of operations || []) if (op?.materialId) ids.add(op.materialId);
+  return [...ids];
 }
 
 /** Huella de TODO lo que entra al motor: dos comprobaciones con la misma huella tienen
@@ -184,6 +336,9 @@ function runInputs(request, result) {
     source: request.source,
     nodeId: request.nodeId,
     connection: request.connection,
+    // La geometría que se comprobó (operaciones → layout, calc-service): su huella basta
+    // para identificarla; el layout completo va en los resultados.
+    layoutHash: result?.layout?.hash ?? null,
     plateMaterial: request.plateMaterial,
     doublerMaterial: request.doublerMaterial ?? null,
     comboNames: request.comboNames,
@@ -233,9 +388,17 @@ function runSummary(run, { latestSolvedRunId, connectionStatus, currentLoadsHash
 }
 
 module.exports = {
+  buildCbfemRequest,
+  cbfemRunInputs,
+  cbfemInputsHash,
+  femRunSummary,
+  CBFEM_ANALYSES,
+  buildLayoutRequest,
+  connectionMaterialIds,
   VGRAVITY_COMBINATION,
   buildInspectRequest,
   membersFromInspection,
+  plateMaterialId,
   orphanReasons,
   buildCheckRequest,
   checkInputsHash,

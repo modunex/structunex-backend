@@ -605,6 +605,10 @@ model Connection {
   method             String   @default("LRFD")
   paramsVersion      Int      @default(1)
   params             Json     @default("{}")
+  // Operaciones de la conexión (calc-service app/connections/operations): null = las
+  // escribe la plantilla de la tipología a partir de `params`; una lista = conexión
+  // personalizada (desacoplada de la plantilla: sin procedimiento, nunca precalificada).
+  operations         Json?
   status             String   @default("draft") // draft | checked (el resultado va en la última ConnectionRun)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -640,7 +644,16 @@ model ConnectionRun {
   id            String    @id @default(uuid(7)) @db.Uuid
   connectionId  String    @db.Uuid
   analysisRunId String?   @db.Uuid
-  status        String    @default("done") // done | error
+  status        String    @default("done") // aisc: done | error · cbfem: running | done | incomplete | notAnalysed | error | cancelled
+  // Motor de la ejecución: "aisc" (procedimiento de la tipología, síncrono) o "cbfem"
+  // (elementos finitos de la conexión, Fase 3: en segundo plano, campos en S3).
+  engine        String    @default("aisc")
+  analysisType  String? // cbfem: linear | nonlinear
+  progress      Json? // cbfem en curso: { step, current, total, caseName, updatedAt }
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  s3Prefix      String? // cbfem: dónde están la malla y los campos por combinación
+  files         Json      @default("{}")
   engineVersion String
   code          String
   method        String
@@ -655,6 +668,7 @@ model ConnectionRun {
   analysisRun AnalysisRun? @relation(fields: [analysisRunId], references: [id], onDelete: SetNull)
 
   @@index([connectionId, createdAt(sort: Desc)])
+  @@index([connectionId, engine, createdAt(sort: Desc)])
   @@index([analysisRunId])
   @@map("connection_runs")
 }

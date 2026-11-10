@@ -45,6 +45,8 @@ test("la petición de comprobación lleva la conexión, el material y las combin
     paramsVersion: 1,
     params: { plate: { thickness: 0.0127 } },
     supportedElementId: "B1",
+    // Sin operaciones guardadas: las escribe la plantilla de la tipología.
+    operations: null,
   });
   assert.deepEqual(req.plateMaterial, { id: "m", name: "A36", Fy: 248000, Fu: 400000, E: 2e8 });
   assert.deepEqual(req.comboNames, ["1.4D"]);
@@ -73,8 +75,8 @@ test("las entradas guardadas identifican el cálculo sin copiar el modelo", () =
   const req = buildCheckRequest({ inspectRequest, connection, plateMaterial: null });
   const inputs = runInputs(req, { demands: [{ label: "1.4D", V: 84 }], context: { beam: {} } });
   assert.deepEqual(Object.keys(inputs).sort(), [
-    "combinations", "comboNames", "connection", "context", "demands", "doublerMaterial", "members", "nodeId",
-    "plateMaterial", "source",
+    "combinations", "comboNames", "connection", "context", "demands", "doublerMaterial", "layoutHash", "members",
+    "nodeId", "plateMaterial", "source",
   ]);
   assert.equal(inputs.demands[0].V, 84);
   assert.equal(inputs.nodes, undefined);

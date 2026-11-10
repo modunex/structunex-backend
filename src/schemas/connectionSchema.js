@@ -8,7 +8,7 @@ const inspectConnectionSchema = z.object({
 });
 
 // Tipologías que el motor sabe evaluar (ver calc-service app/connections/typologies.py).
-const TYPOLOGIES = ["shear_tab", "extended_end_plate"];
+const TYPOLOGIES = ["shear_tab", "double_angle", "extended_end_plate"];
 
 // AISC 358-22 Cap. 6: placa extendida de 4 pernos sin y con rigidizador, y de 8 pernos.
 const END_PLATE_CONFIGURATIONS = ["4E", "4ES", "8ES"];
@@ -151,6 +151,9 @@ const shearTabParamsV1 = z
         thickness: length,
         // Ancho horizontal de la placa (de la soldadura al borde libre).
         width: length,
+        // Lado del alma de la viga en el que va la placa, en el marco de la conexión
+        // (n = z × u). null = +n, y el layout lo declara. No cambia la comprobación.
+        side: z.enum(["+n", "-n"]).nullable(),
         // Material del catálogo del usuario (aporta Fy y Fu).
         materialId: z.string().uuid().nullable(),
       })
@@ -193,10 +196,63 @@ const shearTabParamsV1 = z
   .partial()
   .strict();
 
+// ─── Parámetros del doble ángulo atornillado, versión 1 ───
+// (calc-service app/connections/aisc/double_angle.py; Manual Parte 10, II.A-1A). Mismas
+// reglas que el shear tab: todo opcional y anulable, lo que falta es NO VERIFICABLE.
+const doubleAngleParamsV1 = z
+  .object({
+    angles: z
+      .object({
+        legBeam: length, // ala contra el alma de la viga
+        legSupport: length, // ala contra el apoyo
+        thickness: length,
+        materialId: z.string().uuid().nullable(),
+      })
+      .partial()
+      .strict(),
+    bolts: z
+      .object({
+        diameter: length,
+        grade: z.enum(["A325", "A490"]).nullable(),
+        threads: z.enum(["N", "X"]).nullable(),
+        hole: z.enum(["STD"]).nullable(),
+        rows: z.number().int().min(1).max(20).nullable(),
+        pitch: length,
+        edgeVertical: length,
+        bearingDeformation: z.enum(["considered", "notConsidered"]).nullable(),
+        topDistance: length,
+      })
+      .partial()
+      .strict(),
+    // Del talón (cara del apoyo) a la línea de pernos de la viga.
+    beamGage: length,
+    // Entre las dos líneas de pernos del apoyo (a través del alma).
+    supportGage: length,
+    setback: z.number().min(0).finite().nullable(),
+  })
+  .partial()
+  .strict();
+
 const PARAMS_SCHEMAS = {
   shear_tab: { 1: shearTabParamsV1 },
+  double_angle: { 1: doubleAngleParamsV1 },
   extended_end_plate: { 1: endPlateParamsV1 },
 };
+
+// ─── Operaciones (modelado por operaciones) ───
+// La FORMA completa la valida el calc-service (app/connections/operations/schema.py),
+// que es quien las ejecuta: aquí solo lo que no depende del motor (tipo e id de cada
+// operación, tamaño de la lista). Antes de guardar, el servicio las ejecuta y rechaza
+// una lista que el motor no acepta (422 con el motivo).
+const OPERATION_KINDS = ["cut", "plate", "angle", "boltGrid", "weld"];
+const operationSchema = z
+  .object({
+    op: z.enum(OPERATION_KINDS),
+    id: z.string().trim().min(1).max(40).regex(/^[A-Za-z0-9_-]+$/),
+  })
+  .passthrough();
+// null = volver a la plantilla de la tipología.
+const operationsSchema = z.array(operationSchema).max(200).nullable();
 
 const updateConnectionSchema = z
   .object({
@@ -205,13 +261,52 @@ const updateConnectionSchema = z
     code: z.enum(CODES).optional(),
     // Se valida contra la tipología de la conexión en el servicio (depende de ella).
     params: z.record(z.any()).optional(),
+    // Lista = conexión personalizada; null = la plantilla. Invalida la última comprobación.
+    operations: operationsSchema.optional(),
+  })
+  .strict();
+
+// Vista previa de la geometría: lo que se quiere ver sin guardar. Sin campos = lo guardado.
+const layoutPreviewSchema = z
+  .object({
+    params: z.record(z.any()).optional(),
+    operations: operationsSchema.optional(),
+  })
+  .strict();
+
+// Fase 3 (CBFEM): tipo de análisis. No lineal por defecto (plasticidad, NLGEOM, pernos
+// y contacto); el lineal es una vista rápida sin contacto.
+const femStartSchema = z
+  .object({
+    analysis: z.enum(["linear", "nonlinear"]).default("nonlinear"),
+    // Dónde actúan las fuerzas del análisis global: en el nudo o en el grupo de pernos.
+    forcesAt: z.enum(["node", "bolts"]).default("node"),
+    // Fase 5: curva M–φ y clasificación de rigidez (un análisis no lineal más por viga).
+    stiffness: z.boolean().default(false),
+    // Fase 5: diseño por capacidad (AISC 358-22 §2.4). Presente = se analiza (requiere
+    // no lineal). En la plantilla end plate manda su procedimiento; en una conexión
+    // personalizada Ry y Sh son obligatorios (el motor no supone ninguno).
+    capacity: z
+      .object({
+        Ry: z.number().min(1).max(2).nullable().optional(),
+        Sh: z.number().positive().max(5).nullable().optional(),
+        Lh: z.number().positive().max(100).nullable().optional(),
+        gravityCombination: z.string().min(1).max(120).nullable().optional(),
+      })
+      .strict()
+      .nullable()
+      .optional(),
   })
   .strict();
 
 const listConnectionsQuery = z.object({ nodeId: domainId.optional() });
 
 module.exports = {
+  femStartSchema,
   inspectConnectionSchema,
+  layoutPreviewSchema,
+  operationsSchema,
+  OPERATION_KINDS,
   createConnectionSchema,
   updateConnectionSchema,
   listConnectionsQuery,

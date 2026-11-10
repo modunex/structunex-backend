@@ -1,20 +1,31 @@
 const axios = require("axios");
+const { Prisma } = require("@prisma/client");
 const { prisma } = require("../config/db");
 const { env } = require("../config/env");
 const {
   buildInspectRequest,
   membersFromInspection,
+  plateMaterialId,
   orphanReasons,
   buildCheckRequest,
+  buildLayoutRequest,
+  connectionMaterialIds,
   checkInputsHash,
   runInputs,
   runSummary,
+  buildCbfemRequest,
+  cbfemRunInputs,
+  cbfemInputsHash,
+  femRunSummary,
 } = require("../lib/connections");
 const { isUuid, toApi } = require("../lib/ids");
 const { PARAMS_SCHEMAS, DEFAULT_CODE } = require("../schemas/connectionSchema");
 const { freshness, STALE_MESSAGES } = require("../lib/analysisFreshness");
 const { AppError } = require("../middleware/errorHandler");
-const { fromCalcError } = require("./calcService");
+const { fromCalcError, connectionMesh } = require("./calcService");
+const femJob = require("./connectionFemJob");
+const { mergePreferences } = require("../lib/designPreferences");
+const s3Service = require("./s3Service");
 const { assembleDesignModel } = require("./designService");
 const { currentModelHash, runStaleReason } = require("./analysisService");
 const { connectionLoadsHash } = require("../lib/designInputs");
@@ -144,7 +155,10 @@ async function inspect(project, nodeId) {
 
 const WITH_MEMBERS = {
   members: { select: { elementId: true, end: true, role: true }, orderBy: { role: "asc" } }, // supported antes que supporting
+  // La última comprobación AISC: es la que da el estado de la conexión. Las ejecuciones
+  // CBFEM (Fase 3) no comprueban nada y van por su lado (`fem*`).
   runs: {
+    where: { engine: "aisc" },
     orderBy: { createdAt: "desc" },
     take: 1,
     select: {
@@ -243,7 +257,7 @@ async function getOne(project, connectionId) {
  * comprueba) y que el MOTOR diga que la tipología aplica: el servidor no se fía de que
  * el cliente solo ofrezca el botón cuando toca.
  */
-const NAME_PREFIX = { shear_tab: "ST", extended_end_plate: "EP" };
+const NAME_PREFIX = { shear_tab: "ST", double_angle: "DA", extended_end_plate: "EP" };
 
 async function create(project, { nodeId, elementId, typology, name, code, configuration }) {
   const inspection = await inspect(project, nodeId);
@@ -285,20 +299,84 @@ async function validateParams(project, connection, params) {
       details: parsed.error.flatten(),
     });
   }
-  const materialId = parsed.data.plate?.materialId;
-  if (materialId) {
-    const material = await prisma.catalogMaterial.findFirst({
-      where: { id: materialId, ownerId: project.ownerId },
-      select: { id: true },
-    });
-    if (!material) throw new AppError(422, "El material de la placa no existe en tu catálogo.");
-  }
+  await assertMaterials(project, connectionMaterialIds(parsed.data, null));
   return parsed.data;
 }
 
-async function update(project, connectionId, { name, params, code }) {
+/** Cada material citado (placa, refuerzos, placas de las operaciones) existe en el
+ *  catálogo del dueño del proyecto. */
+async function assertMaterials(project, ids) {
+  if (!ids.length) return;
+  const found = await prisma.catalogMaterial.findMany({
+    where: { id: { in: ids }, ownerId: project.ownerId },
+    select: { id: true },
+  });
+  if (found.length !== ids.length) {
+    throw new AppError(422, "Un material de la conexión no existe en tu catálogo.", {
+      error: "connection.materialNotFound",
+      missing: ids.filter((id) => !found.some((m) => m.id === id)),
+    });
+  }
+}
+
+/**
+ * Operaciones → layout en el calc-service. Para la vista previa y para validar unas
+ * operaciones antes de guardarlas: el motor es quien las ejecuta, así que es quien dice
+ * si valen. Necesita el modelo del nudo, que se arma igual que para la inspección.
+ */
+async function computeLayout(project, row, { params, operations } = {}) {
+  const { request: inspectRequest } = await jointRequest(project, row.nodeId);
+  const request = buildLayoutRequest({ inspectRequest, connection: row, params, operations });
+  try {
+    const { data } = await axios.post(`${env.calcServiceUrl}/connections/layout`, request, {
+      timeout: 60000,
+    });
+    return data;
+  } catch (err) {
+    throw fromCalcError(err);
+  }
+}
+
+/** Vista previa de la geometría con parámetros u operaciones sin guardar (o lo guardado). */
+async function layout(project, connectionId, { params, operations } = {}) {
+  const row = await findOwned(project, connectionId);
+  let checkedParams;
+  if (params !== undefined) {
+    const schema = PARAMS_SCHEMAS[row.typology]?.[row.paramsVersion];
+    const parsed = schema ? schema.safeParse(params) : { success: false };
+    if (!parsed.success) {
+      throw new AppError(400, "Parámetros no válidos.", {
+        error: "ValidationError",
+        details: parsed.error?.flatten?.(),
+      });
+    }
+    checkedParams = parsed.data;
+  }
+  return computeLayout(project, row, { params: checkedParams, operations });
+}
+
+async function update(project, connectionId, { name, params, code, operations }) {
   const row = await findOwned(project, connectionId);
   const data = {};
+  if (operations !== undefined) {
+    if (operations === null) {
+      // Volver a la plantilla: las operaciones las escribe otra vez la tipología.
+      data.operations = Prisma.DbNull;
+    } else {
+      await assertMaterials(project, connectionMaterialIds(null, operations));
+      // Solo se guarda lo que el motor sabe ejecutar: una lista que rechaza es un 422
+      // con su motivo, nunca una conexión guardada que luego no se puede dibujar.
+      const result = await computeLayout(project, row, { operations });
+      if (result.status === "invalid") {
+        throw new AppError(422, "Las operaciones no son válidas.", {
+          error: "operations.invalid",
+          errors: result.errors || [],
+        });
+      }
+      data.operations = operations;
+    }
+    data.status = "draft";
+  }
   if (name !== undefined) data.name = name;
   if (code !== undefined && code !== row.code) {
     data.code = code;
@@ -358,7 +436,7 @@ async function check(project, connectionId) {
     { f1: Number.isFinite(f1) && f1 > 0 ? f1 : undefined }
   );
 
-  const materialId = row.params?.plate?.materialId;
+  const materialId = plateMaterialId(row.params);
   const plateMaterial = materialId
     ? await prisma.catalogMaterial.findFirst({
         where: { id: materialId, ownerId: project.ownerId },
@@ -435,7 +513,7 @@ async function check(project, connectionId) {
 async function latestRun(project, connectionId) {
   const row = await findOwned(project, connectionId);
   const runRow = await prisma.connectionRun.findFirst({
-    where: { connectionId: row.id },
+    where: { connectionId: row.id, engine: "aisc" },
     orderBy: { createdAt: "desc" },
   });
   if (!runRow) throw new AppError(404, "Esta conexión todavía no se ha comprobado.");
@@ -446,4 +524,139 @@ async function latestRun(project, connectionId) {
   };
 }
 
-module.exports = { inspect, list, getOne, create, update, remove, check, latestRun };
+// ─── Fase 3: elementos finitos (CBFEM) ────────────────────────────────────────────
+
+/** Materiales del catálogo que cita la conexión (placa, refuerzos, placas de operaciones). */
+async function catalogMaterialsOf(project, row) {
+  const ids = connectionMaterialIds(row.params, row.operations);
+  if (!ids.length) return [];
+  return prisma.catalogMaterial.findMany({
+    where: { id: { in: ids }, ownerId: project.ownerId },
+    select: { id: true, name: true, Fy: true, Fu: true, E: true },
+  });
+}
+
+/** Vista previa de la malla CBFEM con lo guardado o con lo que se está editando. */
+async function mesh(project, connectionId, { params, operations } = {}) {
+  const row = await findOwned(project, connectionId);
+  const { request: inspectRequest } = await jointRequest(project, row.nodeId);
+  const request = buildLayoutRequest({ inspectRequest, connection: row, params, operations });
+  return connectionMesh(request);
+}
+
+/**
+ * Lanza el análisis CBFEM de la conexión guardada con el análisis vigente (las mismas
+ * fuerzas por combinación que el check). 409 si la conexión quedó huérfana, si el
+ * análisis no es del modelo actual o si ya hay uno en curso.
+ */
+async function femStart(
+  project,
+  connectionId,
+  { analysis = "nonlinear", forcesAt = "node", stiffness = false, capacity = null } = {}
+) {
+  const row = await findOwned(project, connectionId);
+  const orphan = orphanReasons(row, await modelIndex(project.id));
+  if (orphan.length) {
+    throw new AppError(409, "La conexión ya no corresponde al modelo (nudo o barra cambiados).", {
+      error: "connection.orphaned",
+      reasons: orphan,
+    });
+  }
+  const { run, request: inspectRequest, designPreferences } = await jointRequest(project, row.nodeId);
+  const [plateMaterial, doublerMaterial] = await Promise.all(
+    [plateMaterialId(row.params), row.params?.doublerPlate?.materialId].map((id) =>
+      id
+        ? prisma.catalogMaterial.findFirst({
+            where: { id, ownerId: project.ownerId },
+            select: { id: true, name: true, Fy: true, Fu: true, E: true },
+          })
+        : null
+    )
+  );
+  const checkRequest = buildCheckRequest({
+    inspectRequest,
+    connection: row,
+    plateMaterial,
+    doublerMaterial,
+    comboNames: designPreferences.comboNames || [],
+    omega0: designPreferences.seismic?.omega0,
+  });
+  const prefs = mergePreferences(designPreferences, null);
+  const request = buildCbfemRequest({
+    checkRequest,
+    catalogMaterials: await catalogMaterialsOf(project, row),
+    analysis,
+    forcesAt,
+    stiffness,
+    capacity,
+    criteria: {
+      plasticStrainLimit: prefs.cbfem.plasticStrainLimit,
+      bucklingFactorLimit: prefs.cbfem.bucklingFactorLimit,
+    },
+  });
+  const created = await femJob.start({
+    projectId: project.id,
+    connectionId: row.id,
+    analysisRunId: run.id,
+    analysis,
+    request,
+    inputs: cbfemRunInputs(request),
+    inputsHash: cbfemInputsHash(request),
+    code: row.code,
+    method: row.method,
+  });
+  return femRunSummary(created, { latestSolvedRunId: run.id, connectionUpdatedAt: row.updatedAt });
+}
+
+/** La última ejecución CBFEM (en curso o terminada), o null. */
+async function femLatest(project, connectionId) {
+  const row = await findOwned(project, connectionId);
+  let runRow = await prisma.connectionRun.findFirst({
+    where: { connectionId: row.id, engine: "cbfem" },
+    orderBy: { createdAt: "desc" },
+  });
+  runRow = await femJob.settleIfOrphaned(runRow);
+  const solvedId = await latestSolvedRunId(project.id);
+  return femRunSummary(runRow, { latestSolvedRunId: solvedId, connectionUpdatedAt: row.updatedAt });
+}
+
+/** El criterio CBFEM vigente del proyecto (el que usará el próximo análisis). */
+async function femCriteria(project) {
+  const configuration = await prisma.modelConfiguration.findUnique({
+    where: { projectId: project.id },
+    select: { designPreferences: true },
+  });
+  return mergePreferences(configuration?.designPreferences || {}, null).cbfem;
+}
+
+function femCancel(project, connectionId) {
+  return { cancelled: femJob.cancel(connectionId) };
+}
+
+/**
+ * URLs firmadas de la malla y de los campos de las combinaciones pedidas de una
+ * ejecución CBFEM. `combinations` vacío = la que gobierna.
+ */
+async function femFiles(project, connectionId, runId, { combinations = [] } = {}) {
+  const row = await findOwned(project, connectionId);
+  const runRow = await prisma.connectionRun.findFirst({
+    where: { id: runId, connectionId: row.id, engine: "cbfem" },
+  });
+  if (!runRow) throw new AppError(404, "Esa ejecución no existe.");
+  const files = runRow.files || {};
+  if (!runRow.s3Prefix || !files.mesh) {
+    throw new AppError(409, "Esa ejecución no tiene resultados guardados.", { error: "connection.femNoFiles" });
+  }
+  const wanted = combinations.length ? combinations : [runRow.results?.governing].filter(Boolean);
+  const paths = { mesh: files.mesh };
+  for (const name of wanted) {
+    const path = files.fields?.[name];
+    if (path) paths[`fields:${name}`] = path;
+  }
+  return s3Service.signRunPaths(project.id, runRow.id, paths);
+}
+
+module.exports = {
+  inspect, list, getOne, create, update, remove, check, latestRun, layout,
+  mesh, femStart, femLatest, femCancel, femFiles, femCriteria,
+};
