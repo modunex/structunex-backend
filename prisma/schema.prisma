@@ -35,10 +35,72 @@ model User {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
+  // ─── Facturación (Stripe). La rellena el webhook de Stripe; ver services/billingService.js ───
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  plan                 String    @default("free") // free | student | principal
+  planStatus           String? // estado de la suscripción en Stripe (active, past_due, canceled…)
+  planPriceKey         String? // lookup_key del precio suscrito (p. ej. principal_annual)
+  planPeriodEnd        DateTime?
+  // Lookup keys de las features activas según Stripe Entitlements. Se suman a las del
+  // plan (lib/billingPlans.effectiveFeatures), nunca las sustituyen.
+  features             String[]  @default([])
+  featuresSyncedAt     DateTime?
+  // Créditos de IA incluidos en el plan: se reponen cada periodo y no se acumulan.
+  aiCreditsMonthly     Int       @default(0)
+  aiCreditsResetAt     DateTime?
+
   forumProfile ForumProfile?
+  creditGrants AiCreditGrant[]
+  creditLedger AiCreditEntry[]
 
   @@index([email])
   @@map("users")
+}
+
+// Créditos de IA comprados: cada paquete es un lote con su propio vencimiento. El consumo
+// gasta primero los créditos del plan y después los lotes, del que vence antes al último.
+model AiCreditGrant {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @db.Uuid
+  credits   Int
+  remaining Int
+  expiresAt DateTime
+  stripeRef String   @unique // Checkout Session: idempotencia ante webhooks repetidos
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("ai_credit_grants")
+}
+
+// Libro de movimientos de créditos (append-only): de aquí sale el historial de "Uso".
+model AiCreditEntry {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @db.Uuid
+  delta     Int // + recarga o compra, − consumo
+  kind      String // monthly_grant | purchase | consumption
+  messageId String?  @db.Uuid // AiMessage que lo consumió
+  projectId String?  @db.Uuid
+  model     String?
+  usage     Json? // tokens del turno, tal como los devuelve la API
+  stripeRef String?  @unique // factura o Checkout Session (idempotencia)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("ai_credit_entries")
+}
+
+// Eventos de Stripe ya procesados: Stripe reenvía y puede duplicar entregas.
+model StripeEvent {
+  id          String   @id // evt_…
+  type        String
+  processedAt DateTime @default(now())
+
+  @@map("stripe_events")
 }
 
 // ─── Catálogos del usuario (no ligados a un proyecto) ───

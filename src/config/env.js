@@ -107,6 +107,23 @@ const env = {
   // Biblioteca de imágenes: tope por archivo y por proyecto.
   imageMaxBytes: Number(process.env.IMAGE_MAX_BYTES || 20 * 1024 * 1024),
   imageProjectMaxBytes: Number(process.env.IMAGE_PROJECT_MAX_BYTES || 2 * 1024 * 1024 * 1024),
+
+  // Facturación (Stripe). Ver src/lib/billingPlans.js y services/billingService.js.
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY || "",
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
+  // Stripe como comerciante registrado (impuestos, fraude, disputas). Debe estar
+  // activado en el Dashboard (Settings → Managed Payments).
+  stripeManagedPayments: process.env.STRIPE_MANAGED_PAYMENTS !== "false",
+  // A dónde vuelve el usuario desde Checkout y el portal de cliente.
+  appUrl: (process.env.APP_URL || "https://app.structunex.com").replace(/\/+$/, ""),
+  // "true": se aplican los límites de cada plan. Cualquier otro valor: solo se registran
+  // (planes, créditos) y nadie queda bloqueado. Arranca apagado a propósito.
+  billingEnforce: process.env.BILLING_ENFORCE === "true",
+  // Plazas de la oferta Founding Member (precio principal_founding_annual).
+  foundingMemberLimit: Number(process.env.FOUNDING_MEMBER_LIMIT || 100),
+  // Créditos de IA: tarifas de Bedrock (USD por millón de tokens) y margen sobre el costo.
+  aiPricesUsdPerMtok: process.env.AI_PRICES_USD_PER_MTOK || "",
+  aiCreditMarkup: Number(process.env.AI_CREDIT_MARKUP || 4),
 };
 
 if (!env.databaseUrl) {
@@ -141,6 +158,20 @@ if (!env.mailchimpApiKey || !env.mailchimpAudienceId) {
   console.warn(
     "[env] MAILCHIMP_API_KEY / MAILCHIMP_AUDIENCE_ID not set — new users will be " +
       "saved to the DB but not synced to the Mailchimp audience."
+  );
+}
+
+if (!env.stripeSecretKey || !env.stripeWebhookSecret) {
+  console.warn(
+    "[env] STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET not set — checkout, the customer " +
+      "portal and the Stripe webhook are disabled. Everyone stays on the Free plan."
+  );
+}
+
+if (env.billingEnforce && !env.aiPricesUsdPerMtok) {
+  console.warn(
+    "[env] BILLING_ENFORCE is on but AI_PRICES_USD_PER_MTOK is not set — AI messages " +
+      "will be refused, because their credit cost cannot be computed."
   );
 }
 
