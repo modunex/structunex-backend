@@ -63,7 +63,11 @@ const endPlateParamsV1 = z
       .partial()
       .strict(),
     stiffener: z.object({ thickness: length, length: length }).partial().strict(),
-    welds: z.object({ reinforcingFillet: length, webFillet: length }).partial().strict(),
+    // electrode: el de las CJP de las alas de la viga a la placa (sin él el CBFEM no las comprueba).
+    welds: z
+      .object({ reinforcingFillet: length, webFillet: length, electrode: z.enum(["E70"]).nullable() })
+      .partial()
+      .strict(),
     column: z.object({ continuityPlates: yesNo }).partial().strict(),
     // Placas de continuidad (AISC 341-22 E3.6f.2), si están.
     continuityPlate: z
