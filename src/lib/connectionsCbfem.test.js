@@ -65,6 +65,17 @@ test("diseño por capacidad: viaja sin vacíos, entra en la huella y en el resum
   assert.deepEqual(s.capacity, { Mpr: 700 });
 });
 
+test("rendimiento: gobernantes y sin NLGEOM por defecto; ambas entran en la huella", () => {
+  const a = buildCbfemRequest({ checkRequest });
+  assert.equal(a.combinationsMode, "governing");
+  assert.equal(a.geometricNonlinear, false);
+  const b = buildCbfemRequest({ checkRequest, combinationsMode: "all", geometricNonlinear: true });
+  assert.equal(b.combinationsMode, "all");
+  assert.equal(b.geometricNonlinear, true);
+  assert.notEqual(cbfemInputsHash(a), cbfemInputsHash(b));
+  assert.equal(cbfemRunInputs(b).geometricNonlinear, true);
+});
+
 test("análisis desconocido: error", () => {
   assert.throws(() => buildCbfemRequest({ checkRequest, analysis: "dynamic" }));
 });

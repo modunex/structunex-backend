@@ -296,6 +296,10 @@ const femStartSchema = z
       .strict()
       .nullable()
       .optional(),
+    // Rendimiento: solo las combinaciones gobernantes (por defecto) o todas.
+    combinationsMode: z.enum(["governing", "all"]).default("governing"),
+    // No linealidad geométrica (grandes desplazamientos). Por defecto no.
+    geometricNonlinear: z.boolean().default(false),
   })
   .strict();
 
