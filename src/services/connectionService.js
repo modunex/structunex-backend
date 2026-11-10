@@ -558,7 +558,7 @@ async function femStart(
     stiffness = false,
     capacity = null,
     combinationsMode = "governing",
-    geometricNonlinear = false,
+    geometricNonlinear = true,
   } = {}
 ) {
   const row = await findOwned(project, connectionId);
