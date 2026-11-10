@@ -8,7 +8,7 @@ const inspectConnectionSchema = z.object({
 });
 
 // Tipologías que el motor sabe evaluar (ver calc-service app/connections/typologies.py).
-const TYPOLOGIES = ["shear_tab", "extended_end_plate"];
+const TYPOLOGIES = ["shear_tab", "double_angle", "extended_end_plate"];
 
 // AISC 358-22 Cap. 6: placa extendida de 4 pernos sin y con rigidizador, y de 8 pernos.
 const END_PLATE_CONFIGURATIONS = ["4E", "4ES", "8ES"];
@@ -196,8 +196,46 @@ const shearTabParamsV1 = z
   .partial()
   .strict();
 
+// ─── Parámetros del doble ángulo atornillado, versión 1 ───
+// (calc-service app/connections/aisc/double_angle.py; Manual Parte 10, II.A-1A). Mismas
+// reglas que el shear tab: todo opcional y anulable, lo que falta es NO VERIFICABLE.
+const doubleAngleParamsV1 = z
+  .object({
+    angles: z
+      .object({
+        legBeam: length, // ala contra el alma de la viga
+        legSupport: length, // ala contra el apoyo
+        thickness: length,
+        materialId: z.string().uuid().nullable(),
+      })
+      .partial()
+      .strict(),
+    bolts: z
+      .object({
+        diameter: length,
+        grade: z.enum(["A325", "A490"]).nullable(),
+        threads: z.enum(["N", "X"]).nullable(),
+        hole: z.enum(["STD"]).nullable(),
+        rows: z.number().int().min(1).max(20).nullable(),
+        pitch: length,
+        edgeVertical: length,
+        bearingDeformation: z.enum(["considered", "notConsidered"]).nullable(),
+        topDistance: length,
+      })
+      .partial()
+      .strict(),
+    // Del talón (cara del apoyo) a la línea de pernos de la viga.
+    beamGage: length,
+    // Entre las dos líneas de pernos del apoyo (a través del alma).
+    supportGage: length,
+    setback: z.number().min(0).finite().nullable(),
+  })
+  .partial()
+  .strict();
+
 const PARAMS_SCHEMAS = {
   shear_tab: { 1: shearTabParamsV1 },
+  double_angle: { 1: doubleAngleParamsV1 },
   extended_end_plate: { 1: endPlateParamsV1 },
 };
 
@@ -206,7 +244,7 @@ const PARAMS_SCHEMAS = {
 // que es quien las ejecuta: aquí solo lo que no depende del motor (tipo e id de cada
 // operación, tamaño de la lista). Antes de guardar, el servicio las ejecuta y rechaza
 // una lista que el motor no acepta (422 con el motivo).
-const OPERATION_KINDS = ["cut", "plate", "boltGrid", "weld"];
+const OPERATION_KINDS = ["cut", "plate", "angle", "boltGrid", "weld"];
 const operationSchema = z
   .object({
     op: z.enum(OPERATION_KINDS),

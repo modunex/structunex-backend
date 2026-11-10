@@ -5,6 +5,7 @@ const { env } = require("../config/env");
 const {
   buildInspectRequest,
   membersFromInspection,
+  plateMaterialId,
   orphanReasons,
   buildCheckRequest,
   buildLayoutRequest,
@@ -256,7 +257,7 @@ async function getOne(project, connectionId) {
  * comprueba) y que el MOTOR diga que la tipología aplica: el servidor no se fía de que
  * el cliente solo ofrezca el botón cuando toca.
  */
-const NAME_PREFIX = { shear_tab: "ST", extended_end_plate: "EP" };
+const NAME_PREFIX = { shear_tab: "ST", double_angle: "DA", extended_end_plate: "EP" };
 
 async function create(project, { nodeId, elementId, typology, name, code, configuration }) {
   const inspection = await inspect(project, nodeId);
@@ -435,7 +436,7 @@ async function check(project, connectionId) {
     { f1: Number.isFinite(f1) && f1 > 0 ? f1 : undefined }
   );
 
-  const materialId = row.params?.plate?.materialId;
+  const materialId = plateMaterialId(row.params);
   const plateMaterial = materialId
     ? await prisma.catalogMaterial.findFirst({
         where: { id: materialId, ownerId: project.ownerId },
@@ -563,7 +564,7 @@ async function femStart(
   }
   const { run, request: inspectRequest, designPreferences } = await jointRequest(project, row.nodeId);
   const [plateMaterial, doublerMaterial] = await Promise.all(
-    [row.params?.plate?.materialId, row.params?.doublerPlate?.materialId].map((id) =>
+    [plateMaterialId(row.params), row.params?.doublerPlate?.materialId].map((id) =>
       id
         ? prisma.catalogMaterial.findFirst({
             where: { id, ownerId: project.ownerId },

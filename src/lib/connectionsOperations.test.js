@@ -91,7 +91,8 @@ test("el PATCH acepta operaciones de los tipos que el motor ejecuta, o null", ()
   assert.equal(updateConnectionSchema.safeParse({ operations: ops }).success, true);
   assert.equal(updateConnectionSchema.safeParse({ operations: null }).success, true);
   // Un tipo que el motor aún no tiene se rechaza aquí, no se guarda.
-  assert.equal(updateConnectionSchema.safeParse({ operations: [{ op: "angle", id: "A1" }] }).success, false);
+  assert.equal(updateConnectionSchema.safeParse({ operations: [{ op: "cope", id: "A1" }] }).success, false);
+  assert.equal(updateConnectionSchema.safeParse({ operations: [{ op: "angle", id: "L1" }] }).success, true);
   assert.equal(updateConnectionSchema.safeParse({ operations: [{ op: "plate", id: "a b" }] }).success, false);
   assert.equal(updateConnectionSchema.safeParse({ operations: new Array(201).fill(ops[0]) }).success, false);
 });

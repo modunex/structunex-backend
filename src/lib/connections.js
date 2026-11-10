@@ -304,11 +304,17 @@ function femRunSummary(run, { latestSolvedRunId = null, connectionUpdatedAt = nu
   };
 }
 
+/** El acero de las placas de la conexión: la placa (shear tab, placa extrema) o los
+ *  ángulos (doble ángulo). Viaja al motor como `plateMaterial`. */
+function plateMaterialId(params) {
+  return params?.plate?.materialId ?? params?.angles?.materialId ?? null;
+}
+
 /** Los materiales del catálogo que una conexión cita: placa, refuerzos y las placas de
  *  sus operaciones (sin repetir). */
 function connectionMaterialIds(params, operations) {
   const ids = new Set();
-  if (params?.plate?.materialId) ids.add(params.plate.materialId);
+  if (plateMaterialId(params)) ids.add(plateMaterialId(params));
   if (params?.doublerPlate?.materialId) ids.add(params.doublerPlate.materialId);
   for (const op of operations || []) if (op?.materialId) ids.add(op.materialId);
   return [...ids];
@@ -392,6 +398,7 @@ module.exports = {
   VGRAVITY_COMBINATION,
   buildInspectRequest,
   membersFromInspection,
+  plateMaterialId,
   orphanReasons,
   buildCheckRequest,
   checkInputsHash,
