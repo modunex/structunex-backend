@@ -214,6 +214,7 @@ function buildCbfemRequest({
   analysis = "nonlinear",
   forcesAt = "node",
   stiffness = false,
+  capacity = null,
   criteria = null,
   storage = null,
 }) {
@@ -229,9 +230,19 @@ function buildCbfemRequest({
     analysis,
     forcesAt,
     stiffness: Boolean(stiffness),
+    ...(capacity ? { capacity: cleanCapacity(capacity) } : {}),
     ...(criteria ? { criteria } : {}),
     ...(storage ? { storage } : {}),
   };
+}
+
+/** Los datos del diseño por capacidad sin los vacíos (null = no dado). */
+function cleanCapacity(capacity) {
+  const out = {};
+  for (const k of ["Ry", "Sh", "Lh", "gravityCombination"]) {
+    if (capacity[k] !== null && capacity[k] !== undefined && capacity[k] !== "") out[k] = capacity[k];
+  }
+  return out;
 }
 
 /** Lo que se guarda como entradas de una ejecución CBFEM (sin el destino, que no
@@ -245,6 +256,7 @@ function cbfemRunInputs(request) {
     analysis: rest.analysis,
     forcesAt: rest.forcesAt,
     stiffness: Boolean(rest.stiffness),
+    capacity: rest.capacity ?? null,
     criteria: rest.criteria ?? null,
     plateMaterial: rest.plateMaterial,
     doublerMaterial: rest.doublerMaterial ?? null,
@@ -282,6 +294,7 @@ function femRunSummary(run, { latestSolvedRunId = null, connectionUpdatedAt = nu
     assumptions: results.assumptions ?? [],
     checks: results.checks ?? null,
     stiffness: results.stiffness ?? [],
+    capacity: results.capacity ?? null,
     meshStats: results.meshStats ?? null,
     meshRules: results.meshRules ?? null,
     solver: results.solver ?? null,

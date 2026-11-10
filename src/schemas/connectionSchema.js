@@ -245,6 +245,19 @@ const femStartSchema = z
     forcesAt: z.enum(["node", "bolts"]).default("node"),
     // Fase 5: curva M–φ y clasificación de rigidez (un análisis no lineal más por viga).
     stiffness: z.boolean().default(false),
+    // Fase 5: diseño por capacidad (AISC 358-22 §2.4). Presente = se analiza (requiere
+    // no lineal). En la plantilla end plate manda su procedimiento; en una conexión
+    // personalizada Ry y Sh son obligatorios (el motor no supone ninguno).
+    capacity: z
+      .object({
+        Ry: z.number().min(1).max(2).nullable().optional(),
+        Sh: z.number().positive().max(5).nullable().optional(),
+        Lh: z.number().positive().max(100).nullable().optional(),
+        gravityCombination: z.string().min(1).max(120).nullable().optional(),
+      })
+      .strict()
+      .nullable()
+      .optional(),
   })
   .strict();
 

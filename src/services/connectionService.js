@@ -548,7 +548,11 @@ async function mesh(project, connectionId, { params, operations } = {}) {
  * fuerzas por combinación que el check). 409 si la conexión quedó huérfana, si el
  * análisis no es del modelo actual o si ya hay uno en curso.
  */
-async function femStart(project, connectionId, { analysis = "nonlinear", forcesAt = "node", stiffness = false } = {}) {
+async function femStart(
+  project,
+  connectionId,
+  { analysis = "nonlinear", forcesAt = "node", stiffness = false, capacity = null } = {}
+) {
   const row = await findOwned(project, connectionId);
   const orphan = orphanReasons(row, await modelIndex(project.id));
   if (orphan.length) {
@@ -583,6 +587,7 @@ async function femStart(project, connectionId, { analysis = "nonlinear", forcesA
     analysis,
     forcesAt,
     stiffness,
+    capacity,
     criteria: {
       plasticStrainLimit: prefs.cbfem.plasticStrainLimit,
       bucklingFactorLimit: prefs.cbfem.bucklingFactorLimit,

@@ -51,6 +51,20 @@ test("posición de las fuerzas y criterio del proyecto viajan en la petición y 
   assert.notEqual(cbfemInputsHash(a), cbfemInputsHash(c));
 });
 
+test("diseño por capacidad: viaja sin vacíos, entra en la huella y en el resumen", () => {
+  const a = buildCbfemRequest({ checkRequest, analysis: "nonlinear" });
+  assert.equal(a.capacity, undefined);
+  const b = buildCbfemRequest({ checkRequest, capacity: { Ry: 1.1, Sh: 0.15, Lh: null, gravityCombination: "" } });
+  assert.deepEqual(b.capacity, { Ry: 1.1, Sh: 0.15 });
+  assert.notEqual(cbfemInputsHash(a), cbfemInputsHash(b));
+  assert.deepEqual(cbfemRunInputs(b).capacity, { Ry: 1.1, Sh: 0.15 });
+  assert.equal(cbfemRunInputs(a).capacity, null);
+  // plantilla end plate: el objeto vacío pide MC con los datos de su procedimiento
+  assert.deepEqual(buildCbfemRequest({ checkRequest, capacity: {} }).capacity, {});
+  const s = femRunSummary({ id: "r", status: "done", createdAt: new Date(), results: { capacity: { Mpr: 700 } } });
+  assert.deepEqual(s.capacity, { Mpr: 700 });
+});
+
 test("análisis desconocido: error", () => {
   assert.throws(() => buildCbfemRequest({ checkRequest, analysis: "dynamic" }));
 });
