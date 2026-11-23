@@ -26,7 +26,11 @@ async function createProject({ ownerId, ...input }) {
   for (const field of CREATE_FIELDS) {
     if (input[field] !== undefined) data[field] = input[field];
   }
-  return toApi(await prisma.project.create({ data: jsonNulls(data, "project") }), "project");
+  const project = jsonNulls(data, "project");
+  // El juego de barras del asistente vive en la configuración del modelo: se crea con el
+  // proyecto, en la misma escritura, para que nunca exista uno sin el otro.
+  if (input.rebarSet) project.configuration = { create: { rebarSet: input.rebarSet } };
+  return toApi(await prisma.project.create({ data: project }), "project");
 }
 
 // Metadata only — never loads the model. That's the point of normalizing.

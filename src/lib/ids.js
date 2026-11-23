@@ -80,7 +80,7 @@ function stripChild(row, kind) {
 // hay que pasar Prisma.DbNull para guardar un NULL de SQL.
 const NULLABLE_JSON = {
   project: ["analysisProgress", "designProgress", "params"],
-  modelConfiguration: ["gridSystem", "massSource", "activeDofs", "designPreferences"],
+  modelConfiguration: ["gridSystem", "massSource", "activeDofs", "designPreferences", "rebarSet"],
   modelElement: ["releases"],
   modelArea: ["mesh"],
   catalogFrameSection: ["reinforcement"],

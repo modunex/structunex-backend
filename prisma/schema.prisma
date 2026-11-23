@@ -282,6 +282,11 @@ model ModelConfiguration {
   defaultFrameSectionId String?
   defaultAreaSectionId  String?
   designPreferences     Json?
+  // Juego de barras de refuerzo del proyecto (Define ▸ Barras de refuerzo; se elige al
+  // crear el proyecto): { preset, bars: [{ id, label, db (m), area (m²), mass (kg/m) }] }.
+  // null = proyecto anterior a D1, sin catálogo: los diámetros de sección siguen libres.
+  // No entra en la huella del análisis.
+  rebarSet              Json?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
