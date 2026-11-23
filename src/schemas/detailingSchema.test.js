@@ -26,3 +26,9 @@ test("D4: edición por grupo", () => {
     assert.equal(detailingParams.safeParse(bad).success, false, JSON.stringify(bad).slice(0, 60));
   }
 });
+
+test("D6: tipo de pieza", () => {
+  const { createMemberBody } = require("./detailingSchema");
+  assert.equal(createMemberBody.parse({ elementId: "C1", kind: "column" }).kind, "column");
+  assert.equal(createMemberBody.safeParse({ elementId: "C1", kind: "wall" }).success, false);
+});

@@ -76,7 +76,10 @@ async function line(project, elementId) {
 
 // ─── D3: vigas detalladas (propuesta de armado persistida) ──────────────────────────
 
-async function calcPropose(project, elementId, params) {
+// D6: una columna se detalla con su propio endpoint (línea vertical); el resto es igual.
+const PROPOSE_PATH = { beam: "/detailing/propose", column: "/detailing/column/propose" };
+
+async function calcPropose(project, elementId, params, kind = "beam") {
   const { run, request } = await lineRequest(project, elementId);
   const configuration = await prisma.modelConfiguration.findUnique({
     where: { projectId: project.id },
@@ -90,7 +93,7 @@ async function calcPropose(project, elementId, params) {
   let data;
   try {
     ({ data } = await axios.post(
-      `${env.calcServiceUrl}/detailing/propose`,
+      `${env.calcServiceUrl}${PROPOSE_PATH[kind] || PROPOSE_PATH.beam}`,
       { ...request, rebarSet: configuration.rebarSet, params: params || {} },
       { timeout: 60000 }
     ));
@@ -125,13 +128,14 @@ function rowFrom(data, run, params) {
 async function createMember(project, body) {
   // El cuerpo ya lo validó `validate(createMemberBody)` en la ruta.
   const params = body?.params || {};
-  const { run, data } = await calcPropose(project, body?.elementId, params);
+  const kind = body?.kind === "column" ? "column" : "beam";
+  const { run, data } = await calcPropose(project, body?.elementId, params, kind);
   const ids = data.line.elementIds;
   const lineKey = ids.join("|");
   const row = rowFrom(data, run, params);
   const saved = await prisma.concreteMember.upsert({
     where: { projectId_lineKey: { projectId: project.id, lineKey } },
-    create: jsonNulls({ projectId: project.id, kind: "beam", name: ids.length > 1 ? `${ids[0]}–${ids[ids.length - 1]}` : ids[0], lineKey, elementIds: ids, ...row }, "concreteMember"),
+    create: jsonNulls({ projectId: project.id, kind, name: ids.length > 1 ? `${ids[0]}–${ids[ids.length - 1]}` : ids[0], lineKey, elementIds: ids, ...row }, "concreteMember"),
     update: jsonNulls(row, "concreteMember"),
   });
   return { member: memberToApi(saved), ...data };
@@ -167,7 +171,7 @@ async function getMember(project, memberId) {
   let current = null;
   let currentError = null;
   try {
-    current = (await calcPropose(project, ids[0], row.params)).data;
+    current = (await calcPropose(project, ids[0], row.params, row.kind)).data;
   } catch (err) {
     currentError = err.details?.error || err.message;
   }
@@ -180,7 +184,7 @@ async function getMember(project, memberId) {
 async function updateMember(project, memberId, body) {
   const row = await findMember(project.id, memberId);
   const params = body?.params ?? row.params ?? {};
-  const { run, data } = await calcPropose(project, (row.elementIds || [])[0], params);
+  const { run, data } = await calcPropose(project, (row.elementIds || [])[0], params, row.kind);
   if (data.line.elementIds.join("|") !== row.lineKey) {
     // La línea cambió en el modelo (se añadió o quitó una barra): es otra viga.
     throw new AppError(409, "La viga cambió en el modelo: vuelve a crearla desde Armado.", {
@@ -205,6 +209,10 @@ async function checkMember(project, memberId) {
   const row = await findMember(project.id, memberId);
   if (!row.layout) {
     throw new AppError(409, "La viga no tiene armado que comprobar.", { error: "detailing.noLayout" });
+  }
+  if (row.kind === "column") {
+    // D6: la resistencia de una columna es la de Design (las barras son las de la sección).
+    throw new AppError(409, "La resistencia de la columna es la de Design.", { error: "detailing.columnCheckIsDesign" });
   }
   const { run, request } = await lineRequest(project, (row.elementIds || [])[0]);
   const [analysisRun, configuration, resolved] = await Promise.all([

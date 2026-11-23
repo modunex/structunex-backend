@@ -33,7 +33,14 @@ const detailingParams = z
   .strict();
 
 // Cuerpos de POST /detailing/members y PUT /detailing/members/:id.
-const createMemberBody = z.object({ elementId: z.string().min(1), params: detailingParams.optional() }).strict();
+const createMemberBody = z
+  .object({
+    elementId: z.string().min(1),
+    // D6: "column" detalla la línea vertical que contiene la barra.
+    kind: z.enum(["beam", "column"]).optional(),
+    params: detailingParams.optional(),
+  })
+  .strict();
 const updateMemberBody = z.object({ params: detailingParams }).strict();
 
 module.exports = { detailingParams, createMemberBody, updateMemberBody };
