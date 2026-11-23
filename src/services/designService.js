@@ -451,5 +451,7 @@ module.exports = {
   savePreferences,
   seismicInputs,
   joints,
+  latestRun,
+  currentInputsHash,
   DEFAULT_PREFERENCES,
 };
