@@ -13,6 +13,7 @@ router.get("/members", c.listMembers);
 router.post("/members", validate(createMemberBody), c.createMember); // { elementId, params? }
 router.get("/members/:memberId", c.getMember); // + propuesta actual y `stale`
 router.put("/members/:memberId", validate(updateMemberBody), c.updateMember); // { params } → nueva propuesta
+router.post("/members/:memberId/check", c.checkMember); // D4: comprueba el armado guardado
 router.delete("/members/:memberId", c.deleteMember);
 
 module.exports = router;

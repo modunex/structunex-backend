@@ -13,3 +13,16 @@ test("acepta lo que el motor entiende y rechaza lo demás", () => {
     assert.equal(detailingParams.safeParse(bad).success, false, JSON.stringify(bad));
   }
 });
+
+test("D4: edición por grupo", () => {
+  const ok = detailingParams.parse({ groupOverrides: { S1: { count: 3 }, B0: { barId: "n5", count: 2 } } });
+  assert.equal(ok.groupOverrides.S1.count, 3);
+  for (const bad of [
+    { groupOverrides: { S1: { count: 0 } } },
+    { groupOverrides: { S1: { count: 2.5 } } },
+    { groupOverrides: { S1: { layer: 2 } } },
+    { groupOverrides: Object.fromEntries(Array.from({ length: 61 }, (_, i) => [`G${i}`, { count: 2 }])) },
+  ]) {
+    assert.equal(detailingParams.safeParse(bad).success, false, JSON.stringify(bad).slice(0, 60));
+  }
+});

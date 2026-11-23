@@ -21,8 +21,11 @@ const getMember = asyncHandler(async (req, res) => {
 const updateMember = asyncHandler(async (req, res) => {
   res.json(await detailingService.updateMember(req.project, req.params.memberId, req.body));
 });
+const checkMember = asyncHandler(async (req, res) => {
+  res.json(await detailingService.checkMember(req.project, req.params.memberId));
+});
 const deleteMember = asyncHandler(async (req, res) => {
   res.json(await detailingService.deleteMember(req.projectId, req.params.memberId));
 });
 
-module.exports = { line, listMembers, createMember, getMember, updateMember, deleteMember };
+module.exports = { line, listMembers, createMember, getMember, updateMember, checkMember, deleteMember };

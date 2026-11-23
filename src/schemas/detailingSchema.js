@@ -18,6 +18,17 @@ const detailingParams = z
     spacingStep: z.union([z.literal(0.01), z.literal(0.025), z.literal(0.05)]).optional(),
     // Tamaño máximo del agregado (m), para la separación libre de 25.2.1.
     aggregate: z.number().min(0.009).max(0.04).optional(),
+    // D4: edición a mano por grupo de barras (id del grupo → cantidad y/o barra). El
+    // motor vuelve a comprobar que caben y los marca como manuales.
+    groupOverrides: z
+      .record(
+        z.string().min(1).max(40),
+        z
+          .object({ count: z.number().int().min(1).max(20).optional(), barId: barId })
+          .strict()
+      )
+      .refine((o) => Object.keys(o).length <= 60, "demasiados grupos")
+      .optional(),
   })
   .strict();
 

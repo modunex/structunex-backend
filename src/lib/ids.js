@@ -40,7 +40,10 @@ const KEEP_NULL = {
   ],
   modelArea: ["diaphragm"],
   // Rebar Studio: sin propuesta (bloqueada por un error) es un null que la interfaz lee.
-  concreteMember: ["layout", "inputsHash", "engineVersion", "designRunId"],
+  concreteMember: [
+    "layout", "inputsHash", "engineVersion", "designRunId",
+    "checkResult", "checkStatus", "checkHash", "checkedAt",
+  ],
 };
 
 function clean(row, kind) {
@@ -86,7 +89,7 @@ const NULLABLE_JSON = {
   modelElement: ["releases"],
   modelArea: ["mesh"],
   catalogFrameSection: ["reinforcement"],
-  concreteMember: ["layout"],
+  concreteMember: ["layout", "checkResult"],
 };
 
 /** Copia `data` cambiando null por Prisma.DbNull en las columnas Json de `kind`. */

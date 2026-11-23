@@ -104,9 +104,13 @@ async function calcPropose(project, elementId, params) {
 
 const memberToApi = (row) => toApi(row, "concreteMember");
 
+// Columnas de la comprobación D4 vacías: un armado nuevo aún no está comprobado.
+const NO_CHECK = { checkResult: null, checkStatus: null, checkHash: null, checkedAt: null };
+
 function rowFrom(data, run, params) {
   const p = data.proposal;
   return {
+    ...NO_CHECK,
     params: params || {},
     layout: p.layout ?? null,
     issues: p.issues || [],
@@ -144,7 +148,10 @@ async function listMembers(projectId) {
   const rows = await prisma.concreteMember.findMany({
     where: { projectId },
     orderBy: { createdAt: "asc" },
-    select: { id: true, name: true, kind: true, elementIds: true, status: true, updatedAt: true, inputsHash: true },
+    select: {
+      id: true, name: true, kind: true, elementIds: true, status: true, updatedAt: true, inputsHash: true,
+      checkStatus: true, checkedAt: true,
+    },
   });
   return rows.map(memberToApi);
 }
@@ -187,10 +194,79 @@ async function updateMember(project, memberId, body) {
   return { member: memberToApi(saved), ...data, stale: false };
 }
 
+// ─── D4: comprobación del armado guardado ──────────────────────────────────────────
+
+/**
+ * Comprueba el armado GUARDADO de la viga con las fuerzas del análisis del que salió el
+ * diseño, combinadas con las combinaciones y preferencias vigentes (las mismas que
+ * usaría una nueva comprobación de Design). Guarda el resultado con su huella.
+ */
+async function checkMember(project, memberId) {
+  const row = await findMember(project.id, memberId);
+  if (!row.layout) {
+    throw new AppError(409, "La viga no tiene armado que comprobar.", { error: "detailing.noLayout" });
+  }
+  const { run, request } = await lineRequest(project, (row.elementIds || [])[0]);
+  const [analysisRun, configuration, resolved] = await Promise.all([
+    prisma.analysisRun.findUnique({ where: { id: run.analysisRunId }, select: { id: true, cases: true } }),
+    prisma.modelConfiguration.findUnique({ where: { projectId: project.id }, select: { rebarSet: true } }),
+    designService.resolvePreferences(project.id, null),
+  ]);
+  if (!analysisRun) {
+    throw new AppError(409, "El análisis del diseño ya no existe: vuelve a correr el diseño.", {
+      error: "detailing.noAnalysisRun",
+    });
+  }
+  if (resolved.combinations.length === 0) {
+    throw new AppError(409, "El proyecto no tiene combinaciones de carga.", { error: "detailing.noCombinations" });
+  }
+  const body = {
+    ...request,
+    rebarSet: configuration?.rebarSet || {},
+    layout: row.layout,
+    analysis: {
+      projectId: String(project.id),
+      runId: String(analysisRun.id),
+      bucket: env.s3Bucket,
+      prefix: env.s3Prefix,
+      cases: (analysisRun.cases || []).map((c) => ({ name: c.name, key: c.key, kind: c.kind })),
+    },
+    combinations: resolved.combinations.map((c) => ({
+      name: c.name,
+      factors: (c.factors || []).map((f) => ({ factor: f.factor, pattern: f.pattern ?? null, seismic: !!f.seismic })),
+    })),
+    preferences: resolved.preferences,
+  };
+  let data;
+  try {
+    ({ data } = await axios.post(`${env.calcServiceUrl}/detailing/check`, body, { timeout: 120000 }));
+  } catch (err) {
+    const key = err.response?.status === 422 && err.response.data?.detail?.error;
+    if (key) throw new AppError(422, key, { error: key });
+    throw fromCalcError(err);
+  }
+  if (data.line && (data.line.elementIds || []).join("|") !== row.lineKey) {
+    throw new AppError(409, "La viga cambió en el modelo: vuelve a crearla desde Armado.", {
+      error: "detailing.lineChanged",
+    });
+  }
+  const check = data.check;
+  const saved = await prisma.concreteMember.update({
+    where: { id: row.id },
+    data: jsonNulls(
+      { checkResult: check, checkStatus: check.status, checkHash: check.inputsHash ?? null, checkedAt: new Date() },
+      "concreteMember"
+    ),
+  });
+  return { member: memberToApi(saved), check };
+}
+
 async function deleteMember(projectId, memberId) {
   const row = await findMember(projectId, memberId);
   await prisma.concreteMember.delete({ where: { id: row.id } });
   return { deleted: true };
 }
 
-module.exports = { line, lineRequest, createMember, listMembers, getMember, updateMember, deleteMember };
+module.exports = {
+  line, lineRequest, createMember, listMembers, getMember, updateMember, checkMember, deleteMember,
+};

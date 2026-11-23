@@ -1089,6 +1089,12 @@ model ConcreteMember {
   inputsHash    String?
   engineVersion String?
   designRunId   String?  @db.Uuid
+  // D4: última comprobación del armado guardado (calc-service /detailing/check). Se
+  // borra cuando cambia el armado: una comprobación es de un `layout` concreto.
+  checkResult   Json?
+  checkStatus   String? // ok | fail | incomplete
+  checkHash     String?
+  checkedAt     DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
