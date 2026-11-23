@@ -3,6 +3,7 @@ const axios = require("axios");
 const { prisma } = require("../config/db");
 const { env } = require("../config/env");
 const { AppError } = require("../middleware/errorHandler");
+const { isUuid, toApi, jsonNulls } = require("../lib/ids");
 const { fromCalcError } = require("./calcService");
 const { runStaleReason } = require("./analysisService");
 const designService = require("./designService");
@@ -36,6 +37,7 @@ async function lineRequest(project, elementId) {
     nodes: model.nodes,
     elements: model.elements.map((e) => ({ ...e, roll: rollOf.get(e.id) ?? 0 })),
     sections: model.sections,
+    materials: model.materials,
     // Un apoyo del modelo es un nudo con algún grado de libertad restringido.
     supports: supports.filter((s) => SUPPORT_DOFS.some((k) => s[k])).map((s) => ({ nodeId: s.nodeId })),
     overrides,
@@ -72,4 +74,123 @@ async function line(project, elementId) {
   };
 }
 
-module.exports = { line, lineRequest };
+// ─── D3: vigas detalladas (propuesta de armado persistida) ──────────────────────────
+
+async function calcPropose(project, elementId, params) {
+  const { run, request } = await lineRequest(project, elementId);
+  const configuration = await prisma.modelConfiguration.findUnique({
+    where: { projectId: project.id },
+    select: { rebarSet: true },
+  });
+  if (!configuration?.rebarSet) {
+    throw new AppError(409, "Define el juego de barras del proyecto (Define ▸ Barras de refuerzo).", {
+      error: "detailing.noRebarSet",
+    });
+  }
+  let data;
+  try {
+    ({ data } = await axios.post(
+      `${env.calcServiceUrl}/detailing/propose`,
+      { ...request, rebarSet: configuration.rebarSet, params: params || {} },
+      { timeout: 60000 }
+    ));
+  } catch (err) {
+    const key = err.response?.status === 422 && err.response.data?.detail?.error;
+    if (key) throw new AppError(422, key, { error: key });
+    throw fromCalcError(err);
+  }
+  return { run, data };
+}
+
+const memberToApi = (row) => toApi(row, "concreteMember");
+
+function rowFrom(data, run, params) {
+  const p = data.proposal;
+  return {
+    params: params || {},
+    layout: p.layout ?? null,
+    issues: p.issues || [],
+    status: p.status,
+    inputsHash: p.inputsHash,
+    engineVersion: p.engineVersion,
+    designRunId: String(run._id),
+  };
+}
+
+/** Crea (o recupera) la viga detallada que contiene `elementId` y le pone su propuesta. */
+async function createMember(project, body) {
+  // El cuerpo ya lo validó `validate(createMemberBody)` en la ruta.
+  const params = body?.params || {};
+  const { run, data } = await calcPropose(project, body?.elementId, params);
+  const ids = data.line.elementIds;
+  const lineKey = ids.join("|");
+  const row = rowFrom(data, run, params);
+  const saved = await prisma.concreteMember.upsert({
+    where: { projectId_lineKey: { projectId: project.id, lineKey } },
+    create: jsonNulls({ projectId: project.id, kind: "beam", name: ids.length > 1 ? `${ids[0]}–${ids[ids.length - 1]}` : ids[0], lineKey, elementIds: ids, ...row }, "concreteMember"),
+    update: jsonNulls(row, "concreteMember"),
+  });
+  return { member: memberToApi(saved), ...data };
+}
+
+async function findMember(projectId, memberId) {
+  if (!isUuid(memberId)) throw new AppError(404, "Viga no encontrada");
+  const row = await prisma.concreteMember.findFirst({ where: { id: memberId, projectId } });
+  if (!row) throw new AppError(404, "Viga no encontrada");
+  return row;
+}
+
+async function listMembers(projectId) {
+  const rows = await prisma.concreteMember.findMany({
+    where: { projectId },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, name: true, kind: true, elementIds: true, status: true, updatedAt: true, inputsHash: true },
+  });
+  return rows.map(memberToApi);
+}
+
+/**
+ * La viga guardada con su línea recalculada. Si la propuesta guardada ya no corresponde a
+ * las entradas actuales (otro diseño, otro juego de barras, otro modelo), `stale` lo dice:
+ * se enseña lo guardado, pero hay que volver a proponer.
+ */
+async function getMember(project, memberId) {
+  const row = await findMember(project.id, memberId);
+  const ids = row.elementIds || [];
+  let current = null;
+  let currentError = null;
+  try {
+    current = (await calcPropose(project, ids[0], row.params)).data;
+  } catch (err) {
+    currentError = err.details?.error || err.message;
+  }
+  const stale = !current || current.proposal.inputsHash !== row.inputsHash
+    || (current.line.elementIds || []).join("|") !== row.lineKey;
+  return { member: memberToApi(row), ...(current || {}), stale, currentError };
+}
+
+/** Nuevos `params` → nueva propuesta, guardada. */
+async function updateMember(project, memberId, body) {
+  const row = await findMember(project.id, memberId);
+  const params = body?.params ?? row.params ?? {};
+  const { run, data } = await calcPropose(project, (row.elementIds || [])[0], params);
+  if (data.line.elementIds.join("|") !== row.lineKey) {
+    // La línea cambió en el modelo (se añadió o quitó una barra): es otra viga.
+    throw new AppError(409, "La viga cambió en el modelo: vuelve a crearla desde Armado.", {
+      error: "detailing.lineChanged",
+    });
+  }
+  const saved = await prisma.concreteMember.update({
+    where: { id: row.id },
+    data: jsonNulls(rowFrom(data, run, params), "concreteMember"),
+  });
+  return { member: memberToApi(saved), ...data, stale: false };
+}
+
+async function deleteMember(projectId, memberId) {
+  const row = await findMember(projectId, memberId);
+  await prisma.concreteMember.delete({ where: { id: row.id } });
+  return { deleted: true };
+}
+
+module.exports = { line, lineRequest, createMember, listMembers, getMember, updateMember, deleteMember };
