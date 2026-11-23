@@ -1,4 +1,5 @@
 const { z } = require("zod");
+const { rebarSet } = require("./rebarSetSchema");
 const {
   node,
   element,
@@ -149,6 +150,7 @@ const configuration = z
       .optional(),
     spectrumFunctions: z.array(spectrumFunction).optional(),
     responseSpectrumCases: z.array(responseSpectrumCase).optional(),
+    rebarSet: rebarSet.nullable().optional(),
   })
   .strict();
 

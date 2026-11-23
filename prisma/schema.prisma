@@ -255,6 +255,7 @@ model Project {
   designRuns      DesignRun[]
   aiConversations AiConversation[]
   connections     Connection[]
+  concreteMembers ConcreteMember[]
   reportExports   ReportExport[]
   images          ProjectImage[]
   reports         Report[]
@@ -282,6 +283,11 @@ model ModelConfiguration {
   defaultFrameSectionId String?
   defaultAreaSectionId  String?
   designPreferences     Json?
+  // Juego de barras de refuerzo del proyecto (Define ▸ Barras de refuerzo; se elige al
+  // crear el proyecto): { preset, bars: [{ id, label, db (m), area (m²), mass (kg/m) }] }.
+  // null = proyecto anterior a D1, sin catálogo: los diámetros de sección siguen libres.
+  // No entra en la huella del análisis.
+  rebarSet              Json?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
@@ -1062,4 +1068,39 @@ model ForumTranslation {
   @@unique([postId, locale])
   @@index([createdAt])
   @@map("forum_translations")
+}
+
+// Rebar Studio (D3): una viga continua de hormigón detallada. Se identifica por las
+// barras del análisis que la forman (`lineKey`, en orden). La propuesta de armado la
+// calcula el calc-service (POST /detailing/propose) a partir de la última comprobación de
+// diseño, y se guarda con la huella de TODO lo que la produjo (`inputsHash`): las mismas
+// entradas dan la misma propuesta. `params` son las elecciones del ingeniero.
+model ConcreteMember {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  projectId     String   @db.Uuid
+  kind          String   @default("beam") // beam (D3) | column (D6)
+  name          String
+  lineKey       String // ids de las barras de la línea, en orden, unidos por "|"
+  elementIds    Json // los mismos, como lista
+  params        Json     @default("{}")
+  layout        Json? // null = sin propuesta (bloqueada por algún error)
+  issues        Json     @default("[]")
+  status        String   @default("draft") // draft | proposed | incomplete
+  inputsHash    String?
+  engineVersion String?
+  designRunId   String?  @db.Uuid
+  // D4: última comprobación del armado guardado (calc-service /detailing/check). Se
+  // borra cuando cambia el armado: una comprobación es de un `layout` concreto.
+  checkResult   Json?
+  checkStatus   String? // ok | fail | incomplete
+  checkHash     String?
+  checkedAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, lineKey])
+  @@index([projectId, createdAt])
+  @@map("concrete_members")
 }

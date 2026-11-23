@@ -1,4 +1,5 @@
 const { z } = require("zod");
+const { rebarSet } = require("./rebarSetSchema");
 
 // Zod validates the request body BEFORE it touches the database. These per-entity
 // schemas back the sub-resource routes: the full object for POST, and
@@ -189,12 +190,16 @@ const createProjectSchema = z.object({
   company: z.string().optional(),
   engineer: z.string().optional(),
   description: z.string().optional(),
+  // Juego de barras elegido en el asistente: se guarda en la configuración del modelo
+  // al crear el proyecto (no es un metadato del proyecto).
+  rebarSet: rebarSet.optional(),
   // Bloqueo del modelo. Se auto-activa al correr análisis; el desbloqueo manual
   // llega por PATCH con { isLocked: false }.
   isLocked: z.boolean().optional(),
 });
 
-const updateProjectMetaSchema = createProjectSchema.partial();
+// El juego de barras solo se fija al crear; después se edita en la configuración.
+const updateProjectMetaSchema = createProjectSchema.omit({ rebarSet: true }).partial();
 
 module.exports = {
   // Per-entity schemas — used by the sub-resource routes (full for POST,

@@ -39,6 +39,11 @@ const KEEP_NULL = {
     "schemaVersion",
   ],
   modelArea: ["diaphragm"],
+  // Rebar Studio: sin propuesta (bloqueada por un error) es un null que la interfaz lee.
+  concreteMember: [
+    "layout", "inputsHash", "engineVersion", "designRunId",
+    "checkResult", "checkStatus", "checkHash", "checkedAt",
+  ],
 };
 
 function clean(row, kind) {
@@ -80,10 +85,11 @@ function stripChild(row, kind) {
 // hay que pasar Prisma.DbNull para guardar un NULL de SQL.
 const NULLABLE_JSON = {
   project: ["analysisProgress", "designProgress", "params"],
-  modelConfiguration: ["gridSystem", "massSource", "activeDofs", "designPreferences"],
+  modelConfiguration: ["gridSystem", "massSource", "activeDofs", "designPreferences", "rebarSet"],
   modelElement: ["releases"],
   modelArea: ["mesh"],
   catalogFrameSection: ["reinforcement"],
+  concreteMember: ["layout", "checkResult"],
 };
 
 /** Copia `data` cambiando null por Prisma.DbNull en las columnas Json de `kind`. */
