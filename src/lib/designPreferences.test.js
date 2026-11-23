@@ -108,3 +108,21 @@ test("la huella cambia con el sistema resistente asignado; sin sistemas, es la d
     designInputsHash(combos, prefs, [{ elementId: "E2", type: "OMF" }, { elementId: "E1", type: "SMF" }])
   );
 });
+
+test("hormigón: eje débil de vigas check|ignore, mezcla y huella sin tocar", () => {
+  for (const bad of [{ concrete: null }, { concrete: { beamMinorAxis: "maybe" } }, { concrete: [] }]) {
+    assert.throws(() => checkPreferences(bad), (e) => e.statusCode === 400 || e.status === 400, JSON.stringify(bad));
+  }
+  assert.doesNotThrow(() => checkPreferences({ concrete: { beamMinorAxis: "ignore" } }));
+  assert.deepEqual(mergePreferences({}, null).concrete, { beamMinorAxis: "check" });
+  assert.deepEqual(
+    mergePreferences({ concrete: { beamMinorAxis: "ignore" } }, null).concrete,
+    { beamMinorAxis: "ignore" }
+  );
+  // En su valor por defecto no entra en la huella: las comprobaciones viejas no cambian.
+  assert.equal("concrete" in canonicalPreferences(mergePreferences({}, null)), false);
+  assert.deepEqual(
+    canonicalPreferences(mergePreferences({ concrete: { beamMinorAxis: "ignore" } }, null)).concrete,
+    { beamMinorAxis: "ignore" }
+  );
+});

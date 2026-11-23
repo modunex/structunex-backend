@@ -17,6 +17,10 @@ const DEFAULT_STEEL = Object.freeze({
 
 const DEFAULT_SEISMIC = Object.freeze({ ry: null, omega0: 3 });
 
+// Hormigón: el eje débil de las vigas (M2, V3) no se dimensiona. "check" = con demanda la
+// viga queda incompleta; "ignore" = "no considerado" (como ETABS), declarado.
+const DEFAULT_CONCRETE = Object.freeze({ beamMinorAxis: "check" });
+
 // Conexiones por elementos finitos (CBFEM, Fase 4): criterio de aceptación de las placas.
 // AISC 360-22 no fija uno; 5 % es el valor CBFEM (EN 1993-1-5, Anexo C). Decisión del
 // proyecto (P1), guardada con cada ejecución.
@@ -29,6 +33,7 @@ const DEFAULT_PREFERENCES = Object.freeze({
   method: "LRFD",
   ratioLimit: 1,
   steel: DEFAULT_STEEL,
+  concrete: DEFAULT_CONCRETE,
   seismic: DEFAULT_SEISMIC,
   cbfem: DEFAULT_CBFEM,
   comboNames: [],
@@ -73,6 +78,18 @@ function checkSeismic(seismic) {
   }
 }
 
+/** Hormigón: eje débil de vigas, "check" o "ignore". */
+function checkConcrete(concrete) {
+  if (concrete === undefined) return;
+  if (concrete === null || typeof concrete !== "object" || Array.isArray(concrete)) {
+    throw bad("Preferencias de hormigón inválidas.", "concrete");
+  }
+  const { beamMinorAxis } = concrete;
+  if (beamMinorAxis !== undefined && !["check", "ignore"].includes(beamMinorAxis)) {
+    throw bad("Eje débil de vigas: 'check' o 'ignore'.", "concrete.beamMinorAxis");
+  }
+}
+
 /** CBFEM: deformación plástica límite de las placas, fracción en (0, 0,20]. */
 function checkCbfem(cbfem) {
   if (cbfem === undefined) return;
@@ -104,6 +121,7 @@ function checkPreferences(requested) {
   }
   checkDisplay(requested.display, requested.ratioLimit);
   checkSeismic(requested.seismic);
+  checkConcrete(requested.concrete);
   checkCbfem(requested.cbfem);
   const steel = requested.steel;
   if (steel === undefined) return;
@@ -136,12 +154,17 @@ function mergePreferences(stored, requested) {
     const pick = [r.seismic?.[key], s.seismic?.[key]].find((v) => v !== undefined);
     seismic[key] = pick === undefined ? DEFAULT_SEISMIC[key] : pick;
   }
+  const concrete = {};
+  for (const key of Object.keys(DEFAULT_CONCRETE)) {
+    const pick = [r.concrete?.[key], s.concrete?.[key]].find((v) => v !== undefined);
+    concrete[key] = pick === undefined ? DEFAULT_CONCRETE[key] : pick;
+  }
   const cbfem = {};
   for (const key of Object.keys(DEFAULT_CBFEM)) {
     const pick = [r.cbfem?.[key], s.cbfem?.[key]].find((v) => v !== undefined);
     cbfem[key] = pick === undefined ? DEFAULT_CBFEM[key] : pick;
   }
-  return { ...DEFAULT_PREFERENCES, ...s, ...r, steel, seismic, cbfem };
+  return { ...DEFAULT_PREFERENCES, ...s, ...r, steel, concrete, seismic, cbfem };
 }
 
 /**
@@ -165,6 +188,13 @@ function canonicalPreferences(preferences) {
     if (Object.keys(steel).length === 0) delete p.steel;
     else p.steel = steel;
   }
+  if (p.concrete && typeof p.concrete === "object") {
+    const concrete = Object.fromEntries(
+      Object.entries(p.concrete).filter(([k, v]) => v !== undefined && v !== DEFAULT_CONCRETE[k])
+    );
+    if (Object.keys(concrete).length === 0) delete p.concrete;
+    else p.concrete = concrete;
+  }
   if (p.seismic && typeof p.seismic === "object") {
     const seismic = Object.fromEntries(
       Object.entries(p.seismic).filter(([k, v]) => v !== undefined && v !== DEFAULT_SEISMIC[k])
@@ -179,6 +209,7 @@ module.exports = {
   DEFAULT_PREFERENCES,
   DEFAULT_STEEL,
   DEFAULT_SEISMIC,
+  DEFAULT_CONCRETE,
   DEFAULT_CBFEM,
   checkPreferences,
   mergePreferences,
