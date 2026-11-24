@@ -270,7 +270,8 @@ const dist3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 
 /**
  * Geometría de un polígono de nudos: normal de Newell, superficie, alabeo máximo y si
- * se corta a sí mismo (proyectado en el plano de su normal dominante).
+ * se corta a sí mismo (proyectado en el plano de su normal dominante). Cóncavo vale: el motor
+ * de cálculo parte cualquier polígono simple en cuadriláteros y triángulos.
  */
 function polygonGeometry(pts) {
   const n = pts.length;
@@ -302,7 +303,7 @@ function polygonGeometry(pts) {
       }
     }
   }
-  if (bestLen < 1e-12) return { area: 0, warp: 0, selfIntersects: false, convex: true };
+  if (bestLen < 1e-12) return { area: 0, warp: 0, selfIntersects: false };
   const u = { x: best.x / bestLen, y: best.y / bestLen, z: best.z / bestLen };
   const warp = Math.max(...pts.map((p) => Math.abs((p.x - c.x) * u.x + (p.y - c.y) * u.y + (p.z - c.z) * u.z)));
   // Proyección 2D quitando el eje dominante de la normal.
@@ -326,10 +327,7 @@ function polygonGeometry(pts) {
       }
     }
   }
-  // Convexo: todos los giros del mismo signo.
-  const turns = q.map((_, i) => cross(q[i], q[(i + 1) % n], q[(i + 2) % n]));
-  const convex = turns.every((t) => t >= -1e-12) || turns.every((t) => t <= 1e-12);
-  return { area, warp, selfIntersects, convex };
+  return { area, warp, selfIntersects };
 }
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
@@ -1014,21 +1012,11 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
               errors.push(`${w}: los nudos ${ids.join(", ")} están alineados; el área es nula`);
               return;
             }
-            if (ids.length === 4 && !g.convex) {
-              errors.push(`${w}: el cuadrilátero ${ids.join(" → ")} es cóncavo; pártelo en dos áreas`);
-              return;
-            }
             const key = [...ids].sort().join("|");
             const dup = state.areas.find((x) => [...x.nodeIds].sort().join("|") === key);
             if (dup) {
               warnings.push(`${w}: ya existe el área ${dup.id} con esos nudos; se omite`);
               return;
-            }
-            if (ids.length !== 4) {
-              warnings.push(
-                `${w}: un área de ${ids.length} nudos no se malla (solo cuadriláteros): reparte su carga pero ` +
-                  "no aporta rigidez. Para que trabaje como losa o muro, pártela en cuadriláteros."
-              );
             }
             const area = { id: nextFreeId(areaIdSet(), "A"), nodeIds: ids };
             if (sectionRef) area.areaSectionId = sectionRef;

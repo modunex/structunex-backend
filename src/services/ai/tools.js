@@ -136,7 +136,8 @@ const TOOLS = [
       "- set_active_dofs: dofs [UX|UY|UZ|RX|RY|RZ] o null (automático). Solo dentro de los GDL de la formulación del proyecto.\n" +
       "- create_area_section: tempId, name, material (id, tempId o nombre), thickness (longitud), shellType? (shell-thin por defecto | shell-thick | plate-thin | plate-thick | membrane). Sección de losa o muro (Define ▸ Area Sections). Las losas deck se crean en la interfaz.\n" +
       "- add_areas: areas [{nodes [ref…], section?, diaphragm?}]. Losas y muros (shells) por su contorno, con los nudos EN ORDEN a lo largo del borde (ids o [x,y,z]; se crean o reutilizan solos). Los nudos deben ser coplanares. " +
-      "IMPORTANTE: el motor solo malla (da rigidez a) áreas de 4 nudos convexas; un triángulo o un polígono de más lados solo reparte su carga. Modela cada paño de losa o muro como un cuadrilátero y parte las formas en L o con huecos en rectángulos. " +
+      "Cualquier polígono plano y simple vale (rectángulo, L, U, trapecio, triángulo): el motor lo parte en cuadriláteros, y triángulos donde haga falta, como el mallado general de SAP2000. Una losa con un hueco (núcleo, escalera) se dibuja como el polígono que lo rodea (p. ej. una L o una U), o en varias áreas. " +
+      "Si una viga pasa POR DENTRO de una losa, parte la losa por esa viga (dos áreas que compartan sus nudos): así la malla se cose a la viga. " +
       "Un muro va de una planta a la siguiente; parte sus paños donde llegan vigas o columnas para que compartan nudos. section = sección de área; diaphragm = nombre de un diafragma existente o creado antes en la propuesta.\n" +
       "- assign_area_section: areas [ids], section (sección de área: id, tempId o nombre).\n" +
       "- add_diaphragms: names [string]. Diafragmas rígidos (Define ▸ Diaphragms), normalmente uno por planta.\n" +

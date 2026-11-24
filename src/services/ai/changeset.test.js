@@ -485,12 +485,11 @@ test("crea sección de área, muro y losa con diafragma, en una sola propuesta",
   assert.deepEqual(slab.nodeIds.slice(0, 2), wall.nodeIds.slice(2, 4).reverse());
 });
 
-test("áreas inválidas: alineadas, alabeadas, cruzadas o cóncavas se rechazan con su motivo", () => {
+test("áreas inválidas: alineadas, alabeadas o cruzadas se rechazan con su motivo", () => {
   const bad = [
     [[0, 0, 0], [1000, 0, 0], [2000, 0, 0]],
     [[0, 0, 0], [1000, 0, 0], [1000, 1000, 50], [0, 1000, 0]],
     [[0, 0, 0], [1000, 1000, 0], [1000, 0, 0], [0, 1000, 0]],
-    [[0, 0, 0], [1000, 0, 0], [300, 300, 0], [0, 1000, 0]],
   ];
   const msgs = bad.map((nodes) => {
     const r = builder3D().apply({ summary: "x", operations: [{ type: "add_areas", areas: [{ nodes }] }] });
@@ -500,10 +499,9 @@ test("áreas inválidas: alineadas, alabeadas, cruzadas o cóncavas se rechazan 
   assert.match(msgs[0], /alineados/);
   assert.match(msgs[1], /coplanares/);
   assert.match(msgs[2], /se corta/);
-  assert.match(msgs[3], /cóncavo/);
 });
 
-test("un polígono en L se acepta pero avisa de que no se malla", () => {
+test("polígonos en L y cuadriláteros cóncavos se aceptan sin avisos (el motor los malla)", () => {
   const r = builder3D().apply({
     summary: "L",
     operations: [{
@@ -512,7 +510,12 @@ test("un polígono en L se acepta pero avisa de que no se malla", () => {
     }],
   });
   assert.equal(r.ok, true);
-  assert.match(r.result.warnings.join(" "), /no se malla/);
+  assert.deepEqual(r.result.warnings, []);
+  const concave = builder3D().apply({
+    summary: "cóncavo",
+    operations: [{ type: "add_areas", areas: [{ nodes: [[0, 0, 0], [1000, 0, 0], [300, 300, 0], [0, 1000, 0]] }] }],
+  });
+  assert.equal(concave.ok, true, JSON.stringify(concave.errors));
 });
 
 test("diafragma inexistente, sección de área inexistente y modelo plano fallan", () => {
