@@ -12,6 +12,7 @@
 const { z } = require("zod");
 const { createCatalogMaterial } = require("../../schemas/catalogMaterialSchema");
 const { createCatalogFrameSection } = require("../../schemas/catalogFrameSectionSchema");
+const { createCatalogAreaSection } = require("../../schemas/catalogAreaSectionSchema");
 const { getShape } = require("../../lib/aiscShapes");
 const { UNIT_SYSTEM_IDS, unitSystemById, toBase, round } = require("./units");
 const { horizontalNormalSign, angleForRibs } = require("./slabAxes");
@@ -73,6 +74,12 @@ const SECTION_SHAPES = [
 const DIM_KEYS = ["b", "h", "d", "t", "tw", "tf", "bf", "bfTop", "tfTop", "bfBot", "tfBot"];
 const GRID_AXES = ["x", "y", "z"];
 const gridAxis = z.array(z.object({ id: z.string().min(1), at: num })).optional();
+
+// Tipos de shell del catálogo de secciones de área (SAP2000 "Shell Section Data").
+const SHELL_TYPES = ["shell-thin", "shell-thick", "plate-thin", "plate-thick", "membrane"];
+// Tolerancias de geometría de áreas (m y m²).
+const AREA_PLANAR_TOL = 1e-3;
+const AREA_MIN = 1e-6;
 
 const PATTERN_TYPES = ["dead", "superDead", "live", "roofLive", "wind", "snow", "rain", "quake", "other"];
 const LOAD_KINDS = ["nodal", "frame", "area"];
@@ -204,6 +211,38 @@ const operation = z.discriminatedUnion("type", [
     deleteOrphanNodes: z.boolean().optional(),
   }),
   z.object({ type: z.literal("set_grid"), x: gridAxis, y: gridAxis, z: gridAxis }),
+  z.object({
+    type: z.literal("create_area_section"),
+    tempId: z.string().min(1),
+    name: z.string().min(1),
+    material: z.string().min(1),
+    thickness: pos,
+    shellType: z.enum(SHELL_TYPES).optional(),
+  }),
+  z.object({
+    type: z.literal("add_areas"),
+    areas: z
+      .array(
+        z.object({
+          nodes: z.array(nodeRef).min(3),
+          section: z.string().min(1).optional(),
+          diaphragm: z.string().min(1).optional(),
+        })
+      )
+      .min(1),
+  }),
+  z.object({
+    type: z.literal("assign_area_section"),
+    areas: z.array(z.string().min(1)).min(1),
+    section: z.string().min(1),
+  }),
+  z.object({ type: z.literal("add_diaphragms"), names: z.array(z.string().trim().min(1)).min(1) }),
+  z.object({
+    type: z.literal("assign_diaphragm"),
+    areas: z.array(z.string().min(1)).min(1),
+    diaphragm: z.string().min(1).nullable(),
+  }),
+  z.object({ type: z.literal("delete_areas"), areas: z.array(z.string().min(1)).min(1) }),
   z.object({ type: z.literal("set_active_dofs"), dofs: z.array(z.enum(DOF_KEYS)).min(1).nullable() }),
 ]);
 
@@ -228,6 +267,70 @@ function nextFreeId(taken, prefix) {
 }
 
 const dist3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+
+/**
+ * Geometría de un polígono de nudos: normal de Newell, superficie, alabeo máximo y si
+ * se corta a sí mismo (proyectado en el plano de su normal dominante).
+ */
+function polygonGeometry(pts) {
+  const n = pts.length;
+  const c = pts.reduce((a, p) => ({ x: a.x + p.x / n, y: a.y + p.y / n, z: a.z + p.z / n }), { x: 0, y: 0, z: 0 });
+  let nx = 0;
+  let ny = 0;
+  let nz = 0;
+  for (let i = 0; i < n; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % n];
+    nx += (a.y - b.y) * (a.z + b.z);
+    ny += (a.z - b.z) * (a.x + b.x);
+    nz += (a.x - b.x) * (a.y + b.y);
+  }
+  const area = Math.hypot(nx, ny, nz) / 2;
+  // Plano: el mayor producto vectorial desde el primer nudo. La normal de Newell no sirve
+  // para un contorno cruzado (sus dos lóbulos se anulan y daría área nula).
+  let best = { x: 0, y: 0, z: 0 };
+  let bestLen = 0;
+  for (let i = 1; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const a = { x: pts[i].x - pts[0].x, y: pts[i].y - pts[0].y, z: pts[i].z - pts[0].z };
+      const b = { x: pts[j].x - pts[0].x, y: pts[j].y - pts[0].y, z: pts[j].z - pts[0].z };
+      const cr = { x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x };
+      const l = Math.hypot(cr.x, cr.y, cr.z);
+      if (l > bestLen) {
+        bestLen = l;
+        best = cr;
+      }
+    }
+  }
+  if (bestLen < 1e-12) return { area: 0, warp: 0, selfIntersects: false, convex: true };
+  const u = { x: best.x / bestLen, y: best.y / bestLen, z: best.z / bestLen };
+  const warp = Math.max(...pts.map((p) => Math.abs((p.x - c.x) * u.x + (p.y - c.y) * u.y + (p.z - c.z) * u.z)));
+  // Proyección 2D quitando el eje dominante de la normal.
+  const drop = Math.abs(u.x) >= Math.abs(u.y) && Math.abs(u.x) >= Math.abs(u.z) ? "x" : Math.abs(u.y) >= Math.abs(u.z) ? "y" : "z";
+  const q = pts.map((p) => (drop === "x" ? [p.y, p.z] : drop === "y" ? [p.x, p.z] : [p.x, p.y]));
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const segs = (a, b, c2, d) => {
+    const d1 = cross(c2, d, a);
+    const d2 = cross(c2, d, b);
+    const d3 = cross(a, b, c2);
+    const d4 = cross(a, b, d);
+    return d1 * d2 < 0 && d3 * d4 < 0;
+  };
+  let selfIntersects = false;
+  for (let i = 0; i < n && !selfIntersects; i++) {
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue; // aristas contiguas
+      if (segs(q[i], q[(i + 1) % n], q[j], q[(j + 1) % n])) {
+        selfIntersects = true;
+        break;
+      }
+    }
+  }
+  // Convexo: todos los giros del mismo signo.
+  const turns = q.map((_, i) => cross(q[i], q[(i + 1) % n], q[(i + 2) % n]));
+  const convex = turns.every((t) => t >= -1e-12) || turns.every((t) => t <= 1e-12);
+  return { area, warp, selfIntersects, convex };
+}
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
 function formatZodError(err, prefix) {
@@ -261,7 +364,10 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
     loads: clone(snapshot.loads || []),
     frameLoads: clone(snapshot.frameLoads || []),
     areaLoads: clone(snapshot.areaLoads || []),
-    areaIds: new Set((snapshot.areas || []).map((a) => a.id)),
+    // Áreas (losas y muros) y su configuración: se siguen para validar y numerar las
+    // que se crean en este turno igual que el frontend al aplicar.
+    areas: clone(snapshot.areas || []),
+    diaphragms: (snapshot.configuration?.diaphragms || []).map((d) => d.name).filter(Boolean),
     activeDofs: snapshot.activeDofs?.length ? [...snapshot.activeDofs] : null,
     // Catálogo: filas reales + temporales creadas en este turno.
     materials: (catalog.materials || []).map((m) => ({ ref: m.id, name: m.name, type: m.type })),
@@ -270,6 +376,7 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
       name: s.name,
       propertyType: s.propertyType,
     })),
+    areaSections: (catalog.areaSections || []).map((s) => ({ ref: s.id, name: s.name, kind: s.kind || "shell" })),
     ops: [],
     summaries: [],
   };
@@ -281,6 +388,13 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
     return (
       state.materials.find((m) => m.ref === ref || m.ref === `tmp:${ref}`) ||
       state.materials.find((m) => m.name.toLowerCase() === lower)
+    );
+  }
+  function findAreaSection(ref) {
+    const lower = ref.toLowerCase();
+    return (
+      state.areaSections.find((s) => s.ref === ref || s.ref === `tmp:${ref}`) ||
+      state.areaSections.find((s) => s.name.toLowerCase() === lower)
     );
   }
   function findSection(ref) {
@@ -314,16 +428,41 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
     const Q = (v, q) => (v == null ? v : round(toBase(v, sys, q), 9));
 
     // Atomicidad: se trabaja sobre una copia y solo se confirma si todo va bien.
-    const { ops: _ops, summaries: _summaries, areaIds: _areaIds, ...rollbackable } = state;
+    const { ops: _ops, summaries: _summaries, ...rollbackable } = state;
     const saved = clone(rollbackable);
     const opsStart = state.ops.length;
     const errors = [];
     const warnings = [];
-    const created = { nodes: [], elements: [], materials: [], sections: [] };
+    const created = { nodes: [], elements: [], materials: [], sections: [], areaSections: [], areas: [] };
     let replacedAreaLoads = 0;
 
     const nodeIds = () => new Set(state.nodes.map((n) => n.id));
     const elementIds = () => new Set(state.elements.map((e) => e.id));
+    const areaIdSet = () => new Set(state.areas.map((a) => a.id));
+
+    function requireAreas(ids, where) {
+      const all = areaIdSet();
+      const missing = ids.filter((id) => !all.has(id));
+      if (missing.length) errors.push(`${where}: áreas inexistentes: ${missing.join(", ")}`);
+      return missing.length === 0;
+    }
+
+    function resolveAreaSectionRef(ref, where) {
+      const s = findAreaSection(ref);
+      if (!s) errors.push(`${where}: la sección de área "${ref}" no existe (usa list_area_sections o créala con create_area_section)`);
+      return s ? s.ref : null;
+    }
+
+    function requireDiaphragm(name, where) {
+      if (state.diaphragms.includes(name)) return name;
+      const ci = state.diaphragms.filter((d) => d.toLowerCase() === name.toLowerCase());
+      if (ci.length === 1) return ci[0];
+      errors.push(
+        `${where}: el diafragma "${name}" no existe. Existentes: ${state.diaphragms.join(", ") || "(ninguno)"}. ` +
+          "Créalo antes con add_diaphragms."
+      );
+      return null;
+    }
 
     function resolveNode(ref, where) {
       if (typeof ref === "string") {
@@ -627,11 +766,7 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
 
         case "add_area_loads": {
           if (!requirePattern(op.loadPattern, where)) break;
-          const missing = op.areas.filter((id) => !state.areaIds.has(id));
-          if (missing.length) {
-            errors.push(`${where}: áreas inexistentes: ${missing.join(", ")}`);
-            break;
-          }
+          if (!requireAreas(op.areas, where)) break;
           if (op.value === 0) {
             errors.push(`${where}: value 0 no es una carga; para quitar cargas usa delete_loads`);
             break;
@@ -654,13 +789,9 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
             errors.push(`${where}: indica angle o ribDirection (uno de los dos)`);
             break;
           }
-          const missing = op.areas.filter((id) => !state.areaIds.has(id));
-          if (missing.length) {
-            errors.push(`${where}: áreas inexistentes: ${missing.join(", ")}`);
-            break;
-          }
+          if (!requireAreas(op.areas, where)) break;
           const nodeById = new Map(state.nodes.map((n) => [n.id, n]));
-          const areaById = new Map((snapshot.areas || []).map((a) => [a.id, a]));
+          const areaById = new Map(state.areas.map((a) => [a.id, a]));
           const sectionById = new Map((catalog.areaSections || []).map((s) => [s.id, s]));
           for (const areaId of new Set(op.areas)) {
             const area = areaById.get(areaId);
@@ -774,7 +905,11 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
           state.frameLoads = state.frameLoads.filter((l) => !gone.has(l.elementId));
           for (const elementId of op.elements) state.ops.push({ op: "deleteElement", elementId });
           if (op.deleteOrphanNodes) {
-            const used = new Set(state.elements.flatMap((e) => [e.nodeA, e.nodeB]));
+            // Un nudo que solo usa una losa o un muro no está suelto: borrarlo rompería el área.
+            const used = new Set([
+              ...state.elements.flatMap((e) => [e.nodeA, e.nodeB]),
+              ...state.areas.flatMap((a) => a.nodeIds),
+            ]);
             const candidates = new Set(removed.flatMap((e) => [e.nodeA, e.nodeB]));
             for (const nodeId of candidates) {
               if (used.has(nodeId)) continue;
@@ -808,6 +943,143 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
             break;
           }
           state.ops.push({ op: "setGrid", grid });
+          break;
+        }
+
+        case "create_area_section": {
+          if (state.areaSections.some((x) => x.ref === `tmp:${op.tempId}`)) {
+            errors.push(`${where}: el tempId "${op.tempId}" ya está en uso`);
+            break;
+          }
+          const mat = findMaterial(op.material);
+          if (!mat) {
+            errors.push(`${where}: el material "${op.material}" no existe (usa list_materials o créalo)`);
+            break;
+          }
+          if (mat.type === "rebar") {
+            errors.push(`${where}: un material de armadura (rebar) no puede formar una sección de área`);
+            break;
+          }
+          const t = L(op.thickness);
+          const data = {
+            name: op.name,
+            kind: "shell",
+            shellType: op.shellType || "shell-thin",
+            materialId: mat.ref,
+            materialAngle: 0,
+            thicknessMembrane: t,
+            thicknessBending: t,
+          };
+          const check = createCatalogAreaSection.safeParse(data);
+          if (!check.success) {
+            errors.push(...formatZodError(check.error, `${where}: `));
+            break;
+          }
+          const ref = `tmp:${op.tempId}`;
+          state.areaSections.push({ ref, name: op.name, kind: "shell" });
+          state.ops.push({ op: "createAreaSection", tempId: ref, data: check.data });
+          created.areaSections.push(ref);
+          break;
+        }
+
+        case "add_areas": {
+          if (plane) {
+            errors.push(
+              `${where}: el modelo es plano (${snapshot.analysisType || "2D"}); las losas y muros (shells) ` +
+                "solo existen en modelos 3D"
+            );
+            break;
+          }
+          op.areas.forEach((a, k) => {
+            const w = `${where}.areas[${k}]`;
+            const ids = a.nodes.map((ref, m) => resolveNode(ref, `${w}.nodes[${m}]`));
+            const sectionRef = a.section ? resolveAreaSectionRef(a.section, w) : null;
+            const diaphragm = a.diaphragm ? requireDiaphragm(a.diaphragm, w) : null;
+            if (ids.some((x) => !x) || (a.section && !sectionRef) || (a.diaphragm && !diaphragm)) return;
+            if (new Set(ids).size !== ids.length) {
+              errors.push(`${w}: repite un nudo (${ids.join(", ")}); cada esquina debe ser distinta`);
+              return;
+            }
+            const byId = new Map(state.nodes.map((n) => [n.id, n]));
+            const g = polygonGeometry(ids.map((id) => byId.get(id)));
+            if (g.warp > AREA_PLANAR_TOL) {
+              errors.push(`${w}: los nudos ${ids.join(", ")} no son coplanares (alabeo ${round(g.warp, 4)} m)`);
+              return;
+            }
+            if (g.selfIntersects) {
+              errors.push(`${w}: el contorno ${ids.join(" → ")} se corta a sí mismo; ordena los nudos siguiendo el borde`);
+              return;
+            }
+            if (g.area < AREA_MIN) {
+              errors.push(`${w}: los nudos ${ids.join(", ")} están alineados; el área es nula`);
+              return;
+            }
+            if (ids.length === 4 && !g.convex) {
+              errors.push(`${w}: el cuadrilátero ${ids.join(" → ")} es cóncavo; pártelo en dos áreas`);
+              return;
+            }
+            const key = [...ids].sort().join("|");
+            const dup = state.areas.find((x) => [...x.nodeIds].sort().join("|") === key);
+            if (dup) {
+              warnings.push(`${w}: ya existe el área ${dup.id} con esos nudos; se omite`);
+              return;
+            }
+            if (ids.length !== 4) {
+              warnings.push(
+                `${w}: un área de ${ids.length} nudos no se malla (solo cuadriláteros): reparte su carga pero ` +
+                  "no aporta rigidez. Para que trabaje como losa o muro, pártela en cuadriláteros."
+              );
+            }
+            const area = { id: nextFreeId(areaIdSet(), "A"), nodeIds: ids };
+            if (sectionRef) area.areaSectionId = sectionRef;
+            if (diaphragm) area.diaphragm = diaphragm;
+            state.areas.push(area);
+            state.ops.push({ op: "addArea", area });
+            created.areas.push(area.id);
+          });
+          break;
+        }
+
+        case "assign_area_section": {
+          if (!requireAreas(op.areas, where)) break;
+          const ref = resolveAreaSectionRef(op.section, where);
+          if (!ref) break;
+          for (const areaId of new Set(op.areas)) {
+            state.areas = state.areas.map((a) => (a.id === areaId ? { ...a, areaSectionId: ref } : a));
+            state.ops.push({ op: "assignAreaSection", areaId, areaSectionId: ref });
+          }
+          break;
+        }
+
+        case "add_diaphragms":
+          for (const name of new Set(op.names)) {
+            if (state.diaphragms.some((d) => d.toLowerCase() === name.toLowerCase())) {
+              warnings.push(`${where}: el diafragma "${name}" ya existe; se omite`);
+              continue;
+            }
+            state.diaphragms.push(name);
+            state.ops.push({ op: "addDiaphragm", name });
+          }
+          break;
+
+        case "assign_diaphragm": {
+          if (!requireAreas(op.areas, where)) break;
+          const name = op.diaphragm == null ? null : requireDiaphragm(op.diaphragm, where);
+          if (op.diaphragm != null && !name) break;
+          for (const areaId of new Set(op.areas)) {
+            state.areas = state.areas.map((a) => (a.id === areaId ? { ...a, diaphragm: name } : a));
+            state.ops.push({ op: "assignDiaphragm", areaId, diaphragm: name });
+          }
+          break;
+        }
+
+        case "delete_areas": {
+          if (!requireAreas(op.areas, where)) break;
+          for (const areaId of new Set(op.areas)) {
+            state.areas = state.areas.filter((a) => a.id !== areaId);
+            state.areaLoads = state.areaLoads.filter((l) => l.areaId !== areaId);
+            state.ops.push({ op: "deleteArea", areaId });
+          }
           break;
         }
 
@@ -850,6 +1122,12 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
         counts: {
           materials: count("createMaterial"),
           sections: count("createSection"),
+          areaSections: count("createAreaSection"),
+          areas: count("addArea"),
+          areaSectionAssignments: count("assignAreaSection"),
+          diaphragms: count("addDiaphragm"),
+          diaphragmAssignments: count("assignDiaphragm"),
+          deletedAreas: count("deleteArea"),
           nodes: count("addNode"),
           frames: count("addElement"),
           supports: count("setSupport"),

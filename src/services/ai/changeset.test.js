@@ -426,3 +426,162 @@ test("get_model_summary dice hacia dónde van los nervios", () => {
   const s = runTool("get_model_summary", {}, ctx).content;
   assert.deepEqual(s.areas.map((a) => a.ribDirection), ["X", "Y"]);
 });
+
+// ─── Losas, muros y diafragmas ───
+
+function builder3D(extra = {}) {
+  return createChangesetBuilder({
+    snapshot: {
+      nodes: [],
+      elements: [],
+      supports: [],
+      areas: [],
+      dim: "3D",
+      analysisType: "space_frame",
+      configuration: { loadPatterns: [{ name: "Dead", type: "dead" }], diaphragms: [{ name: "D-N2" }] },
+      ...extra,
+    },
+    catalog: {
+      materials: [{ id: MAT_ID, name: "H30", type: "concrete" }],
+      sections: [],
+      areaSections: [{ id: "as-1", name: "LOSA 15", kind: "shell", shellType: "shell-thin", materialId: MAT_ID }],
+    },
+    unitSystemId: "kn-mm",
+  });
+}
+
+test("crea sección de área, muro y losa con diafragma, en una sola propuesta", () => {
+  const b = builder3D();
+  const r = b.apply({
+    summary: "núcleo",
+    operations: [
+      { type: "create_area_section", tempId: "m25", name: "MURO 25", material: "H30", thickness: 250 },
+      { type: "add_diaphragms", names: ["D-N3"] },
+      {
+        type: "add_areas",
+        areas: [
+          { nodes: [[0, 0, 0], [3000, 0, 0], [3000, 0, 3600], [0, 0, 3600]], section: "m25" },
+          { nodes: [[0, 0, 3600], [3000, 0, 3600], [3000, 5000, 3600], [0, 5000, 3600]], section: "LOSA 15", diaphragm: "D-N3" },
+        ],
+      },
+      { type: "add_area_loads", areas: ["A2"], loadPattern: "Dead", dir: "gravity", value: 0.002 },
+    ],
+  });
+  assert.equal(r.ok, true, JSON.stringify(r.errors));
+  assert.deepEqual(r.result.created.areas, ["A1", "A2"]);
+  assert.equal(r.result.counts.areaSections, 1);
+  assert.equal(r.result.counts.diaphragms, 1);
+  const { ops } = b.finish();
+  const sec = ops.find((o) => o.op === "createAreaSection");
+  assert.equal(sec.data.thicknessBending, 0.25);                  // 250 mm → m
+  assert.equal(sec.data.shellType, "shell-thin");
+  const wall = ops.find((o) => o.op === "addArea" && o.area.id === "A1").area;
+  assert.equal(wall.areaSectionId, "tmp:m25");
+  assert.equal(wall.nodeIds.length, 4);
+  const slab = ops.find((o) => o.op === "addArea" && o.area.id === "A2").area;
+  assert.equal(slab.diaphragm, "D-N3");
+  assert.equal(slab.areaSectionId, "as-1");
+  // Comparte los dos nudos superiores del muro.
+  assert.deepEqual(slab.nodeIds.slice(0, 2), wall.nodeIds.slice(2, 4).reverse());
+});
+
+test("áreas inválidas: alineadas, alabeadas, cruzadas o cóncavas se rechazan con su motivo", () => {
+  const bad = [
+    [[0, 0, 0], [1000, 0, 0], [2000, 0, 0]],
+    [[0, 0, 0], [1000, 0, 0], [1000, 1000, 50], [0, 1000, 0]],
+    [[0, 0, 0], [1000, 1000, 0], [1000, 0, 0], [0, 1000, 0]],
+    [[0, 0, 0], [1000, 0, 0], [300, 300, 0], [0, 1000, 0]],
+  ];
+  const msgs = bad.map((nodes) => {
+    const r = builder3D().apply({ summary: "x", operations: [{ type: "add_areas", areas: [{ nodes }] }] });
+    assert.equal(r.ok, false);
+    return r.errors.join(" ");
+  });
+  assert.match(msgs[0], /alineados/);
+  assert.match(msgs[1], /coplanares/);
+  assert.match(msgs[2], /se corta/);
+  assert.match(msgs[3], /cóncavo/);
+});
+
+test("un polígono en L se acepta pero avisa de que no se malla", () => {
+  const r = builder3D().apply({
+    summary: "L",
+    operations: [{
+      type: "add_areas",
+      areas: [{ nodes: [[6000, 5000, 3600], [12000, 5000, 3600], [12000, 7500, 3600], [9000, 7500, 3600], [9000, 10000, 3600], [6000, 10000, 3600]] }],
+    }],
+  });
+  assert.equal(r.ok, true);
+  assert.match(r.result.warnings.join(" "), /no se malla/);
+});
+
+test("diafragma inexistente, sección de área inexistente y modelo plano fallan", () => {
+  let r = builder3D().apply({
+    summary: "x",
+    operations: [{ type: "add_areas", areas: [{ nodes: [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]], diaphragm: "D-N9" }] }],
+  });
+  assert.match(r.errors.join(" "), /D-N9.*add_diaphragms/);
+  r = builder3D().apply({ summary: "x", operations: [{ type: "assign_area_section", areas: ["A1"], section: "X" }] });
+  assert.equal(r.ok, false);
+  r = builder({ analysisType: "plane_frame", dim: "2D" }).apply({
+    summary: "x",
+    operations: [{ type: "add_areas", areas: [{ nodes: [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]] }] }],
+  });
+  assert.match(r.errors.join(" "), /modelos 3D/);
+});
+
+test("asignar y quitar diafragma, cambiar sección y borrar áreas con sus cargas", () => {
+  const areas = [{ id: "A1", nodeIds: ["N1", "N2", "N3", "N4"] }];
+  const nodes = [
+    { id: "N1", x: 0, y: 0, z: 3 }, { id: "N2", x: 6, y: 0, z: 3 },
+    { id: "N3", x: 6, y: 5, z: 3 }, { id: "N4", x: 0, y: 5, z: 3 },
+  ];
+  const b = builder3D({ areas, nodes, areaLoads: [{ areaId: "A1", loadPattern: "Dead", dir: "gravity", value: 2 }] });
+  const r = b.apply({
+    summary: "x",
+    operations: [
+      { type: "assign_diaphragm", areas: ["A1"], diaphragm: "d-n2" },
+      { type: "assign_area_section", areas: ["A1"], section: "LOSA 15" },
+      { type: "assign_diaphragm", areas: ["A1"], diaphragm: null },
+      { type: "delete_areas", areas: ["A1"] },
+      { type: "delete_loads", areas: ["A1"] },
+    ],
+  });
+  // Tras borrar el área, sus cargas ya no existen: delete_loads falla por área inexistente.
+  assert.equal(r.ok, true, JSON.stringify(r.errors));
+  const ops = b.finish().ops.map((o) => o.op);
+  assert.deepEqual(ops, ["assignDiaphragm", "assignAreaSection", "assignDiaphragm", "deleteArea"]);
+  assert.equal(b.finish().ops[0].diaphragm, "D-N2");                // nombre real, sin distinguir mayúsculas
+});
+
+test("borrar barras con deleteOrphanNodes no borra los nudos de una losa", () => {
+  const nodes = [
+    { id: "N1", x: 0, y: 0, z: 3 }, { id: "N2", x: 6, y: 0, z: 3 },
+    { id: "N3", x: 6, y: 5, z: 3 }, { id: "N4", x: 0, y: 5, z: 3 },
+  ];
+  const b = builder3D({
+    nodes,
+    elements: [{ id: "E1", nodeA: "N1", nodeB: "N2" }],
+    areas: [{ id: "A1", nodeIds: ["N1", "N2", "N3", "N4"] }],
+  });
+  const r = b.apply({ summary: "x", operations: [{ type: "delete_elements", elements: ["E1"], deleteOrphanNodes: true }] });
+  assert.equal(r.ok, true);
+  assert.equal(r.result.counts.deletedNodes, 0);
+});
+
+test("list_area_sections devuelve espesor y material en unidades del usuario", () => {
+  const { runTool } = require("./tools");
+  const out = runTool("list_area_sections", {}, {
+    sys: unitSystemById("kn-mm"),
+    catalog: {
+      materials: [{ id: MAT_ID, name: "H30" }],
+      areaSections: [{ id: "as-1", name: "MURO 25", kind: "shell", shellType: "shell-thin", materialId: MAT_ID,
+        thicknessMembrane: 0.25, thicknessBending: 0.25 }],
+    },
+  });
+  assert.equal(out.isError, undefined);
+  assert.deepEqual(out.content.areaSections[0], {
+    id: "as-1", name: "MURO 25", kind: "shell", shellType: "shell-thin", material: "H30",
+    thickness: 250, thicknessMembrane: undefined, ribAngle: undefined,
+  });
+});

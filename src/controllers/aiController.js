@@ -47,6 +47,8 @@ const snapshotSchema = z.object({
   supports: z.array(z.any()).default([]),
   loads: z.array(z.any()).default([]),
   frameLoads: z.array(z.any()).default([]),
+  // Sin esta clave Zod la descartaba: el asistente no veía las cargas de área existentes.
+  areaLoads: z.array(z.any()).default([]),
   areas: z.array(z.any()).default([]),
   configuration: z.record(z.any()).default({}),
   dim: z.enum(["2D", "3D"]).optional(),

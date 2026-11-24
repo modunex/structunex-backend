@@ -77,6 +77,13 @@ const TOOLS = [
     input_schema: { type: "object", properties: {} },
   },
   {
+    name: "list_area_sections",
+    description:
+      "Secciones de área del catálogo del usuario (losas y muros tipo shell, y losas deck): id, nombre, " +
+      "tipo de shell, material y espesor. Consúltala antes de crear secciones de área o de asignarlas.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
     name: "search_aisc_shapes",
     description:
       "Busca perfiles de acero del catálogo del sistema por texto en la etiqueta: AISC (W, HSS, PIPE, C, MC, " +
@@ -126,7 +133,15 @@ const TOOLS = [
       "- set_grid: x?, y?, z? = [{id, at}] (z = niveles de planta). Cada eje indicado sustituye al actual; los omitidos se conservan. " +
       "Úsala para nombrar ejes y plantas (A, B…, 1, 2…, PB, P1…), fijar ejes sin elementos o QUITAR ejes: los ejes que indiques quedan exactamente así aunque haya nudos en otras coordenadas. " +
       "Al aplicar, la rejilla solo crece hacia fuera (vanos o plantas nuevos) con los nudos nuevos; los nudos intermedios (correas, subdivisiones) no crean ejes. En un proyecto vacío se genera entera a partir de los nudos.\n" +
-      "- set_active_dofs: dofs [UX|UY|UZ|RX|RY|RZ] o null (automático). Solo dentro de los GDL de la formulación del proyecto.",
+      "- set_active_dofs: dofs [UX|UY|UZ|RX|RY|RZ] o null (automático). Solo dentro de los GDL de la formulación del proyecto.\n" +
+      "- create_area_section: tempId, name, material (id, tempId o nombre), thickness (longitud), shellType? (shell-thin por defecto | shell-thick | plate-thin | plate-thick | membrane). Sección de losa o muro (Define ▸ Area Sections). Las losas deck se crean en la interfaz.\n" +
+      "- add_areas: areas [{nodes [ref…], section?, diaphragm?}]. Losas y muros (shells) por su contorno, con los nudos EN ORDEN a lo largo del borde (ids o [x,y,z]; se crean o reutilizan solos). Los nudos deben ser coplanares. " +
+      "IMPORTANTE: el motor solo malla (da rigidez a) áreas de 4 nudos convexas; un triángulo o un polígono de más lados solo reparte su carga. Modela cada paño de losa o muro como un cuadrilátero y parte las formas en L o con huecos en rectángulos. " +
+      "Un muro va de una planta a la siguiente; parte sus paños donde llegan vigas o columnas para que compartan nudos. section = sección de área; diaphragm = nombre de un diafragma existente o creado antes en la propuesta.\n" +
+      "- assign_area_section: areas [ids], section (sección de área: id, tempId o nombre).\n" +
+      "- add_diaphragms: names [string]. Diafragmas rígidos (Define ▸ Diaphragms), normalmente uno por planta.\n" +
+      "- assign_diaphragm: areas [ids], diaphragm (nombre, o null para quitarlo). En Structunex el diafragma se asigna a las ÁREAS (las losas de cada planta), no a los nudos; los muros no llevan diafragma.\n" +
+      "- delete_areas: areas [ids]. Borra losas o muros (y sus cargas de área); sus nudos se conservan.",
     input_schema: {
       type: "object",
       properties: {
@@ -165,6 +180,12 @@ const TOOLS = [
                   "delete_elements",
                   "set_grid",
                   "set_active_dofs",
+                  "create_area_section",
+                  "add_areas",
+                  "assign_area_section",
+                  "add_diaphragms",
+                  "assign_diaphragm",
+                  "delete_areas",
                 ],
               },
               tempId: { type: "string" },
@@ -188,7 +209,31 @@ const TOOLS = [
               patterns: { type: "array", items: { type: "object" } },
               loads: { type: "array", items: { type: "object" } },
               elements: { type: "array", items: { type: "string" } },
-              areas: { type: "array", items: { type: "string" } },
+              areas: {
+                type: "array",
+                description: "Ids de área; en add_areas, objetos {nodes, section?, diaphragm?}.",
+                items: {
+                  anyOf: [
+                    { type: "string" },
+                    {
+                      type: "object",
+                      properties: {
+                        nodes: { type: "array", items: nodeRefSchema, minItems: 3 },
+                        section: { type: "string" },
+                        diaphragm: { type: "string" },
+                      },
+                      required: ["nodes"],
+                    },
+                  ],
+                },
+              },
+              thickness: { type: "number" },
+              shellType: {
+                type: "string",
+                enum: ["shell-thin", "shell-thick", "plate-thin", "plate-thick", "membrane"],
+              },
+              names: { type: "array", items: { type: "string" } },
+              diaphragm: { anyOf: [{ type: "string" }, { type: "null" }] },
               ribDirection: { type: "string", enum: ["x", "y"] },
               angle: { type: "number" },
               loadTypes: { type: "array", items: { type: "string", enum: ["nodal", "frame", "area"] } },
@@ -491,6 +536,26 @@ function listMaterials(ctx) {
   };
 }
 
+function listAreaSections(ctx) {
+  const { catalog, sys } = ctx;
+  const matNames = new Map((catalog.materials || []).map((m) => [m.id, m.name]));
+  return {
+    units: { length: unitLabels(sys).length },
+    areaSections: (catalog.areaSections || []).map((s) => ({
+      id: s.id,
+      name: s.name,
+      kind: s.kind || "shell",
+      shellType: s.shellType,
+      material: matNames.get(s.materialId) || s.materialId,
+      thickness: disp(s.thicknessBending, sys, "length"),
+      thicknessMembrane:
+        s.thicknessMembrane !== s.thicknessBending ? disp(s.thicknessMembrane, sys, "length") : undefined,
+      // Deck: los nervios a ribAngle grados del eje local 1 del área.
+      ribAngle: s.kind === "deck" ? s.deck?.ribAngle ?? 0 : undefined,
+    })),
+  };
+}
+
 function listSections(ctx) {
   const { catalog, sys } = ctx;
   const matNames = new Map((catalog.materials || []).map((m) => [m.id, m.name]));
@@ -571,6 +636,8 @@ function runTool(name, input, ctx) {
         return { content: listMaterials(ctx) };
       case "list_sections":
         return { content: listSections(ctx) };
+      case "list_area_sections":
+        return { content: listAreaSections(ctx) };
       case "search_aisc_shapes":
         return { content: searchAisc(ctx, input || {}) };
       case "check_model":

@@ -24,6 +24,7 @@ const TOOL_LABELS = {
   query_model: "Consultando nudos y barras",
   list_materials: "Revisando materiales",
   list_sections: "Revisando secciones",
+  list_area_sections: "Revisando secciones de área",
   search_aisc_shapes: "Buscando perfiles AISC",
   check_model: "Validando el modelo",
   propose_changes: "Preparando la propuesta",
