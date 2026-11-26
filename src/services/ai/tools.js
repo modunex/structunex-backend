@@ -142,7 +142,8 @@ const TOOLS = [
       "- assign_area_section: areas [ids], section (sección de área: id, tempId o nombre).\n" +
       "- add_diaphragms: names [string]. Diafragmas rígidos (Define ▸ Diaphragms), normalmente uno por planta.\n" +
       "- assign_diaphragm: areas [ids], diaphragm (nombre, o null para quitarlo). En Structunex el diafragma se asigna a las ÁREAS (las losas de cada planta), no a los nudos; los muros no llevan diafragma.\n" +
-      "- delete_areas: areas [ids]. Borra losas o muros (y sus cargas de área); sus nudos se conservan.",
+      "- delete_areas: areas [ids]. Borra losas o muros (y sus cargas de área); sus nudos se conservan.\n" +
+      "- set_display_colors: colors [{target (frameSection|areaSection|material), ref (id, tempId o nombre), color (#rrggbb)}], colorMode? (section|material). Color de visualización de secciones o materiales (el que se ve en el visor con Ver ▸ Color por sección / material). Si no das colorMode, el visor pasa a colorear por lo que cambiaste. Es solo visual: no cambia el cálculo.",
     input_schema: {
       type: "object",
       properties: {
@@ -187,6 +188,7 @@ const TOOLS = [
                   "add_diaphragms",
                   "assign_diaphragm",
                   "delete_areas",
+                  "set_display_colors",
                 ],
               },
               tempId: { type: "string" },
@@ -229,6 +231,19 @@ const TOOLS = [
                 },
               },
               thickness: { type: "number" },
+              colors: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    target: { type: "string", enum: ["frameSection", "areaSection", "material"] },
+                    ref: { type: "string" },
+                    color: { type: "string", description: "#rrggbb" },
+                  },
+                  required: ["target", "ref", "color"],
+                },
+              },
+              colorMode: { type: "string", enum: ["section", "material"] },
               shellType: {
                 type: "string",
                 enum: ["shell-thin", "shell-thick", "plate-thin", "plate-thick", "membrane"],
@@ -533,6 +548,7 @@ function listMaterials(ctx) {
       fc: S(m.fc),
       Fy: S(m.Fy),
       Fu: S(m.Fu),
+      color: m.color || undefined,
     })),
   };
 }
@@ -553,6 +569,7 @@ function listAreaSections(ctx) {
         s.thicknessMembrane !== s.thicknessBending ? disp(s.thicknessMembrane, sys, "length") : undefined,
       // Deck: los nervios a ribAngle grados del eje local 1 del área.
       ribAngle: s.kind === "deck" ? s.deck?.ribAngle ?? 0 : undefined,
+      color: s.color || undefined,
     })),
   };
 }
@@ -577,6 +594,7 @@ function listSections(ctx) {
         catalogLabel: s.catalogLabel || undefined,
         dims,
         designRole: s.reinforcement?.designRole,
+        color: s.color || undefined,
         A: disp(p.A, sys, "area"),
         I33: disp(p.I33, sys, "inertia"),
         I22: disp(p.I22, sys, "inertia"),

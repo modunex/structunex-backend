@@ -585,6 +585,69 @@ test("list_area_sections devuelve espesor y material en unidades del usuario", (
   assert.equal(out.isError, undefined);
   assert.deepEqual(out.content.areaSections[0], {
     id: "as-1", name: "MURO 25", kind: "shell", shellType: "shell-thin", material: "H30",
-    thickness: 250, thicknessMembrane: undefined, ribAngle: undefined,
+    thickness: 250, thicknessMembrane: undefined, ribAngle: undefined, color: undefined,
   });
+});
+
+// ─── Colores de visualización ───
+
+test("set_display_colors: por nombre, id o tempId, y pone el visor en el modo de color", () => {
+  const b = builder3D();
+  const r = b.apply({
+    summary: "colores",
+    operations: [
+      { type: "create_area_section", tempId: "m25", name: "MURO 25", material: "H30", thickness: 250 },
+      {
+        type: "set_display_colors",
+        colors: [
+          { target: "areaSection", ref: "LOSA 15", color: "#A7F3D0" },
+          { target: "areaSection", ref: "m25", color: "#475569" },
+          { target: "material", ref: "H30", color: "#f59e0b" },
+        ],
+      },
+    ],
+  });
+  assert.equal(r.ok, true, JSON.stringify(r.errors));
+  assert.equal(r.result.counts.colors, 3);
+  const ops = b.finish().ops.filter((o) => o.op === "setCatalogColor" || o.op === "setColorMode");
+  assert.deepEqual(ops, [
+    { op: "setCatalogColor", kind: "areaSection", id: "as-1", color: "#a7f3d0" },
+    { op: "setCatalogColor", kind: "areaSection", id: "tmp:m25", color: "#475569" },
+    { op: "setCatalogColor", kind: "material", id: MAT_ID, color: "#f59e0b" },
+    { op: "setColorMode", mode: "section" },
+  ]);
+});
+
+test("set_display_colors: solo materiales → modo material; errores sin dejar nada a medias", () => {
+  let b = builder3D();
+  let r = b.apply({ summary: "m", operations: [{ type: "set_display_colors", colors: [{ target: "material", ref: "H30", color: "#112233" }] }] });
+  assert.equal(r.ok, true);
+  assert.equal(b.finish().ops.at(-1).mode, "material");
+
+  b = builder3D();
+  r = b.apply({
+    summary: "x",
+    operations: [{ type: "set_display_colors", colors: [{ target: "frameSection", ref: "NO EXISTE", color: "#112233" }] }],
+  });
+  assert.match(r.errors.join(" "), /NO EXISTE/);
+  r = b.apply({ summary: "x", operations: [{ type: "set_display_colors", colors: [{ target: "material", ref: "H30", color: "rojo" }] }] });
+  assert.equal(r.ok, false);
+  assert.equal(b.finish(), null);                       // nada propuesto: ni a medias
+});
+
+test("list_* devuelve el color actual", () => {
+  const { runTool } = require("./tools");
+  const ctx = {
+    sys: unitSystemById("kn-mm"),
+    catalog: {
+      materials: [{ id: MAT_ID, name: "H30", type: "concrete", color: "#f59e0b" }],
+      sections: [{ id: "s1", name: "V30x60", materialId: MAT_ID, color: "#2563eb", props: {} }],
+      areaSections: [{ id: "as-1", name: "LOSA 15", materialId: MAT_ID, thicknessBending: 0.15, thicknessMembrane: 0.15, color: "#a7f3d0" }],
+    },
+  };
+  assert.equal(runTool("list_materials", {}, ctx).content.materials[0].color, "#f59e0b");
+  assert.equal(runTool("list_sections", {}, ctx).content.sections[0].color, "#2563eb");
+  const as = runTool("list_area_sections", {}, ctx).content.areaSections[0];
+  assert.equal(as.color, "#a7f3d0");
+  assert.equal(as.material, "H30");
 });

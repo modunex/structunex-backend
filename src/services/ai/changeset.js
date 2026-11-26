@@ -243,6 +243,19 @@ const operation = z.discriminatedUnion("type", [
     diaphragm: z.string().min(1).nullable(),
   }),
   z.object({ type: z.literal("delete_areas"), areas: z.array(z.string().min(1)).min(1) }),
+  z.object({
+    type: z.literal("set_display_colors"),
+    colors: z
+      .array(
+        z.object({
+          target: z.enum(["frameSection", "areaSection", "material"]),
+          ref: z.string().min(1),
+          color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "color en hexadecimal #rrggbb"),
+        })
+      )
+      .min(1),
+    colorMode: z.enum(["section", "material"]).optional(),
+  }),
   z.object({ type: z.literal("set_active_dofs"), dofs: z.array(z.enum(DOF_KEYS)).min(1).nullable() }),
 ]);
 
@@ -1071,6 +1084,32 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
           break;
         }
 
+        case "set_display_colors": {
+          const finders = { frameSection: findSection, areaSection: findAreaSection, material: findMaterial };
+          const label = { frameSection: "sección de barra", areaSection: "sección de área", material: "material" };
+          const done = new Map();
+          let ok = true;
+          op.colors.forEach((c, k) => {
+            const hit = finders[c.target](c.ref);
+            if (!hit) {
+              errors.push(`${where}.colors[${k}]: ${label[c.target]} "${c.ref}" no existe`);
+              ok = false;
+              return;
+            }
+            done.set(`${c.target}|${hit.ref}`, { target: c.target, ref: hit.ref, color: c.color.toLowerCase() });
+          });
+          if (!ok) break;
+          // Solo se añaden operaciones (nunca se tocan las de llamadas anteriores): así un
+          // fallo posterior en esta llamada se deshace recortando state.ops. Una sección
+          // creada en esta propuesta va como "tmp:…" y el frontend la resuelve al aplicar.
+          for (const { target, ref, color } of done.values()) {
+            state.ops.push({ op: "setCatalogColor", kind: target, id: ref, color });
+          }
+          const mode = op.colorMode || (op.colors.every((c) => c.target === "material") ? "material" : "section");
+          state.ops.push({ op: "setColorMode", mode });
+          break;
+        }
+
         case "set_active_dofs": {
           if (op.dofs && typeDofs) {
             const extra = op.dofs.filter((d) => !typeDofs.includes(d));
@@ -1116,6 +1155,7 @@ function createChangesetBuilder({ snapshot, catalog, unitSystemId }) {
           diaphragms: count("addDiaphragm"),
           diaphragmAssignments: count("assignDiaphragm"),
           deletedAreas: count("deleteArea"),
+          colors: count("setCatalogColor"),
           nodes: count("addNode"),
           frames: count("addElement"),
           supports: count("setSupport"),

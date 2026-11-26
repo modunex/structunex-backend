@@ -89,7 +89,10 @@ async function runTurn(p) {
     prisma.catalogAreaSection.findMany({
       where: { ownerId },
       orderBy: { createdAt: "asc" },
-      select: { id: true, name: true, kind: true, shellType: true, thicknessMembrane: true, thicknessBending: true, deck: true },
+      select: {
+        id: true, name: true, kind: true, shellType: true, materialId: true,
+        thicknessMembrane: true, thicknessBending: true, deck: true, color: true,
+      },
     }),
   ]);
   const attById = new Map(attachments.map((a) => [a.id, a]));
